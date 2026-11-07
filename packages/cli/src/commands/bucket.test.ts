@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect } from "vitest";
+import YAML from "yaml";
 import { test } from "../test_utils/fixtures";
 
 // A temp dir for the `object get` download target so the test never writes into
@@ -247,6 +248,156 @@ describe("bucket", () => {
 				output: "json",
 			},
 		);
+	});
+
+	// A folder-collapsed listing can return folders and no objects: every key sits
+	// inside a folder, so nothing lives directly at the prefix. The bucket is not
+	// empty, and "No objects found." under the folders table read as if it were.
+	test("object list with only folders does not claim the bucket is empty", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			["bucket", "object", "list", "folders-only", ...SCOPE],
+			{
+				mockDir: "single_org",
+				outputTable: true,
+				stdout: 'folders Name images/ logs/ No objects directly under "folders-only". List one of the folders above, or pass --recursive to list every key.',
+			},
+		);
+		expect(stdout).not.toContain("No objects found.");
+	});
+
+	test("object list with only folders names the prefix it listed", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			["bucket", "object", "list", "folders-only/logs/", ...SCOPE],
+			{ mockDir: "single_org", outputTable: true },
+		);
+		expect(stdout).toContain(
+			'No objects directly under "folders-only/logs/".',
+		);
+		expect(stdout).not.toContain("No objects found.");
+	});
+
+	test("object list with an explicit delimiter suggests replacing it with --recursive", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"bucket",
+				"object",
+				"list",
+				"folders-only",
+				"--delimiter",
+				"/",
+				...SCOPE,
+			],
+			{ mockDir: "single_org", outputTable: true },
+		);
+		expect(stdout).toContain("replace --delimiter with --recursive");
+		expect(stdout).not.toContain("or pass --recursive");
+	});
+
+	// A listing with neither folders nor objects is genuinely empty, so it keeps
+	// the plain message.
+	test("object list of an empty bucket still reports No objects found.", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["bucket", "object", "list", "empty", ...SCOPE], {
+			mockDir: "single_org",
+			outputTable: true,
+			stdout: "No objects found.",
+		});
+	});
+
+	// --recursive is the way out the folders-only message points at: every nested
+	// key comes back as an object, so only the objects table is printed.
+	test("object list --recursive of nested keys prints only the objects table", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"bucket",
+				"object",
+				"list",
+				"objects-only",
+				"--recursive",
+				...SCOPE,
+			],
+			{ mockDir: "single_org", outputTable: true },
+		);
+		expect(stdout).toContain("images/logo.png");
+		expect(stdout).not.toContain("folders");
+		expect(stdout).not.toContain("No objects");
+	});
+
+	// -o json and -o yaml are the machine contract: the response is printed as
+	// returned, with none of the human-readable guidance.
+	test("object list of only folders keeps json and yaml output structured", async ({
+		testCliCommand,
+	}) => {
+		const response = {
+			folders: ["images/", "logs/"],
+			objects: [],
+			prefix: "",
+			next_cursor: "",
+			is_truncated: false,
+		};
+		const json = await testCliCommand(
+			["bucket", "object", "list", "folders-only", ...SCOPE],
+			{ mockDir: "single_org", output: "json" },
+		);
+		expect(JSON.parse(json.stdout)).toEqual(response);
+		const yaml = await testCliCommand(
+			["bucket", "object", "list", "folders-only", ...SCOPE],
+			{ mockDir: "single_org", output: "yaml" },
+		);
+		expect(YAML.parse(yaml.stdout)).toEqual(response);
+	});
+
+	// Folders and objects share one paged listing, so a page of only folders says
+	// nothing about the objects directly at the prefix: they can sit on the next
+	// page. Claiming there are none would be wrong, so the page stays silent and
+	// the pagination hint explains there is more.
+	test("object list of a truncated page of only folders does not claim there are no objects", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			["bucket", "object", "list", "paged-folders", ...SCOPE],
+			{
+				mockDir: "single_org",
+				outputTable: true,
+				stdout: "folders Name images/",
+				stderr: "More results available. Re-run with --cursor page-2 to fetch the next page.",
+			},
+		);
+		expect(stdout).not.toContain("No objects");
+	});
+
+	// The same holds for a page that resumes from --cursor: the objects directly
+	// at the prefix can have been on an earlier page the CLI cannot see.
+	test("object list --cursor to a last page of only folders does not claim there are no objects", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"bucket",
+				"object",
+				"list",
+				"paged-folders",
+				"--cursor",
+				"page-2",
+				...SCOPE,
+			],
+			{
+				mockDir: "single_org",
+				outputTable: true,
+				stdout: "folders Name logs/",
+				stderr: "",
+			},
+		);
+		expect(stdout).not.toContain("No objects");
 	});
 
 	test("object get downloads to the given file", async ({
