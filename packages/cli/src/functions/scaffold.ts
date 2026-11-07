@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import {
 	asRelativeModulePath,
 	editNeonConfig,
+	type FunctionEnvEntry,
 	TYPESCRIPT_EXTENSION,
 } from "../config_edit.js";
 import { renderNeonConfig } from "../config_template.js";
@@ -61,7 +62,7 @@ export type ScaffoldFunction = {
 	name: string;
 	operation?: string;
 	file: string;
-	env: string[];
+	env: FunctionEnvEntry[];
 };
 
 export type ScaffoldPlan = {
@@ -129,7 +130,10 @@ export const planScaffold = (
 	slug: string,
 ): ScaffoldPlan => {
 	const { template } = loaded;
-	const env = template.environment.map(({ name }) => name);
+	const env = template.environment.map(({ name, required }) => ({
+		name,
+		required: required ?? true,
+	}));
 	if (!FUNCTION_SLUG_PATTERN.test(slug)) {
 		throw new Error(
 			`Invalid function slug "${slug}". ${FUNCTION_SLUG_HELP}`,
@@ -201,6 +205,41 @@ export const writeScaffold = (
 	}
 };
 
+/** The `@neon/config` version installed for `projectRoot`, from the nearest `node_modules`. */
+export const installedConfigVersion = (
+	projectRoot: string,
+): string | undefined => {
+	let dir = resolve(projectRoot);
+	while (true) {
+		const manifest = join(
+			dir,
+			"node_modules",
+			"@neon",
+			"config",
+			"package.json",
+		);
+		if (existsSync(manifest)) {
+			const parsed: unknown = JSON.parse(readFileSync(manifest, "utf8"));
+			return typeof parsed === "object" &&
+				parsed !== null &&
+				"version" in parsed &&
+				typeof parsed.version === "string"
+				? parsed.version
+				: undefined;
+		}
+		const parent = dirname(dir);
+		if (parent === dir) return undefined;
+		dir = parent;
+	}
+};
+
+/** `{ value, required }` Function env declarations need `@neon/config` 1.13.0 or later. */
+export const supportsDeclaredEnv = (version: string | undefined): boolean => {
+	if (version === undefined) return true;
+	const [major = 0, minor = 0] = version.split(".").map(Number);
+	return major > 1 || (major === 1 && minor >= 13);
+};
+
 export type ConfigRegistration = {
 	source?: string;
 	created: boolean;
@@ -212,6 +251,7 @@ export const planConfigRegistration = (
 	configPath: string,
 	targetDir: string,
 	functions: readonly ScaffoldFunction[],
+	envForm: "declaration" | "process-env" = "declaration",
 ): ConfigRegistration => {
 	const created = !existsSync(configPath);
 	let source = created
@@ -230,6 +270,7 @@ export const planConfigRegistration = (
 					.join("/"),
 			),
 			env: fn.env,
+			envForm,
 			typescript: TYPESCRIPT_EXTENSION.test(configPath),
 		});
 		if (result.changes.length === 0) {
