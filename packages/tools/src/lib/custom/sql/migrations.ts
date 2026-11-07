@@ -34,6 +34,10 @@ const discardTemporaryBranch = async (
 			{ operations },
 			{ timeoutMs: CLEANUP_WAIT_MS },
 		);
+	} catch {
+		// Provisioning that failed or was cancelled still leaves a branch to delete.
+	}
+	try {
 		await neonClient.branches.delete(
 			{ projectId, branchId },
 			{ waitForReadiness: false },
