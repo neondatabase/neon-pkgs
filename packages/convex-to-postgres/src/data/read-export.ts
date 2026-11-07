@@ -16,6 +16,24 @@ export interface ExportSource {
 
 const DOCUMENTS_FILE = "documents.jsonl";
 
+/** The only entries the generators read: `<table>/documents.jsonl`. */
+export const DOCUMENTS_ENTRY = /^[^/_][^/]*\/documents\.jsonl$/;
+
+/**
+ * `convex export` writes a `documents.jsonl` for every table, empty ones
+ * included, so a schema table without one means the snapshot doesn't match the
+ * schema. Loading it as zero rows would report a successful migration.
+ */
+export function assertExportCoversSchema(
+	missingTables: readonly string[],
+): void {
+	if (missingTables.length === 0) return;
+	const names = missingTables.map((name) => `"${name}"`).join(", ");
+	throw new Error(
+		`The export has no ${DOCUMENTS_FILE} for schema table(s) ${names}. Export again after deploying this schema, or leave the table out with excludeTables (--exclude-table).`,
+	);
+}
+
 /**
  * Open a `convex export` snapshot. `source` is either an extracted directory or
  * a `.zip` produced by `npx convex export`. The zip is read fully into memory
@@ -67,7 +85,10 @@ class ZipExportSource implements ExportSource {
 	private readonly decoder = new TextDecoder();
 
 	constructor(buffer: Uint8Array) {
-		this.entries = unzipSync(buffer);
+		// Skips file-storage blobs, which can dwarf the documents.
+		this.entries = unzipSync(buffer, {
+			filter: (file) => DOCUMENTS_ENTRY.test(file.name),
+		});
 	}
 
 	listTables(): string[] {

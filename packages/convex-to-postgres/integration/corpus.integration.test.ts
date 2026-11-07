@@ -18,9 +18,8 @@ const dirs = readdirSync(CORPUS, { withFileTypes: true })
 
 /**
  * Suite A: every vendored corpus `schema.ts` must load, generate DDL, and have
- * that DDL apply cleanly to a real Postgres. A fixture that fails to *load*
- * (an unavailable external dep) is skipped with a recorded reason; a fixture
- * that loads but whose DDL fails to apply is a generator bug, not a skip.
+ * that DDL apply cleanly to a real Postgres. A load or apply failure fails the
+ * test.
  *
  * Search and vector indexes are the exception. By default a search index is a
  * Neon Lakebase BM25 index, and a vector index a `lakebase_ann` index over a
@@ -37,22 +36,10 @@ describe("Suite A: corpus DDL applies to Postgres", () => {
 	});
 
 	for (const dir of dirs) {
-		test(`${dir}: loads, applies, and matches the plan`, async (ctx) => {
-			const schemaPath = join(CORPUS, dir, "schema.ts");
-
-			let schema: Awaited<ReturnType<typeof loadConvexSchema>>;
-			try {
-				schema = await loadConvexSchema(schemaPath);
-			} catch (error) {
-				// A load failure means an unavailable external dependency, not a
-				// generator bug. Record why and skip rather than fail the suite.
-				const message =
-					error instanceof Error
-						? error.message.split("\n")[0]
-						: String(error);
-				ctx.skip(`schema failed to load: ${message}`);
-				return;
-			}
+		test(`${dir}: loads, applies, and matches the plan`, async () => {
+			const schema = await loadConvexSchema(
+				join(CORPUS, dir, "schema.ts"),
+			);
 
 			// Applied with the stock GIN search index; see the suite comment.
 			const gin = { searchIndex: "gin" } as const;

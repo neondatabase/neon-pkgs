@@ -186,11 +186,18 @@ describe("excluded tables in a seed script", () => {
 				"authAccounts",
 				`{"_id":"a1","_creationTime":1.5,"userId":"u1","provider":"password","providerAccountId":"a@example.com","secret":"HASH-SHOULD-NOT-APPEAR"}`,
 			],
+			["authSessions", ""],
+			["authRefreshTokens", ""],
+			["authVerificationCodes", ""],
+			["authVerifiers", ""],
+			["authRateLimits", ""],
+			["calendars", ""],
+			["auditLog", ""],
 		]) {
 			mkdirSync(join(exportDir, name));
 			writeFileSync(
 				join(exportDir, name, "documents.jsonl"),
-				`${line}\n`,
+				line === "" ? "" : `${line}\n`,
 			);
 		}
 	});

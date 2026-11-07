@@ -141,7 +141,59 @@ export function planSchema(
 		extensions.push("CREATE EXTENSION IF NOT EXISTS lakebase_text;");
 	}
 
+	assertUniqueNames(tables);
+
 	return { tables, extensions, warnings };
+}
+
+// Postgres truncates identifiers to NAMEDATALEN - 1 bytes.
+const MAX_IDENTIFIER_BYTES = 63;
+
+/**
+ * Throw when two generated names would land on the same Postgres object:
+ * tables, staging tables and indexes share one relation namespace per schema,
+ * and columns must be unique per table. Names are compared as Postgres stores
+ * them, truncated to 63 bytes, so the clash surfaces here rather than halfway
+ * through an import.
+ */
+function assertUniqueNames(tables: readonly PlannedTable[]): void {
+	const clashes: string[] = [];
+	const relations = tables.flatMap((table) => [
+		table.pgName,
+		table.stagingName,
+		...table.indexes.map((index) => index.name),
+		...table.postLoadIndexes.map((index) => index.name),
+	]);
+	for (const name of duplicates(relations)) {
+		clashes.push(`table or index "${name}"`);
+	}
+	for (const table of tables) {
+		for (const name of duplicates(table.columns.map((c) => c.pgName))) {
+			clashes.push(`column "${name}" in table "${table.pgName}"`);
+		}
+	}
+	if (clashes.length > 0) {
+		throw new Error(
+			`Generated Postgres names collide: ${clashes.join(", ")}. Rename the Convex table, field or index, or leave the table out with excludeTables (--exclude-table).`,
+		);
+	}
+}
+
+function duplicates(names: readonly string[]): string[] {
+	const seen = new Set<string>();
+	const repeated = new Set<string>();
+	for (const name of names) {
+		const stored = truncateIdentifier(name);
+		if (seen.has(stored)) repeated.add(stored);
+		seen.add(stored);
+	}
+	return [...repeated];
+}
+
+function truncateIdentifier(name: string): string {
+	const bytes = new TextEncoder().encode(name);
+	if (bytes.length <= MAX_IDENTIFIER_BYTES) return name;
+	return new TextDecoder().decode(bytes.subarray(0, MAX_IDENTIFIER_BYTES));
 }
 
 /**

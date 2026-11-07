@@ -89,8 +89,8 @@ describe("generateSeedSql", () => {
 		expect(sql).toContain("DROP TABLE _convex_messages;");
 	});
 
-	test("omits data for a table whose documents.jsonl is absent", () => {
-		const onlyChannels = parseExportedSchema(
+	test("throws for a schema table whose documents.jsonl is absent", () => {
+		const withGhost = parseExportedSchema(
 			schema([
 				table({
 					name: "channels",
@@ -99,11 +99,12 @@ describe("generateSeedSql", () => {
 				table({ name: "ghost", fields: { x: field(v.string()) } }),
 			]),
 		);
-		const out = generateSeedSql(onlyChannels, exportDir);
-		expect(out).toContain(
-			"CREATE TABLE _convex_ghost (doc jsonb NOT NULL);",
+		expect(() => generateSeedSql(withGhost, exportDir)).toThrow(
+			'schema table(s) "ghost"',
 		);
-		expect(out).not.toContain("INSERT INTO _convex_ghost");
+		expect(
+			generateSeedSql(withGhost, exportDir, { excludeTables: ["ghost"] }),
+		).not.toContain("_convex_ghost");
 	});
 
 	test("a schema with no search/vector indexes ends at COMMIT (no VACUUM)", () => {

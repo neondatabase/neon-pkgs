@@ -9,9 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { unzipSync } from "fflate";
-
-/** The only entries the generators read: `<table>/documents.jsonl`. */
-const DOCUMENTS_ENTRY = /^[^/_][^/]*\/documents\.jsonl$/;
+import { DOCUMENTS_ENTRY } from "../data/read-export.js";
 
 /**
  * Run `fn` against a `convex export` snapshot as an extracted directory. A

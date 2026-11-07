@@ -6,6 +6,7 @@ import type { ConvexSchema } from "../schema/model.js";
 import { planSchema } from "../schema/plan.js";
 import { quoteIdentIfNeeded } from "../util/names.js";
 import { quoteSqlString } from "../util/sql.js";
+import { assertExportCoversSchema } from "./read-export.js";
 import { generateStagingDdl, generateStagingDropSql } from "./staging.js";
 import { generateTransformSql } from "./transform.js";
 
@@ -67,8 +68,8 @@ export function generateSeedSql(
  * documents do not depend on the target schema, only the transform does.
  *
  * Lines are embedded verbatim as jsonb literals, exactly as in
- * {@link generateSeedSql}. `exportDir` is an extracted export directory; a
- * table whose `documents.jsonl` is absent gets a staging table and no rows.
+ * {@link generateSeedSql}. `exportDir` is an extracted export directory with a
+ * `documents.jsonl` for every planned table.
  */
 export function generateDataSql(
 	schema: ConvexSchema,
@@ -76,6 +77,13 @@ export function generateDataSql(
 	options?: GenerateOptions,
 ): string {
 	const plan = planSchema(schema, options);
+	assertExportCoversSchema(
+		plan.tables
+			.map((table) => table.convexName)
+			.filter(
+				(name) => !existsSync(join(exportDir, name, "documents.jsonl")),
+			),
+	);
 	const parts: string[] = [
 		"-- Staging tables (raw Convex documents as jsonb)",
 		generateStagingDdl(schema, options).trimEnd(),
@@ -100,7 +108,6 @@ function stagingInserts(
 	stagingName: string,
 ): string[] {
 	const path = join(exportDir, convexTable, "documents.jsonl");
-	if (!existsSync(path)) return [];
 	const target = quoteIdentIfNeeded(stagingName);
 	const lines = readFileSync(path, "utf8").split(/\r?\n/);
 	const inserts: string[] = [];

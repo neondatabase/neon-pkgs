@@ -4,15 +4,16 @@ import { generateDdl, generateIndexDdl } from "../schema/generate-ddl.js";
 import type { ConvexSchema } from "../schema/model.js";
 import { planSchema } from "../schema/plan.js";
 import { quoteIdentIfNeeded } from "../util/names.js";
-import { openExportSource } from "./read-export.js";
+import { assertExportCoversSchema, openExportSource } from "./read-export.js";
 import { generateStagingDdl, generateStagingDropSql } from "./staging.js";
 import { generateTransformSql } from "./transform.js";
 
 /**
  * The minimal `pg`-compatible surface the orchestrator needs. A `pg.Client` or
  * `pg.PoolClient` satisfies it, so callers can supply an existing connection
- * (e.g. one already inside their own transaction) instead of a connection
- * string.
+ * instead of a connection string. The import issues its own `BEGIN` and
+ * `COMMIT`, then builds indexes and runs `VACUUM` outside any transaction, so
+ * the connection must not be inside a transaction of its own.
  */
 export interface QueryableClient {
 	query(
@@ -58,6 +59,11 @@ export async function importConvexExport(
 	const plan = planSchema(options.schema, options);
 	const ddl = generateDdl(options.schema, options);
 	const source = await openExportSource(options.source);
+	assertExportCoversSchema(
+		plan.tables
+			.map((table) => table.convexName)
+			.filter((name) => !source.hasTable(name)),
+	);
 	const { client, release } = await resolveClient(options);
 
 	const counts: Record<string, number> = {};

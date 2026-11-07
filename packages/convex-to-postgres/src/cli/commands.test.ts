@@ -640,6 +640,13 @@ describe("Convex Auth tables", () => {
 	beforeAll(() => {
 		authProject = join(work, "auth-project");
 		writeSchemaTs(join(authProject, "convex", "schema.ts"), authExported);
+		for (const name of ["users", "calendars"]) {
+			mkdirSync(join(authProject, "export", name), { recursive: true });
+			writeFileSync(
+				join(authProject, "export", name, "documents.jsonl"),
+				"",
+			);
+		}
 	});
 
 	beforeEach(() => {
@@ -755,7 +762,12 @@ describe("Convex Auth tables", () => {
 
 	test("seed --skip-auth-tables leaves the tables out of the script", async () => {
 		const { code, stdout, stderr } = await run(
-			["seed", "--export", join(project, "export"), "--skip-auth-tables"],
+			[
+				"seed",
+				"--export",
+				join(authProject, "export"),
+				"--skip-auth-tables",
+			],
 			{ cwd: authProject, loadAuthTableNames: loader(AUTH_NAMES) },
 		);
 		expect(code).toBe(0);

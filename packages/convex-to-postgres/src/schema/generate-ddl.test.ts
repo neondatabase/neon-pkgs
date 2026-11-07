@@ -851,3 +851,68 @@ describe("generateIndexDdl maxAnnDimensions", () => {
 		expect(indexDdl(vectorSchema(), options)).toContain("lakebase_ann");
 	});
 });
+
+describe("generated name collisions", () => {
+	test("a field that snake-cases onto a search index's tsvector column throws", () => {
+		const exported = schema([
+			table({
+				name: "items",
+				fields: {
+					title: field(v.string()),
+					titleTsv: field(v.string()),
+				},
+				searchIndexes: [
+					{
+						indexDescriptor: "search_title",
+						searchField: "title",
+						filterFields: [],
+					},
+				],
+			}),
+		]);
+		expect(() => ddl(exported)).toThrow(
+			'column "title_tsv" in table "items"',
+		);
+	});
+
+	test("two tables that snake-case onto one name throw", () => {
+		const exported = schema([
+			table({ name: "userProfiles", fields: { a: field(v.string()) } }),
+			table({ name: "user_profiles", fields: { a: field(v.string()) } }),
+		]);
+		expect(() => ddl(exported)).toThrow('table or index "user_profiles"');
+	});
+
+	test("names equal in their first 63 bytes throw", () => {
+		const long = "a".repeat(63);
+		const exported = schema([
+			table({
+				name: "items",
+				fields: {
+					[`${long}_one`]: field(v.string()),
+					[`${long}_two`]: field(v.string()),
+				},
+			}),
+		]);
+		expect(() => ddl(exported)).toThrow(`column "${long}"`);
+	});
+});
+
+describe("vectorOps", () => {
+	test("accepts plain and schema-qualified operator classes", () => {
+		expect(
+			indexDdl(vectorSchema(), { vectorOps: "vector_l2_ops" }),
+		).toContain("(embedding vector_l2_ops)");
+		expect(
+			indexDdl(vectorSchema(), { vectorOps: "my_schema.my_ops" }),
+		).toContain("(embedding my_schema.my_ops)");
+	});
+
+	test("refuses anything that isn't an operator class name", () => {
+		expect(() =>
+			indexDdl(vectorSchema(), {
+				vectorOps: "vector_cosine_ops); DROP TABLE victim; --",
+			}),
+		).toThrow("is not an operator class name");
+	});
+});

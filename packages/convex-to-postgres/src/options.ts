@@ -93,8 +93,20 @@ export interface ResolvedOptions {
 	excludeTables: string[];
 }
 
+// An unquoted, optionally schema-qualified operator class name. It is emitted
+// into the index DDL as is, so anything else is refused.
+const OPCLASS_NAME = /^([A-Za-z_][A-Za-z0-9_$]*\.)?[A-Za-z_][A-Za-z0-9_$]*$/;
+
 /** Fill in defaults for any omitted {@link GenerateOptions} field. */
 export function resolveOptions(options: GenerateOptions = {}): ResolvedOptions {
+	if (
+		options.vectorOps !== undefined &&
+		!OPCLASS_NAME.test(options.vectorOps)
+	) {
+		throw new Error(
+			`vectorOps: "${options.vectorOps}" is not an operator class name, such as vector_cosine_ops or my_schema.my_ops.`,
+		);
+	}
 	return {
 		idStrategy: options.idStrategy ?? "uuid",
 		snakeCase: options.snakeCase ?? true,
