@@ -125,10 +125,95 @@ ${JSON.stringify({ project, branches }, null, 2)}
 	};
 };
 
+const fetchEndpoint = async (
+	neonClient: NeonClient<true>,
+	id: string,
+	projectId: string,
+	endpointId: string,
+	consoleUrl: string,
+	signal?: AbortSignal,
+) => {
+	const endpoint = await neonClient.postgres.endpoints.get(
+		{ projectId, endpointId },
+		{ signal },
+	);
+	const text = `**Compute Endpoint Details**
+
+- ID: ${endpoint.id}
+- Type: ${endpoint.type}
+- State: ${endpoint.current_state}
+- Host: ${endpoint.host}
+- Branch: ${endpoint.branch_id}
+- Project: ${endpoint.project_id}
+- Region: ${endpoint.region_id}
+- Autoscaling: ${endpoint.autoscaling_limit_min_cu}-${endpoint.autoscaling_limit_max_cu} CU
+
+**Raw Data:**
+${JSON.stringify(endpoint, null, 2)}
+`;
+	return {
+		id,
+		title: `${endpoint.id} (${endpoint.type})`,
+		text,
+		url: new URL(
+			`/app/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(endpoint.branch_id)}`,
+			consoleUrl,
+		).toString(),
+		metadata: { endpoint },
+	};
+};
+
+const fetchSnapshot = async (
+	neonClient: NeonClient<true>,
+	id: string,
+	projectId: string,
+	snapshotId: string,
+	consoleUrl: string,
+	signal?: AbortSignal,
+) => {
+	const snapshots = await neonClient.snapshots.list(
+		{ projectId },
+		{ signal },
+	);
+	const snapshot = snapshots.find((candidate) => candidate.id === snapshotId);
+	if (snapshot === undefined) {
+		throw new NeonClientError(
+			`Snapshot ${snapshotId} not found in project ${projectId}`,
+		);
+	}
+	const text = `**Snapshot Details**
+
+- Name: ${snapshot.name}
+- ID: ${snapshot.id}
+- Source branch: ${snapshot.source_branch_id ?? "unknown"}
+- Taken at: ${snapshot.timestamp ?? snapshot.lsn ?? "unknown"}
+
+**Raw Data:**
+${JSON.stringify(snapshot, null, 2)}
+`;
+	return {
+		id,
+		title: snapshot.name,
+		text,
+		url: new URL(
+			`/app/projects/${encodeURIComponent(projectId)}`,
+			consoleUrl,
+		).toString(),
+		metadata: { snapshot },
+	};
+};
+
 const invalidId = (id: string) =>
 	new NeonClientError(
-		`Invalid ID format: "${id}". Expected format: org:*, project:*, or branch:*`,
+		`Invalid ID format: "${id}". Expected format: org:*, project:*, branch:<project>/<branch>, endpoint:<project>/<endpoint>, or snapshot:<project>/<snapshot>`,
 	);
+
+/** `<prefix><project>/<child>`, the form resources.search returns for project-scoped resources. */
+const projectScopedId = (id: string, prefix: string): [string, string] => {
+	const [projectId, childId, ...rest] = id.slice(prefix.length).split("/");
+	if (!projectId || !childId || rest.length > 0) throw invalidId(id);
+	return [projectId, childId];
+};
 
 export const fetchResource = async (
 	neonClient: NeonClient<true>,
@@ -158,11 +243,30 @@ export const fetchResource = async (
 			signal,
 		);
 	}
+	if (id.startsWith("endpoint:")) {
+		const [projectId, endpointId] = projectScopedId(id, "endpoint:");
+		return fetchEndpoint(
+			neonClient,
+			id,
+			projectId,
+			endpointId,
+			consoleUrl,
+			signal,
+		);
+	}
+	if (id.startsWith("snapshot:")) {
+		const [projectId, snapshotId] = projectScopedId(id, "snapshot:");
+		return fetchSnapshot(
+			neonClient,
+			id,
+			projectId,
+			snapshotId,
+			consoleUrl,
+			signal,
+		);
+	}
 	if (id.startsWith("branch:")) {
-		const [projectId, branchId, ...rest] = id
-			.slice("branch:".length)
-			.split("/");
-		if (!projectId || !branchId || rest.length > 0) throw invalidId(id);
+		const [projectId, branchId] = projectScopedId(id, "branch:");
 		const { text, console_url, ...metadata } = await describeBranch(
 			neonClient,
 			{ project_id: projectId, branch_id: branchId },
@@ -190,7 +294,7 @@ export const fetchResourceTool = (options: ToolClientOptions) => {
 			id: publishedId("resources.fetch"),
 			title: "Fetch",
 			description:
-				"Fetch detailed information about a specific organization, project, or branch using the ID returned by resources.search. Returns `{ id, title, text, url, metadata }`.",
+				"Fetch detailed information about an organization, project, branch, compute endpoint, or snapshot using the ID returned by resources.search. Returns `{ id, title, text, url, metadata }`.",
 			inputSchema: fetchResourceInputSchema,
 			annotations: {
 				readOnlyHint: true,

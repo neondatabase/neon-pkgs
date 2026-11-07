@@ -16,7 +16,7 @@ export const searchResourcesInputSchema = z.strictObject({
 		.string()
 		.min(3)
 		.describe(
-			"The search query to find matching organizations, projects, or branches",
+			"A name or id to find organizations, projects, branches, compute endpoints, or snapshots. A compute endpoint matches its id or host, so a host from a connection string finds it.",
 		),
 });
 
@@ -29,7 +29,7 @@ type SearchResult = {
 export const consoleBaseUrl = (apiBaseUrl: string) =>
 	apiBaseUrl.replace(/\/api\/v2\/?$/, "");
 
-/** An inaccessible organization, project, or branch is left out of the results; anything else fails the search. */
+/** A resource the API refuses to list is left out of the results; anything else fails the search. */
 const skipIfRefused = async <T>(read: () => Promise<T[]>): Promise<T[]> => {
 	try {
 		return await read();
@@ -47,6 +47,57 @@ const searchResources = async (
 ): Promise<{ results: SearchResult[] }> => {
 	const link = (path: string) => new URL(path, consoleUrl).toString();
 
+	const projectPath = (projectId: string) =>
+		`/app/projects/${encodeURIComponent(projectId)}`;
+	const branchPath = (projectId: string, branchId: string) =>
+		`${projectPath(projectId)}/branches/${encodeURIComponent(branchId)}`;
+	// A pooled connection string names `ep-…-pooler.`; the endpoint's own host has no `-pooler`.
+	const hostQuery = query.replace("-pooler.", ".");
+
+	const searchProject = async (projectId: string) => {
+		const [branches, endpoints, snapshots] = await Promise.all([
+			skipIfRefused(async () =>
+				(
+					await neon.branches.list({ projectId }, { signal }).page()
+				).items.filter((branch) => matchesNameOrId(branch, query)),
+			),
+			skipIfRefused(async () =>
+				(
+					await neon.postgres.endpoints.list(
+						{ projectId },
+						{ signal },
+					)
+				).filter(
+					(endpoint) =>
+						endpoint.id.toLowerCase().includes(query) ||
+						endpoint.host.toLowerCase().includes(hostQuery),
+				),
+			),
+			skipIfRefused(async () =>
+				(await neon.snapshots.list({ projectId }, { signal })).filter(
+					(snapshot) => matchesNameOrId(snapshot, query),
+				),
+			),
+		]);
+		return [
+			...branches.map((branch) => ({
+				id: `branch:${projectId}/${branch.id}`,
+				title: branch.name,
+				url: link(branchPath(projectId, branch.id)),
+			})),
+			...endpoints.map((endpoint) => ({
+				id: `endpoint:${projectId}/${endpoint.id}`,
+				title: `${endpoint.id} (${endpoint.type})`,
+				url: link(branchPath(projectId, endpoint.branch_id)),
+			})),
+			...snapshots.map((snapshot) => ({
+				id: `snapshot:${projectId}/${snapshot.id}`,
+				title: snapshot.name,
+				url: link(projectPath(projectId)),
+			})),
+		];
+	};
+
 	const searchProjects = async (
 		projects: readonly { id: string; name: string }[],
 	): Promise<SearchResult[]> => {
@@ -55,27 +106,12 @@ const searchResources = async (
 			.map((project) => ({
 				id: `project:${project.id}`,
 				title: project.name,
-				url: link(`/app/projects/${encodeURIComponent(project.id)}`),
+				url: link(projectPath(project.id)),
 			}));
-		const branches = await Promise.all(
-			projects.map((project) =>
-				skipIfRefused(async () => {
-					const page = await neon.branches
-						.list({ projectId: project.id }, { signal })
-						.page();
-					return page.items
-						.filter((branch) => matchesNameOrId(branch, query))
-						.map((branch) => ({
-							id: `branch:${project.id}/${branch.id}`,
-							title: branch.name,
-							url: link(
-								`/app/projects/${encodeURIComponent(project.id)}/branches/${encodeURIComponent(branch.id)}`,
-							),
-						}));
-				}),
-			),
+		const children = await Promise.all(
+			projects.map((project) => searchProject(project.id)),
 		);
-		return [...matchingProjects, ...branches.flat()];
+		return [...matchingProjects, ...children.flat()];
 	};
 
 	const results: SearchResult[] = [];
@@ -120,9 +156,9 @@ export const searchResourcesTool = (options: ToolClientOptions) => {
 		{
 			operationId: "resources.search",
 			id: publishedId("resources.search"),
-			title: "Search organizations, projects, and branches",
+			title: "Search Neon resources",
 			description:
-				"Search across all organizations, projects, and branches the credential can access, including projects shared with the user, by keyword. Matches names and ids case-insensitively. Returns `{ results }` with each match's id, title, and console URL. Pass an id to resources.fetch for details. Query must be at least 3 characters.",
+				"Search the organizations, projects (including projects shared with the user), branches, compute endpoints, and snapshots the credential can access. Matches names and ids case-insensitively, and compute endpoint hosts. Returns `{ results }` with each match's id, title, and console URL. Pass an id to resources.fetch for details. Query must be at least 3 characters.",
 			inputSchema: searchResourcesInputSchema,
 			annotations: {
 				readOnlyHint: true,

@@ -147,6 +147,75 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 		]);
 	});
 
+	it("resources.search and resources.fetch find a compute endpoint by id and by pooled host", async () => {
+		const [endpoint] = await neon.postgres.endpoints.listByBranch({
+			projectId,
+			branchId: mainBranchId,
+		});
+		if (endpoint === undefined) throw new Error("main has no endpoint");
+		const resultId = `endpoint:${projectId}/${endpoint.id}`;
+
+		const byId = await tools["resources.search"].execute({
+			query: endpoint.id.toUpperCase(),
+		});
+		expect(byId.data.results).toContainEqual({
+			id: resultId,
+			title: `${endpoint.id} (${endpoint.type})`,
+			url: expect.stringContaining(
+				`/app/projects/${projectId}/branches/${mainBranchId}`,
+			),
+		});
+
+		const pooledHost = endpoint.host.replace(
+			endpoint.id,
+			`${endpoint.id}-pooler`,
+		);
+		const byHost = await tools["resources.search"].execute({
+			query: pooledHost,
+		});
+		expect(byHost.data.results.map((result) => result.id)).toEqual([
+			resultId,
+		]);
+
+		const { data } = await tools["resources.fetch"].execute({
+			id: resultId,
+		});
+		expect(data).toMatchObject({
+			id: resultId,
+			title: `${endpoint.id} (${endpoint.type})`,
+			metadata: { endpoint: { id: endpoint.id, host: endpoint.host } },
+		});
+		expect(data.text).toContain(`- Host: ${endpoint.host}`);
+	});
+
+	it("resources.search and resources.fetch find a snapshot by name", async () => {
+		const snapshotName = `${projectName}-snap`;
+		const snapshot = await neon.snapshots.create({
+			projectId,
+			branchId: mainBranchId,
+			name: snapshotName,
+		});
+		const resultId = `snapshot:${projectId}/${snapshot.id}`;
+
+		const { data: found } = await tools["resources.search"].execute({
+			query: snapshotName,
+		});
+		expect(found.results).toContainEqual({
+			id: resultId,
+			title: snapshotName,
+			url: expect.stringContaining(`/app/projects/${projectId}`),
+		});
+
+		const { data } = await tools["resources.fetch"].execute({
+			id: resultId,
+		});
+		expect(data).toMatchObject({
+			id: resultId,
+			title: snapshotName,
+			metadata: { snapshot: { id: snapshot.id, name: snapshotName } },
+		});
+	});
+
 	it("resources.fetch returns an organization's details", async () => {
 		const orgs = await neon.user.organizations();
 		const org = orgs[0];
@@ -211,7 +280,7 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 		const failure = tools["resources.fetch"].execute({ id: "nope:123" });
 		await expect(failure).rejects.toBeInstanceOf(NeonClientError);
 		await expect(failure).rejects.toThrow(
-			'Invalid ID format: "nope:123". Expected format: org:*, project:*, or branch:*',
+			'Invalid ID format: "nope:123". Expected format: org:*, project:*, branch:<project>/<branch>, endpoint:<project>/<endpoint>, or snapshot:<project>/<snapshot>',
 		);
 	});
 

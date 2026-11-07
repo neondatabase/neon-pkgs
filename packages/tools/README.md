@@ -109,8 +109,8 @@ Custom tools combine several requests into one call, or call Postgres or neon.co
 | Selector | Published id | Returns |
 | --- | --- | --- |
 | `auth.getConfig` | `get_config_auth` | The branch's Neon Auth integration and settings: trusted origins, localhost access, email and password, OAuth providers, email provider, the organization, magic link, and phone number plugins, and the webhook. `branch_id` defaults to the project's default branch. |
-| `resources.search` | `search_resources` | `{ results: [{ id, title, url }] }` for organizations, projects (including projects shared with the user), and branches whose name or id contains `query`. The id prefix (`org:`, `project:`, `branch:<project>/<branch>`) names the kind. |
-| `resources.fetch` | `fetch_resources` | `{ id, title, text, url, metadata }` for an id from `resources.search`: markdown details in `text`, the console URL, and the organization with members and projects, the project with branches, or the `branches.describe` result in `metadata`. |
+| `resources.search` | `search_resources` | `{ results: [{ id, title, url }] }` for organizations, projects (including projects shared with the user), branches, compute endpoints, and snapshots whose name or id contains `query`. A compute endpoint also matches its host, with or without `-pooler`, so a host from a connection string finds it. The id prefix (`org:`, `project:`, `branch:<project>/<branch>`, `endpoint:<project>/<endpoint>`, `snapshot:<project>/<snapshot>`) names the kind. |
+| `resources.fetch` | `fetch_resources` | `{ id, title, text, url, metadata }` for an id from `resources.search`: markdown details in `text`, the console URL, and the organization with members and projects, the project with branches, the `branches.describe` result, the endpoint, or the snapshot in `metadata`. |
 | `sql.run` | `run_sql` | `{ rows, totalRowCount, truncated, note? }` for one statement. `rows` holds at most `max_rows` (default 100, at most 10,000). |
 | `sql.runTransaction` | `run_transaction_sql` | One `{ rows, totalRowCount, truncated, note? }` per statement, run in one transaction. |
 | `sql.explain` | `explain_sql` | The `EXPLAIN (FORMAT JSON)` rows. `analyze: true` executes the statement. |
@@ -190,7 +190,7 @@ result; // { rows: [{ id: 1, email: "a@example.com" }, { id: 2, email: "b@exampl
 
 `user.organizations` takes an optional `search` that filters by a case-insensitive part of the name or id. An organization API key gets its own organization.
 
-`resources.search` leaves out an organization, project, or branch whose read the API refuses, and fails on any other error, including an aborted `signal`. It reads up to 400 projects per organization and 400 shared projects. `resources.fetch` reads the first page of an organization's members and projects and skips either when the API refuses it. An id without a known prefix throws `NeonClientError`. Console URLs follow `baseUrl`: `https://console.neon.tech/api/v2` links to `https://console.neon.tech`.
+`resources.search` leaves out a resource whose list the API refuses, and fails on any other error, including an aborted `signal`. It reads up to 400 projects per organization and 400 shared projects, and lists each project's branches, compute endpoints, and snapshots in parallel. Resources that belong to a branch (databases, roles, functions, buckets, triggers, credentials) are not searched, since each would cost one request per branch. `resources.fetch` reads the first page of an organization's members and projects and skips either when the API refuses it. An id without a known prefix throws `NeonClientError`. Console URLs follow `baseUrl`: `https://console.neon.tech/api/v2` links to `https://console.neon.tech`.
 
 ### SQL tools
 
