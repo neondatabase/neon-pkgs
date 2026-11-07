@@ -12,14 +12,26 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import strip from "strip-ansi";
 import { afterEach, describe, expect } from "vitest";
+import yargs from "yargs";
 
 import {
 	NEON_MCP_CATEGORIES,
 	NEON_MCP_URL,
+	type NeonMcpCategory,
 	neonMcpUrl,
 } from "../mcp/install.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
 import { test } from "../test_utils/fixtures";
+import { builder } from "./mcp.js";
+
+/** The categories the MCP server accepts that `neon mcp --category` used to reject. */
+const ADDED_CATEGORIES = [
+	"endpoints",
+	"snapshots",
+	"functions",
+	"storage",
+	"realtime",
+] as const;
 
 const dirs: string[] = [];
 
@@ -559,6 +571,73 @@ describe("neon mcp", () => {
 		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
 	});
 
+	test("unknown --category lists every supported category", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(
+			["mcp", "-y", "--oauth", "--category", "nope"],
+			{ ...runOptions(home, cwd), apiKey: false, code: 1 },
+		);
+		const listed = /Supported categories: ([^\n]+)/
+			.exec(strip(stderr))?.[1]
+			?.split(", ");
+		expect(listed).toEqual(expect.arrayContaining([...ADDED_CATEGORIES]));
+	});
+
+	test("--category accepts endpoints, snapshots, functions, storage and realtime", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		mkdirSync(join(cwd, ".cursor"));
+		await testCliCommand(
+			[
+				"mcp",
+				"-y",
+				"--project",
+				"--oauth",
+				"--agent",
+				"cursor",
+				"--category",
+				"endpoints,snapshots",
+				"--category",
+				"functions",
+				"--category",
+				"storage, realtime",
+			],
+			{ ...runOptions(home, cwd), apiKey: false },
+		);
+		const written = JSON.parse(
+			readFileSync(join(cwd, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon.url).toBe(
+			"https://mcp.neon.tech/mcp?category=endpoints&category=snapshots&category=functions&category=storage&category=realtime",
+		);
+	});
+
+	test("--category storage installs into Codex", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stdout } = await testCliCommand(
+			[
+				"mcp",
+				"--category",
+				"storage",
+				"--oauth",
+				"--agent",
+				"codex",
+				"--project",
+			],
+			{ ...runOptions(home, cwd), apiKey: false },
+		);
+		expect(
+			readFileSync(join(cwd, ".codex", "config.toml"), "utf8"),
+		).toContain("https://mcp.neon.tech/mcp?category=storage");
+		expect(stdout).toContain("codex");
+		expect(stdout).toContain("installed");
+	});
+
 	test("bare --category fails instead of installing", async ({
 		testCliCommand,
 	}) => {
@@ -719,6 +798,9 @@ describe("neon mcp", () => {
 		for (const category of NEON_MCP_CATEGORIES) {
 			expect(compact).toContain(category);
 		}
+		for (const category of ADDED_CATEGORIES) {
+			expect(compact).toContain(category);
+		}
 	});
 
 	test("installs without -y when --agent is set", async ({
@@ -790,5 +872,42 @@ describe("neon mcp", () => {
 		);
 		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
 		expect(stderr).not.toMatch(/Minted API key/);
+	});
+});
+
+describe("neon mcp --category parsing", () => {
+	const parse = async (...args: string[]) =>
+		(await builder(
+			yargs().scriptName("neon").exitProcess(false).showHelpOnFail(false),
+		).parseAsync(args)) as { category?: NeonMcpCategory[] };
+
+	test.each(ADDED_CATEGORIES)("accepts %s", async (category) => {
+		expect((await parse("--category", category)).category).toEqual([
+			category,
+		]);
+	});
+
+	test("repeated and comma-separated values add up in order", async () => {
+		const argv = await parse(
+			"--category",
+			"projects",
+			"--category",
+			" storage , realtime",
+			"--category",
+			"neon_auth,endpoints",
+		);
+		expect(argv.category).toEqual([
+			"projects",
+			"storage",
+			"realtime",
+			"neon_auth",
+			"endpoints",
+		]);
+	});
+
+	test("rejects an unknown name next to valid ones", async () => {
+		await expect(parse("--category", "storage,nope")).rejects.toThrow(
+			/Unknown MCP category: "nope"/,
+		);
 	});
 });
