@@ -238,6 +238,8 @@ const { data } = await tools["docs.search"].execute({ query: "reset a branch" })
 const { data: page } = await tools["docs.get"].execute({ slug: data.hits[0].slug });
 ```
 
+Neon's feedback reporting counts `manual_test`, `neon_agent`, `neon_cli`, `neon_mcp`, and `neon_website` by name and any other `feedbackSource`, including the default, as `other`.
+
 ## Writes and waiting
 
 Tools run with `waitForReadiness: true`. When a mutation response includes an `operations` array, the call waits until those operations finish. The default deadline is five minutes (`wait.timeoutMs`). Pass `wait: { timeoutMs: 30_000 }` on `createNeonTools` or `createNeonTool` to bound that. Set it below the host's own tool-call timeout, otherwise the host gives up first.
