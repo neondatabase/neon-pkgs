@@ -161,7 +161,7 @@ function assertUniqueNames(tables: readonly PlannedTable[]): void {
 	const clashes: string[] = [];
 	const relations = tables.flatMap((table) => [
 		table.pgName,
-		`${table.pgName}_pkey`,
+		primaryKeyName(table.pgName),
 		table.stagingName,
 		...table.indexes.map((index) => index.name),
 		...table.postLoadIndexes.map((index) => index.name),
@@ -174,7 +174,7 @@ function assertUniqueNames(tables: readonly PlannedTable[]): void {
 			clashes.push(`column "${name}" in table "${table.pgName}"`);
 		}
 		const constraints = [
-			`${table.pgName}_pkey`,
+			primaryKeyName(table.pgName),
 			...table.columns
 				.filter((column) => column.references !== undefined)
 				.map((column) => foreignKeyName(table.pgName, column.pgName)),
@@ -188,6 +188,12 @@ function assertUniqueNames(tables: readonly PlannedTable[]): void {
 			`Generated Postgres names collide: ${clashes.join(", ")}. Rename the Convex table, field or index, or leave the table out with excludeTables (--exclude-table).`,
 		);
 	}
+}
+
+// Postgres names the implicit primary-key index itself, clipping the table name
+// so that `_pkey` survives truncation.
+function primaryKeyName(table: string): string {
+	return `${truncateIdentifier(table, MAX_IDENTIFIER_BYTES - "_pkey".length)}_pkey`;
 }
 
 export function foreignKeyName(table: string, column: string): string {
@@ -205,10 +211,13 @@ function duplicates(names: readonly string[]): string[] {
 	return [...repeated];
 }
 
-function truncateIdentifier(name: string): string {
+function truncateIdentifier(
+	name: string,
+	maxBytes = MAX_IDENTIFIER_BYTES,
+): string {
 	const bytes = new TextEncoder().encode(name);
-	if (bytes.length <= MAX_IDENTIFIER_BYTES) return name;
-	return new TextDecoder().decode(bytes.subarray(0, MAX_IDENTIFIER_BYTES));
+	if (bytes.length <= maxBytes) return name;
+	return new TextDecoder().decode(bytes.subarray(0, maxBytes));
 }
 
 /**

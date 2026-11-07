@@ -894,6 +894,13 @@ describe("generated name collisions", () => {
 		expect(() => ddl(exported)).toThrow('table or index "items_pkey"');
 	});
 
+	test("a 63-byte table name keeps a distinct primary-key name", () => {
+		const exported = schema([
+			table({ name: "a".repeat(63), fields: { b: field(v.string()) } }),
+		]);
+		expect(ddl(exported).sql).toContain(`CREATE TABLE ${"a".repeat(63)} (`);
+	});
+
 	test("foreign keys whose constraint names truncate alike throw", () => {
 		const stem = "a".repeat(57);
 		const exported = schema([
