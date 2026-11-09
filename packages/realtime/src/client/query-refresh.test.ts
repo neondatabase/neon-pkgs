@@ -296,6 +296,76 @@ describe("QueryRefreshController", () => {
 		controller.stop();
 	});
 
+	it.each([
+		"error",
+		"closed",
+	] as const)(
+		"does not renew when the subscription becomes %s during refresh",
+		async (status) => {
+			vi.useFakeTimers();
+			vi.setSystemTime(0);
+			let resolveRefresh!: (query: SealedLiveQuery<unknown>) => void;
+			const refreshQuery = vi.fn(
+				() =>
+					new Promise<SealedLiveQuery<unknown>>((resolve) => {
+						resolveRefresh = resolve;
+					}),
+			);
+			const renewSubscription = vi.fn(async () => undefined);
+			const subscription = statefulSubscription({ status: "live" });
+			const controller = new QueryRefreshController({
+				query: query(20),
+				refreshQuery,
+				renewSubscription,
+				onRefreshExhausted: vi.fn(),
+				subscription,
+			});
+
+			controller.start();
+			await vi.advanceTimersByTimeAsync(10_000);
+			subscription.setState(endedState(status));
+			const replacement = query(60);
+			resolveRefresh(replacement);
+			await vi.advanceTimersByTimeAsync(120_000);
+
+			expect(renewSubscription).not.toHaveBeenCalled();
+			expect(controller.currentQuery()).not.toBe(replacement);
+			expect(refreshQuery).toHaveBeenCalledOnce();
+			controller.stop();
+		},
+	);
+
+	it("does not retry a failed refresh after the subscription ends", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		let rejectRefresh!: (error: Error) => void;
+		const refreshQuery = vi.fn(
+			() =>
+				new Promise<SealedLiveQuery<unknown>>((_, reject) => {
+					rejectRefresh = reject;
+				}),
+		);
+		const renewSubscription = vi.fn(async () => undefined);
+		const subscription = statefulSubscription({ status: "live" });
+		const controller = new QueryRefreshController({
+			query: query(20),
+			refreshQuery,
+			renewSubscription,
+			onRefreshExhausted: vi.fn(),
+			subscription,
+		});
+
+		controller.start();
+		await vi.advanceTimersByTimeAsync(10_000);
+		subscription.setState(endedState("error"));
+		rejectRefresh(new Error("seal endpoint unavailable"));
+		await vi.advanceTimersByTimeAsync(120_000);
+
+		expect(refreshQuery).toHaveBeenCalledOnce();
+		expect(renewSubscription).not.toHaveBeenCalled();
+		controller.stop();
+	});
+
 	it("stops retrying when the subscription fails during renewal", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);
