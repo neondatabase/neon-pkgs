@@ -234,7 +234,7 @@ export const getAuthConfigTool = (options: ToolClientOptions) =>
 			id: publishedId("auth.getConfig"),
 			title: "Get Neon Auth configuration",
 			description:
-				"Returns a branch's Neon Auth integration and every setting: trusted origins, localhost, email and password, OAuth and email providers, plugins, and webhook, with secrets redacted. Needs Neon Auth on the branch ({{auth.create}}).",
+				"Returns a branch's Neon Auth integration and settings: trusted origins, localhost, email and password, OAuth and email providers, plugins, and webhook, with secrets redacted. Needs Neon Auth on the branch ({{auth.create}}).",
 			inputSchema: getAuthConfigInputSchema,
 			annotations: {
 				readOnlyHint: true,

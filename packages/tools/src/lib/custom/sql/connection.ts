@@ -38,9 +38,7 @@ export const databaseNameField = z
 export const roleNameField = z
 	.string()
 	.optional()
-	.describe(
-		"Postgres role to log in as. Omit for the database owner; a pinned postgresRole allows only itself.",
-	);
+	.describe("Postgres role to log in as. Omit for the database owner.");
 
 export const COMPUTE_ID_DESCRIPTION =
 	"Compute endpoint id (ep-...). Omit for the read-write compute.";
