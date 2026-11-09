@@ -544,7 +544,9 @@ export interface FunctionDef {
 
 /**
  * A trigger that invokes a function. The trigger name is the record key in
- * {@link Config.triggers}. `functionPath` defaults to `/`. `enabled` defaults to `true`.
+ * {@link Config.triggers}. `functionPath` defaults to `/`. Omit `enabled` to create the trigger
+ * enabled and leave later changes to `neon triggers enable` / `disable`; set it to have every
+ * apply enforce that state.
  *
  * @example { type: "schedule", function: "cron", cron: "0 * * * *" }
  * @example { type: "storage_object_created", function: "ingest", bucket: "assets", prefix: "logos/" }
@@ -1136,7 +1138,8 @@ export interface ResolvedFunctionScheduleTrigger {
 	functionSlug: string;
 	cron: string;
 	functionPath: string;
-	enabled: boolean;
+	/** Absent when the policy leaves the trigger's enabled state unmanaged. */
+	enabled?: boolean;
 }
 
 export interface ResolvedFunctionStorageObjectCreatedTrigger {
@@ -1146,7 +1149,8 @@ export interface ResolvedFunctionStorageObjectCreatedTrigger {
 	bucketName: string;
 	prefix?: string;
 	functionPath: string;
-	enabled: boolean;
+	/** Absent when the policy leaves the trigger's enabled state unmanaged. */
+	enabled?: boolean;
 }
 
 /** A bucket with its access level defaulted to `private`. */

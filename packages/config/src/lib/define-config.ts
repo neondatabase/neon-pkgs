@@ -465,7 +465,9 @@ function resolveTriggers(
 				functionSlug: trigger.function,
 				cron: trigger.cron,
 				functionPath: trigger.functionPath ?? "/",
-				enabled: trigger.enabled ?? true,
+				...(trigger.enabled !== undefined
+					? { enabled: trigger.enabled }
+					: {}),
 			};
 		}
 		return {
@@ -475,7 +477,9 @@ function resolveTriggers(
 			bucketName: trigger.bucket,
 			...(trigger.prefix !== undefined ? { prefix: trigger.prefix } : {}),
 			functionPath: trigger.functionPath ?? "/",
-			enabled: trigger.enabled ?? true,
+			...(trigger.enabled !== undefined
+				? { enabled: trigger.enabled }
+				: {}),
 		};
 	});
 }

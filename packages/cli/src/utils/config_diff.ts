@@ -187,6 +187,17 @@ const appliedBranchFields = (change: AppliedChange): FieldChange[] => {
 	}
 };
 
+/** The `current → desired` fields of a service update that reports them (trigger updates). */
+const serviceFieldChanges = (change: AppliedChange): FieldChange[] => {
+	const changes = change.details?.changes;
+	if (!Array.isArray(changes)) return [];
+	return changes.flatMap((entry: unknown) =>
+		isPlainObject(entry) && typeof entry.field === "string"
+			? expandField(entry.field, entry.current, entry.desired)
+			: [],
+	);
+};
+
 export const renderAppliedChanges = (
 	changes: AppliedChange[],
 	title: string,
@@ -216,6 +227,11 @@ export const renderAppliedChanges = (
 						: paint.arrow(line)
 			}`,
 		);
+		if (service.action === "update") {
+			lines.push(
+				...renderFieldLines(serviceFieldChanges(service), paint),
+			);
+		}
 	}
 
 	const byBranch = new Map<string, FieldChange[]>();

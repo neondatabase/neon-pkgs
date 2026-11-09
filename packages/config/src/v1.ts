@@ -134,6 +134,7 @@ export type {
 	RemotePreviewState,
 	RemoteServiceState,
 	RemoteState,
+	TriggerFieldChange,
 } from "./lib/diff.js";
 export { diffConfig } from "./lib/diff.js";
 // ─── Errors ────────────────────────────────────────────────────────────────────

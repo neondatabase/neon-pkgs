@@ -504,7 +504,10 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 				kind: "service",
 				action: "update",
 				identifier: `trigger:${step.functionSlug}:${step.trigger.name}`,
-				details: triggerChangeDetails(step.functionSlug, step.trigger),
+				details: {
+					...triggerChangeDetails(step.functionSlug, step.trigger),
+					changes: step.changes,
+				},
 			};
 		case "register-custom-domain":
 			return {
@@ -890,7 +893,10 @@ async function applyStep(
 				kind: "service",
 				action: "update",
 				identifier: `trigger:${step.functionSlug}:${step.trigger.name}`,
-				details: triggerChangeDetails(step.functionSlug, step.trigger),
+				details: {
+					...triggerChangeDetails(step.functionSlug, step.trigger),
+					changes: step.changes,
+				},
 			};
 		}
 		case "register-custom-domain": {
@@ -1270,7 +1276,9 @@ function triggerChangeDetails(
 			functionSlug,
 			type: trigger.type,
 			cron: trigger.cron,
-			enabled: trigger.enabled,
+			...(trigger.enabled !== undefined
+				? { enabled: trigger.enabled }
+				: {}),
 		};
 	}
 	return {
@@ -1278,7 +1286,7 @@ function triggerChangeDetails(
 		type: trigger.type,
 		bucketName: trigger.bucketName,
 		...(trigger.prefix !== undefined ? { prefix: trigger.prefix } : {}),
-		enabled: trigger.enabled,
+		...(trigger.enabled !== undefined ? { enabled: trigger.enabled } : {}),
 	};
 }
 
@@ -1293,7 +1301,9 @@ function createTriggerInput(
 			functionSlug,
 			cron: trigger.cron,
 			functionPath: trigger.functionPath,
-			enabled: trigger.enabled,
+			...(trigger.enabled !== undefined
+				? { enabled: trigger.enabled }
+				: {}),
 		};
 	}
 	return {
@@ -1303,7 +1313,7 @@ function createTriggerInput(
 		bucketName: trigger.bucketName,
 		...(trigger.prefix !== undefined ? { prefix: trigger.prefix } : {}),
 		functionPath: trigger.functionPath,
-		enabled: trigger.enabled,
+		...(trigger.enabled !== undefined ? { enabled: trigger.enabled } : {}),
 	};
 }
 
@@ -1318,7 +1328,9 @@ function updateTriggerInput(
 			functionSlug,
 			cron: trigger.cron,
 			functionPath: trigger.functionPath,
-			enabled: trigger.enabled,
+			...(trigger.enabled !== undefined
+				? { enabled: trigger.enabled }
+				: {}),
 		};
 	}
 	return {
@@ -1328,6 +1340,6 @@ function updateTriggerInput(
 		bucketName: trigger.bucketName,
 		...(trigger.prefix !== undefined ? { prefix: trigger.prefix } : {}),
 		functionPath: trigger.functionPath,
-		enabled: trigger.enabled,
+		...(trigger.enabled !== undefined ? { enabled: trigger.enabled } : {}),
 	};
 }
