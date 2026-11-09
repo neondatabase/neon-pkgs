@@ -16,7 +16,7 @@ export const searchResourcesInputSchema = z.strictObject({
 		.string()
 		.min(3)
 		.describe(
-			"A name or id to find organizations, projects, branches, compute endpoints, or snapshots. A compute endpoint matches its id or host, so a host from a connection string finds it.",
+			"Part of a name or id, or a compute endpoint host from a connection string.",
 		),
 });
 
@@ -158,7 +158,7 @@ export const searchResourcesTool = (options: ToolClientOptions) => {
 			id: publishedId("resources.search"),
 			title: "Search Neon resources",
 			description:
-				"Search the organizations, projects (including projects shared with the user), branches, compute endpoints, and snapshots the credential can access. Matches names and ids case-insensitively, and compute endpoint hosts. Returns `{ results }` with each match's id, title, and console URL. Pass an id to resources.fetch for details. Query must be at least 3 characters.",
+				"Finds organizations, projects (including shared ones), branches, computes, and snapshots whose name or id contains query, with ids for {{resources.fetch}}. To list projects, use {{projects.list}}; for docs, {{docs.search}}.",
 			inputSchema: searchResourcesInputSchema,
 			annotations: {
 				readOnlyHint: true,

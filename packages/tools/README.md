@@ -124,7 +124,7 @@ Custom tools combine several requests into one call, or call Postgres or neon.co
 | `sql.explain` | `explain_sql` | The `EXPLAIN (FORMAT JSON)` rows. `analyze: true` executes the statement. |
 | `schema.listTables` | `list_tables_schema` | `{ table_schema, table_name, table_type }` for every table outside `pg_catalog` and `information_schema`. |
 | `schema.describeTable` | `describe_table_schema` | `{ raw, formatted }`: columns, indexes, constraints, and sizes. A missing table throws `NeonClientError`. |
-| `branches.describe` | `describe_branches` | `{ branch, console_url, text, database_structure }`, where `database_structure` is the object tree from a temporary `show_db_tree()` function. When that query fails it is `null` and `database_structure_error` says why. |
+| `branches.describe` | `describe_branches` | `{ branch, console_url, text, database_structure }`, where `database_structure` is `[[], rows]`: one `{ tree_structure }` row per database, then the connected database's schemas and objects, read from the system catalogs in a `READ ONLY` transaction. When that query fails it is `null` and `database_structure_error` says why. |
 | `queries.listSlow` | `list_slow_queries` | `{ slow_queries, total_queries_found }` from `pg_stat_statements`, slowest mean time first. Without the extension it throws `NeonClientError`. |
 | `database.inspect` | `inspect_database` | One `neon inspect db` check: `{ check, describe, projectId, branchId, databases, fields, totalRowCount, rows, truncated, note? }`. |
 | `migrations.prepare` | `prepare_migrations` | Runs `migration_sql` on a new temporary branch and returns `{ complete, temporary_branch, migration_result }`. `complete` holds exactly the fields `migrations.complete` takes (`migration_id`, `migration_sql`, `database_name`, `project_id`, `temporary_branch_id`, `parent_branch_id`); `temporary_branch` is `{ id, name, parent_id }`; `migration_result` holds each statement's rows. |
@@ -202,7 +202,7 @@ result; // { rows: [{ id: 1, email: "a@example.com" }, { id: 2, email: "b@exampl
 
 ### SQL tools
 
-The SQL tools resolve a connection from `project_id` (required), then `branch_id` (default branch), `database_name` (`neondb`, else the first database), `role_name` (that database's owner), and `compute_id` (the branch's read-write compute). Their `metadata.method` is `"SQL"` and `metadata.path` is `/projects/{project_id}/connection_uri`, so `inject.projectId` fills `project_id`. Whether a tool can change data is in `annotations`, not `metadata.method`.
+The SQL tools resolve a connection from `project_id` (required), then `branch_id` (default branch), `database_name` (`neondb`, else the first database), `role_name` (that database's owner), and `compute_id` (the branch's read-write compute). Their `metadata.method` is `"SQL"` and `metadata.path` is `/projects/{project_id}/connection_uri`, so `inject.projectId` fills `project_id`. Whether a tool can change data is in `annotations`, not `metadata.method`. `postgres.connectionString` resolves the same way and returns the URI, with `endpoint_id` as the compute and `pooled` defaulting to `true`.
 
 A Postgres error rejects with the `NeonDbError` from `@neondatabase/serverless`, carrying `code` (SQLSTATE), `position`, `detail`, `hint`, and `where`. `database.inspect` throws `InspectDiagnosticError` (exported from `@neon/tools`, with `check` and the `NeonDbError` as `cause`) when Postgres rejects one of its own diagnostic queries, which is a bug in this package rather than in the input. A caller-side problem, such as a missing extension, a missing database, or a refused connection, keeps its own class.
 
@@ -225,8 +225,8 @@ await tools["sql.run"].execute(
 
 | Field | Effect |
 | --- | --- |
-| `readOnly` | `sql.run` and `sql.explain` run the statement in a `READ ONLY` transaction, so Postgres rejects writes. `sql.runTransaction`, `migrations.*`, and `queryTuning.*` throw `NeonClientError` without running anything, because a caller statement such as `COMMIT` or `SET TRANSACTION READ WRITE` can leave a read-only transaction. `branches.describe` still creates and drops its fixed `show_db_tree()` function. `schema.*`, `queries.listSlow`, and `database.inspect` behave the same; `database.inspect` always uses a `READ ONLY` transaction. |
-| `postgresRole` | Every SQL connection logs in as this role. A `role_name` that differs throws `NeonClientError`. |
+| `readOnly` | `sql.run` and `sql.explain` run the statement in a `READ ONLY` transaction, so Postgres rejects writes. `sql.runTransaction`, `migrations.*`, and `queryTuning.*` throw `NeonClientError` without running anything, because a caller statement such as `COMMIT` or `SET TRANSACTION READ WRITE` can leave a read-only transaction. `schema.*` and `queries.listSlow` behave the same; `branches.describe` and `database.inspect` always use a `READ ONLY` transaction. |
+| `postgresRole` | Every SQL connection logs in as this role, and `postgres.connectionString` returns a URI for it. A `role_name` that differs throws `NeonClientError`. |
 | `caller` | Sent with `docs.search` as `x-caller-source`, `x-caller-user-agent`, and `x-caller-client`. Without it, or when `source` cannot be a header value, `x-caller-source` is `neon_tools`. The search service records `website`, `cli`, `mcp`, and `monitor` by name and counts any other source as `rest`. |
 
 ### Docs and feedback
@@ -283,21 +283,26 @@ const { data: role } = await tools["postgres.roles.create"].execute({
 
 ### Descriptions
 
-Pass a map keyed by SDK path or the current published `id`, or a function that can append to the generated text. A key that matches neither is ignored.
+Every tool and every top-level input has a description. A description that names another tool uses the name that tool publishes under, after `names` and `name`. A tool you did not select gets its default `id` with `name` applied, since `names` only takes selected tools.
 
-Generated Management API tools use the first sentence of the OpenAPI description (title stays the OpenAPI summary). Every top-level input carries a description too: the first sentence of its OpenAPI description, or handwritten copy where the spec has none. Composed tools keep their handwritten copy. Hosts that need more still pass `descriptions`.
+Pass `descriptions` to replace the package's copy: a map keyed by SDK path or the current published `id`, or a function that receives the package's text. A key that matches neither is ignored. Write `{{selector}}` to name another tool the same way; an unknown selector throws.
 
 ```ts
 const tools = createNeonTools({
 	apiKey,
-	tools: ["projects.list", "projects.delete"],
+	tools: ["projects.create", "postgres.connectionString", "projects.delete"],
+	names: { "postgres.connectionString": "get_connection_string" },
 	descriptions: {
-		"projects.list":
-			"List Neon projects in your account. Do not use for projects shared with you.",
+		"postgres.connectionString":
+			"Get a connection string. Call it after {{projects.create}}.",
 		delete_projects:
 			"Delete a Neon project and all its data. NEVER run autonomously; always ask the user first.",
 	},
 });
+tools["projects.create"].description;
+// "Creates a project with a default branch and read-write compute and waits until it is ready. Returns no connection string; use get_connection_string."
+tools["postgres.connectionString"].description;
+// "Get a connection string. Call it after create_projects."
 ```
 
 ### Tracking

@@ -10,6 +10,7 @@ import {
 import {
 	DATABASE_NAME_DESCRIPTION,
 	defaultDatabase,
+	projectIdField,
 	refuseInReadOnly,
 	SQL_METADATA,
 } from "./connection.js";
@@ -99,43 +100,35 @@ const migrationBranchName = () =>
 export const prepareMigrationInputSchema = z.strictObject({
 	migration_sql: z
 		.string()
-		.describe("The SQL to execute to create the migration"),
-	project_id: z
-		.string()
-		.describe("The ID of the project to execute the query against"),
+		.describe(
+			"The migration SQL. It is split on every semicolon, including one inside a string or function body.",
+		),
+	project_id: projectIdField,
 	database_name: z.string().optional().describe(DATABASE_NAME_DESCRIPTION),
 });
 
 export const completeMigrationInputSchema = z.strictObject({
 	migration_id: z
 		.string()
-		.describe("The migration ID from migrations.prepare."),
+		.describe("The migration_id from {{migrations.prepare}}."),
 	migration_sql: z
 		.string()
-		.describe(
-			"The SQL statements to apply. Pass the exact value from migrations.prepare.",
-		),
+		.describe("The exact migration_sql from {{migrations.prepare}}."),
 	database_name: z
 		.string()
-		.describe(
-			"The database name. Pass the exact value from migrations.prepare.",
-		),
+		.describe("The exact database_name from {{migrations.prepare}}."),
 	project_id: z
 		.string()
-		.describe(
-			"The project ID. Pass the exact value from migrations.prepare.",
-		),
-	temporary_branch_id: z
-		.string()
-		.describe("The temporary branch ID to delete after migration."),
+		.describe("The exact project_id from {{migrations.prepare}}."),
+	temporary_branch_id: z.string().describe("The temporary branch to delete."),
 	parent_branch_id: z
 		.string()
-		.describe("The parent branch ID where migration will be applied."),
+		.describe("The branch the migration is applied to."),
 	apply_changes: z
 		.boolean()
 		.default(true)
 		.describe(
-			"Whether to apply the migration. Set to false to just delete the temp branch without applying.",
+			"Apply the migration to the parent branch. false only deletes the temporary branch.",
 		),
 });
 
@@ -147,7 +140,7 @@ export const prepareMigrationTool = (options: ToolClientOptions) =>
 			id: publishedId("migrations.prepare"),
 			title: "Prepare Database Migration",
 			description:
-				"Apply a schema change on a temporary branch and return a migration_id. Test with sql.run on that branch, ask the user, then call migrations.complete, even if they reject, so the temporary branch is deleted. Pass every field of the response's `complete` object.",
+				"Applies a schema change on a new temporary branch and returns a migration_id. Test it there with {{sql.run}}, ask the user, then always call {{migrations.complete}} with the response's complete object so the branch is deleted.",
 			inputSchema: prepareMigrationInputSchema,
 			annotations: {
 				readOnlyHint: false,
@@ -159,7 +152,7 @@ export const prepareMigrationTool = (options: ToolClientOptions) =>
 			metadata: SQL_METADATA,
 		},
 		async (neonClient, input, signal, context) => {
-			refuseInReadOnly(context, "migrations.prepare");
+			refuseInReadOnly(context);
 			const projectId = input.project_id;
 			return withTemporaryBranch(
 				neonClient,
@@ -222,14 +215,14 @@ export const completeMigrationTool = (options: ToolClientOptions) =>
 			id: publishedId("migrations.complete"),
 			title: "Complete Database Migration",
 			description:
-				"Apply or discard a prepared migration and delete the temporary branch. NEVER run autonomously; always ask the user first. Pass the fields of the `complete` object migrations.prepare returns: migration_id, migration_sql, database_name, project_id, temporary_branch_id, and parent_branch_id. Set apply_changes false to discard; omitting it applies the migration.",
+				"Applies or discards a prepared migration and deletes the temporary branch. NEVER run autonomously; always ask the user first. Pass the complete object from {{migrations.prepare}}; apply_changes false discards.",
 			inputSchema: completeMigrationInputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,
 		},
 		async (neonClient, input, signal, context) => {
-			refuseInReadOnly(context, "migrations.complete");
+			refuseInReadOnly(context);
 			const migrationResult = input.apply_changes
 				? await runTransaction(
 						neonClient,

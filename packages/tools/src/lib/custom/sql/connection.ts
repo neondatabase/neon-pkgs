@@ -1,6 +1,7 @@
 import { type NeonClient, NeonClientError } from "@neon/sdk";
 import { neon } from "@neondatabase/serverless";
 import * as z from "zod";
+import { pathInputDescriptions } from "../../../descriptions.gen.js";
 import type {
 	NeonToolExecutionContext,
 	NeonToolMetadata,
@@ -16,17 +17,17 @@ export const SQL_METADATA: NeonToolMetadata = {
 	tags: ["SQL"],
 };
 
-export const DATABASE_NAME_DESCRIPTION = `The name of the database. If not provided, the default ${NEON_DEFAULT_DATABASE_NAME} or first available database is used.`;
+export const DATABASE_NAME_DESCRIPTION = `Database name. Omit for ${NEON_DEFAULT_DATABASE_NAME}, else the first database.`;
 
 export const projectIdField = z
 	.string()
-	.describe("The ID of the project to execute the query against");
+	.describe(pathInputDescriptions.project_id);
 
 export const branchIdField = z
 	.string()
 	.optional()
 	.describe(
-		"An optional ID of the branch to execute the query against. If not provided the default branch is used.",
+		`${pathInputDescriptions.branch_id} Omit it for the default branch.`,
 	);
 
 export const databaseNameField = z
@@ -38,15 +39,16 @@ export const roleNameField = z
 	.string()
 	.optional()
 	.describe(
-		"An optional Postgres role to log in as. The server resolves its credentials internally and never returns them. If not provided, the database owner is used. On a connection pinned to a role, omit this or pass that role.",
+		"Postgres role to log in as. Omit for the database owner; a pinned postgresRole allows only itself.",
 	);
+
+export const COMPUTE_ID_DESCRIPTION =
+	"Compute endpoint id (ep-...). Omit for the read-write compute.";
 
 export const computeIdField = z
 	.string()
 	.optional()
-	.describe(
-		"The ID of the compute/endpoint. If not provided, the read-write compute associated with the branch will be used.",
-	);
+	.describe(COMPUTE_ID_DESCRIPTION);
 
 export interface ConnectionTarget {
 	project_id: string;
@@ -54,6 +56,8 @@ export interface ConnectionTarget {
 	database_name?: string;
 	role_name?: string;
 	compute_id?: string;
+	/** Defaults to `true`, as in `@neon/sdk`. */
+	pooled?: boolean;
 }
 
 export interface ResolvedConnection {
@@ -86,8 +90,8 @@ export const defaultDatabase = async (
 };
 
 /**
- * Resolves the connection every SQL tool uses. The URI embeds a role password,
- * so it stays inside the tool and never reaches a result.
+ * Resolves the connection every SQL tool uses, and the URI `postgres.connectionString`
+ * returns. The URI embeds a role password, so the SQL tools keep it inside the tool.
  */
 export const resolveConnection = async (
 	neonClient: NeonClient<true>,
@@ -137,6 +141,7 @@ export const resolveConnection = async (
 			...(target.compute_id === undefined
 				? {}
 				: { endpointId: target.compute_id }),
+			...(target.pooled === undefined ? {} : { pooled: target.pooled }),
 		},
 		{ signal },
 	);
@@ -159,13 +164,10 @@ export const sqlClient = (uri: string, signal?: AbortSignal) =>
  * Caller SQL that shares one transaction can escape `READ ONLY` with `COMMIT`
  * or `SET TRANSACTION READ WRITE`, so these tools refuse instead.
  */
-export const refuseInReadOnly = (
-	context: NeonToolExecutionContext,
-	selector: string,
-) => {
+export const refuseInReadOnly = (context: NeonToolExecutionContext) => {
 	if (context.readOnly === true) {
 		throw new NeonClientError(
-			`${selector} is unavailable in read-only mode because it runs caller SQL that can leave a read-only transaction.`,
+			"This tool is unavailable in read-only mode because it runs caller SQL that can leave a read-only transaction.",
 		);
 	}
 };

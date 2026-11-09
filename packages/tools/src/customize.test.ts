@@ -95,9 +95,8 @@ describe("description overrides", () => {
 			descriptions: (tool) => `${tool.description}\nNotice: scoped.`,
 		});
 
-		expect(tools["projects.list"].description).toContain("Notice: scoped.");
-		expect(tools["projects.list"].description.startsWith("Retrieves")).toBe(
-			true,
+		expect(tools["projects.list"].description).toBe(
+			`${createNeonTool("projects.list", { apiKey: "test-key" }).description}\nNotice: scoped.`,
 		);
 	});
 

@@ -19,7 +19,7 @@ export const fetchResourceInputSchema = z.strictObject({
 		.string()
 		.min(1)
 		.describe(
-			"The ID returned by resources.search to fetch detailed information about the entity",
+			"An id from {{resources.search}}, such as project:<project_id>.",
 		),
 });
 
@@ -294,7 +294,7 @@ export const fetchResourceTool = (options: ToolClientOptions) => {
 			id: publishedId("resources.fetch"),
 			title: "Fetch",
 			description:
-				"Fetch detailed information about an organization, project, branch, compute endpoint, or snapshot using the ID returned by resources.search. Returns `{ id, title, text, url, metadata }`.",
+				"Returns an organization, project, branch, compute, or snapshot by an id from {{resources.search}}: markdown text, console URL, and records in metadata.",
 			inputSchema: fetchResourceInputSchema,
 			annotations: {
 				readOnlyHint: true,

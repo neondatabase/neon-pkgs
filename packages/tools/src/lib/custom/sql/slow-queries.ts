@@ -6,35 +6,28 @@ import {
 	type ToolClientOptions,
 } from "../../ergonomic/bind.js";
 import {
+	branchIdField,
 	computeIdField,
 	databaseNameField,
+	projectIdField,
 	resolveConnection,
 	SQL_METADATA,
 	sqlClient,
 } from "./connection.js";
 
 export const listSlowQueriesInputSchema = z.strictObject({
-	project_id: z
-		.string()
-		.describe("The ID of the project to list slow queries from"),
-	branch_id: z
-		.string()
-		.optional()
-		.describe(
-			"An optional ID of the branch. If not provided the default branch is used.",
-		),
+	project_id: projectIdField,
+	branch_id: branchIdField,
 	database_name: databaseNameField,
 	compute_id: computeIdField,
 	limit: z
 		.number()
 		.default(10)
-		.describe("Maximum number of slow queries to return"),
+		.describe("Maximum number of queries to return."),
 	min_execution_time: z
 		.number()
 		.default(1000)
-		.describe(
-			"Minimum execution time in milliseconds to consider a query as slow",
-		),
+		.describe("Ignored; results are not filtered by time."),
 });
 
 const EXTENSION_CHECK_SQL = `
@@ -74,7 +67,7 @@ export const listSlowQueriesTool = (options: ToolClientOptions) =>
 			id: publishedId("queries.listSlow"),
 			title: "List Slow Queries",
 			description:
-				"List queries from pg_stat_statements by execution time, slowest first. For sizes, indexes, locks, cache, bloat, or replication use database.inspect.",
+				"Lists queries from pg_stat_statements, slowest mean execution time first. For sizes, indexes, locks, cache, bloat, or replication, use {{database.inspect}}.",
 			inputSchema: listSlowQueriesInputSchema,
 			annotations: {
 				readOnlyHint: true,

@@ -12,6 +12,7 @@ export default defineConfig({
 				"src/**/*.test.ts",
 				"src/generated/**",
 				"src/operations.gen.ts",
+				"src/descriptions.gen.ts",
 			],
 			reporter: ["html", "lcov"],
 		},

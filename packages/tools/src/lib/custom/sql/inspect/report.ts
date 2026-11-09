@@ -62,13 +62,13 @@ function truncationNote(
 		return `Showing the first ${limit} of ${totalRowCount} rows, which cover only the databases ${covered} (of ${ran.length}). ${
 			limit < INSPECT_MAX_LIMIT
 				? "Raise `limit` to reach the rest."
-				: "Narrow the question with `sql.run` to see the rest."
+				: "Narrow the question with your own SQL to see the rest."
 		}`;
 	}
 	if (limit < INSPECT_MAX_LIMIT) {
 		return `Showing the first ${limit} of ${totalRowCount} rows. Raise \`limit\` to see more.`;
 	}
-	return `Showing the first ${limit} of ${totalRowCount} rows, which is the maximum this tool returns. Narrow the question with \`sql.run\` to see the rest.`;
+	return `Showing the first ${limit} of ${totalRowCount} rows, which is the maximum this tool returns. Narrow the question with your own SQL to see the rest.`;
 }
 
 export function assembleInspectReport({
@@ -116,8 +116,8 @@ export function assembleInspectReport({
 		batches.some((batch) => batch.rows.length === query.sqlLimit)
 	) {
 		const sqlCapNote = includeDatabaseColumn
-			? `The \`${check}\` check returns at most ${query.sqlLimit} rows per database, and at least one database hit that cap, so there may be more. Use \`sql.run\` for the full ranking.`
-			: `The \`${check}\` check returns at most ${query.sqlLimit} rows, and hit that cap, so there may be more. Use \`sql.run\` for the full ranking.`;
+			? `The \`${check}\` check returns at most ${query.sqlLimit} rows per database, and at least one database hit that cap, so there may be more. Run your own SQL for the full ranking.`
+			: `The \`${check}\` check returns at most ${query.sqlLimit} rows, and hit that cap, so there may be more. Run your own SQL for the full ranking.`;
 		note = note === undefined ? sqlCapNote : `${note} ${sqlCapNote}`;
 	}
 

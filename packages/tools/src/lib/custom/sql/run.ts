@@ -12,6 +12,7 @@ import type {
 import {
 	branchIdField,
 	type ConnectionTarget,
+	computeIdField,
 	databaseNameField,
 	projectIdField,
 	refuseInReadOnly,
@@ -34,13 +35,6 @@ export const sqlWriteAnnotations: NeonToolAnnotations = {
 	openWorldHint: false,
 };
 
-const sqlComputeIdField = z
-	.string()
-	.optional()
-	.describe(
-		"An optional ID of the compute/endpoint to run on. If not provided, the read-write compute of the branch is used.",
-	);
-
 const maxRowsField = z
 	.number()
 	.int()
@@ -48,33 +42,33 @@ const maxRowsField = z
 	.max(SQL_MAX_ROWS_LIMIT)
 	.default(SQL_DEFAULT_MAX_ROWS)
 	.describe(
-		"Maximum number of rows to return per statement. When a statement returns more, its result has `truncated: true` and `totalRowCount`; raise this only then.",
+		"Rows to return per statement. Raise it only when a result has truncated: true.",
 	);
 
 export const runSqlInputSchema = z.strictObject({
-	sql: z.string().describe("The SQL query to execute"),
+	sql: z.string().describe("The SQL statement to run."),
 	project_id: projectIdField,
 	branch_id: branchIdField,
 	database_name: databaseNameField,
 	role_name: roleNameField,
-	compute_id: sqlComputeIdField,
+	compute_id: computeIdField,
 	max_rows: maxRowsField,
 });
 
 export const runSqlTransactionInputSchema = z.strictObject({
 	sql_statements: z
 		.array(z.string())
-		.describe("The SQL statements to execute"),
+		.describe("The SQL statements to run, in order."),
 	project_id: projectIdField,
 	branch_id: branchIdField,
 	database_name: databaseNameField,
 	role_name: roleNameField,
-	compute_id: sqlComputeIdField,
+	compute_id: computeIdField,
 	max_rows: maxRowsField,
 });
 
 export const explainSqlInputSchema = z.strictObject({
-	sql: z.string().describe("The SQL statement to analyze"),
+	sql: z.string().describe("The SQL statement to explain."),
 	project_id: projectIdField,
 	branch_id: branchIdField,
 	database_name: databaseNameField,
@@ -82,7 +76,7 @@ export const explainSqlInputSchema = z.strictObject({
 		.boolean()
 		.default(false)
 		.describe(
-			"Whether to execute the statement with EXPLAIN ANALYZE. Defaults to false because execution may cause side effects.",
+			"Run EXPLAIN ANALYZE, which executes the statement and its side effects.",
 		),
 });
 
@@ -158,7 +152,7 @@ export const runSqlTool = (options: ToolClientOptions) =>
 			id: publishedId("sql.run"),
 			title: "Run SQL",
 			description:
-				"Execute one SQL statement on a Neon database. If a prior step created a temporary branch, pass that branch_id. NEVER run destructive SQL autonomously; always ask the user first.",
+				"Runs one SQL statement on a branch's database and returns its rows. After a prepare step, pass its temporary branch_id. NEVER run destructive SQL autonomously; always ask the user first.",
 			inputSchema: runSqlInputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
@@ -185,14 +179,14 @@ export const runSqlTransactionTool = (options: ToolClientOptions) =>
 			id: publishedId("sql.runTransaction"),
 			title: "Run SQL Transaction",
 			description:
-				"Execute multiple SQL statements as one transaction. If a prior step created a temporary branch, pass that branch_id. NEVER run destructive SQL autonomously; always ask the user first.",
+				"Runs several SQL statements in one transaction and returns each one's rows. After a prepare step, pass its temporary branch_id. NEVER run destructive SQL autonomously; always ask the user first.",
 			inputSchema: runSqlTransactionInputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,
 		},
 		async (neonClient, input, signal, context) => {
-			refuseInReadOnly(context, "sql.runTransaction");
+			refuseInReadOnly(context);
 			const results = await runTransaction(
 				neonClient,
 				input,
@@ -212,7 +206,7 @@ export const explainSqlTool = (options: ToolClientOptions) =>
 			id: publishedId("sql.explain"),
 			title: "Explain SQL Statement",
 			description:
-				"Generate the execution plan for a SQL statement. When `analyze` is true, PostgreSQL executes the statement and any side effects. Use `analyze: false` to inspect a statement without executing it. Never analyze potentially destructive SQL autonomously. Do not use when you need query results (use `sql.run` instead).",
+				"Returns a statement's execution plan as JSON. analyze true executes it, side effects included, so never analyze potentially destructive SQL autonomously. For rows, use {{sql.run}}.",
 			inputSchema: explainSqlInputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,

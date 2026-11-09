@@ -34,7 +34,7 @@ export const sendFeedbackTool = (options: ToolClientOptions) => {
 			id: publishedId("feedback.send"),
 			title: "Send Feedback",
 			description:
-				"Send anonymous feedback about Neon or this tool to the Neon team. Only call this when the user asks to give feedback. Sends only the feedback text, not account, project, or connection details.",
+				"Sends anonymous feedback text to the Neon team, with no account, project, or connection details. Only call it when the user asks to give feedback.",
 			inputSchema: sendFeedbackInputSchema,
 			annotations: {
 				readOnlyHint: false,

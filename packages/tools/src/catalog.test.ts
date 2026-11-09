@@ -939,7 +939,7 @@ describe("special mappings", () => {
 		expect(reset.annotations.destructiveHint).toBe(true);
 		expect(reset.requiresApproval).toBe(true);
 		expect(reset.description).toContain(
-			"Discards every change the branch has written since it diverged",
+			"discarding the branch's own changes. NEVER run autonomously; always ask the user first.",
 		);
 		const preserve = z.toJSONSchema(reset.inputSchema).properties
 			?.preserve_under_name;

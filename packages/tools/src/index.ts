@@ -3,7 +3,6 @@ import { InspectDiagnosticError } from "./lib/custom/sql/inspect/inspect.js";
 import {
 	applyToolCustomization,
 	assertToolCustomizeOptions,
-	hasToolCustomization,
 	type InjectedNeonTool,
 	type NeonToolCustomizeOptions,
 	type NeonToolInjectOptions,
@@ -162,14 +161,9 @@ const bindTools = <T extends CreateNeonToolsInput>(
 		options.names,
 		rawEntries.map(([, tool]) => tool),
 	);
-	const entries = rawEntries.map(([id, tool]) => {
-		return [
-			id,
-			hasToolCustomization(options)
-				? applyToolCustomization(tool, options)
-				: tool,
-		] as const;
-	});
+	const entries = rawEntries.map(
+		([id, tool]) => [id, applyToolCustomization(tool, options)] as const,
+	);
 	const publishedIds = new Map<string, string>();
 	for (const [id, tool] of entries) {
 		const previous = publishedIds.get(tool.id);
@@ -268,10 +262,7 @@ export function createNeonTool<
 	assertToolCustomizeOptions(options);
 	const tool = factoryFor(id)(options);
 	assertKnownNameKeys(options.names, [tool]);
-	const customized = hasToolCustomization(options)
-		? applyToolCustomization(tool, options)
-		: tool;
-	return customized as
+	return applyToolCustomization(tool, options) as
 		| NamedNeonTool<Id, Inject>
 		| InjectedNeonTool<ToolForId<Id>, Inject>
 		| ToolForId<Id>;

@@ -1,5 +1,6 @@
 import type { Branch, NeonClient } from "@neon/sdk";
 import * as z from "zod";
+import { pathInputDescriptions } from "../../../descriptions.gen.js";
 import {
 	bindTool,
 	publishedId,
@@ -9,6 +10,7 @@ import type { NeonToolExecutionContext } from "../../operation.js";
 import { consoleBaseUrl, DEFAULT_API_BASE_URL } from "../resources.js";
 import {
 	databaseNameField,
+	projectIdField,
 	resolveConnection,
 	SQL_METADATA,
 	sqlClient,
@@ -17,26 +19,16 @@ import type { Row } from "./rows.js";
 import { sqlReadAnnotations } from "./schema.js";
 
 export const describeBranchInputSchema = z.strictObject({
-	project_id: z.string().describe("The ID of the project"),
-	branch_id: z.string().describe("An ID of the branch to describe"),
+	project_id: projectIdField,
+	branch_id: z.string().describe(pathInputDescriptions.branch_id),
 	database_name: databaseNameField,
 });
 
-const CREATE_DB_TREE_FUNCTION = `
-CREATE OR REPLACE FUNCTION public.show_db_tree()
-RETURNS TABLE (tree_structure text) AS
-$$
-BEGIN
-    -- First show all databases
-    RETURN QUERY
-    SELECT ':file_folder: ' || datname || ' (DATABASE)'
-    FROM pg_database
-    WHERE datistemplate = false;
-
-    -- Then show current database structure
-    RETURN QUERY
-    WITH RECURSIVE
-    -- Get schemas
+// One SELECT over the system catalogs: every database, then the current
+// database's schemas and objects as an indented tree. It creates nothing, so it
+// needs no CREATE privilege and runs in a READ ONLY transaction.
+const DESCRIBE_DATABASE_QUERY = `
+WITH RECURSIVE
     schemas AS (
         SELECT
             n.nspname AS object_name,
@@ -48,7 +40,6 @@ BEGIN
         AND n.nspname != 'information_schema'
     ),
 
-    -- Get all objects (tables, views, functions, etc.)
     objects AS (
         SELECT
             c.relname AS object_name,
@@ -79,15 +70,20 @@ BEGIN
         JOIN schemas s ON n.nspname = s.object_name
     ),
 
-    -- Combine schemas and objects
     combined AS (
         SELECT * FROM schemas
         UNION ALL
         SELECT * FROM objects
     )
 
-    -- Final output with tree-like formatting
-    SELECT
+SELECT tree_structure FROM (
+    SELECT 0 AS part, NULL::text AS path, ':file_folder: ' || datname || ' (DATABASE)' AS tree_structure
+    FROM pg_database
+    WHERE datistemplate = false
+
+    UNION ALL
+
+    SELECT 1 AS part, path,
         REPEAT('    ', level) ||
         CASE
             WHEN level = 1 THEN '└── :open_file_folder: '
@@ -102,19 +98,11 @@ BEGIN
                     WHEN 'FOREIGN TABLE' THEN ':globe_with_meridians: '
                     ELSE ''
                 END
-        END || object_name || ' (' || object_type || ')'
+        END || object_name || ' (' || object_type || ')' AS tree_structure
     FROM combined
-    ORDER BY path;
-END;
-$$ LANGUAGE plpgsql;
+) tree
+ORDER BY part, path;
 `;
-
-const DESCRIBE_DATABASE_STATEMENTS = [
-	CREATE_DB_TREE_FUNCTION,
-	"SELECT * FROM show_db_tree();",
-];
-
-const DROP_DB_TREE_FUNCTION = "DROP FUNCTION IF EXISTS public.show_db_tree();";
 
 export const branchConsoleUrl = (
 	consoleUrl: string,
@@ -149,15 +137,14 @@ export interface BranchDescription {
 	console_url: string;
 	/** The branch details and database tree as text. */
 	text: string;
-	/** The `CREATE FUNCTION` result and the tree rows, or null when the tree query failed. */
+	/**
+	 * `[[], treeRows]`, or null when the tree query failed. The leading empty array
+	 * keeps the shape the Neon MCP server's `describe_branch` returns.
+	 */
 	database_structure: Row[][] | null;
 	database_structure_error?: string;
 }
 
-/**
- * The tree comes from a fixed function created and dropped in one transaction.
- * It reads only catalogs, so it runs outside `READ ONLY` even in read-only mode.
- */
 export const describeBranch = async (
 	neonClient: NeonClient<true>,
 	input: { project_id: string; branch_id: string; database_name?: string },
@@ -183,13 +170,11 @@ export const describeBranch = async (
 			signal,
 		);
 		const sql = sqlClient(connection.uri, signal);
-		const results = await sql.transaction([
-			...DESCRIBE_DATABASE_STATEMENTS.map((statement) =>
-				sql.query(statement),
-			),
-			sql.query(DROP_DB_TREE_FUNCTION),
-		]);
-		const structure = results.slice(0, DESCRIBE_DATABASE_STATEMENTS.length);
+		const [tree] = await sql.transaction(
+			[sql.query(DESCRIBE_DATABASE_QUERY)],
+			{ readOnly: true },
+		);
+		const structure: Row[][] = [[], tree];
 		return {
 			branch,
 			console_url: url,
@@ -222,7 +207,7 @@ export const describeBranchTool = (options: ToolClientOptions) => {
 			id: publishedId("branches.describe"),
 			title: "Describe Branch",
 			description:
-				"Get a tree view of all objects in a branch, including databases, schemas, tables, views, and functions. Do not use when you only need table names (use `schema.listTables` instead) or column detail (use `schema.describeTable` instead).",
+				"Returns a branch summary, its database names, and a tree of one database's schemas, tables, views, indexes, sequences, and functions. Starts a suspended compute. Branch record only: {{branches.get}}; table names: {{schema.listTables}}; columns: {{schema.describeTable}}.",
 			inputSchema: describeBranchInputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,

@@ -9,6 +9,7 @@ import {
 	type NeonClient,
 } from "@neon/sdk";
 import * as z from "zod";
+import { pathInputDescriptions } from "../../descriptions.gen.js";
 import * as zod from "../../generated/zod.gen.js";
 import {
 	bindTool,
@@ -19,9 +20,13 @@ import {
 export const REDACTED_SECRET = "***redacted***";
 
 export const getAuthConfigInputSchema = z.strictObject({
-	project_id: zod.zGetNeonAuthPath.shape.project_id,
+	project_id: zod.zGetNeonAuthPath.shape.project_id.describe(
+		pathInputDescriptions.project_id,
+	),
 	branch_id: zod.zGetNeonAuthPath.shape.branch_id
-		.describe("Branch ID. If omitted, the project default branch is used.")
+		.describe(
+			`${pathInputDescriptions.branch_id} Omit it for the project's default branch.`,
+		)
 		.optional(),
 });
 
@@ -229,7 +234,7 @@ export const getAuthConfigTool = (options: ToolClientOptions) =>
 			id: publishedId("auth.getConfig"),
 			title: "Get Neon Auth configuration",
 			description:
-				'Read Neon Auth config for a branch: trusted origins, localhost access, email and password, OAuth providers, email provider, the organization, magic link, and phone number plugins, and the webhook. OAuth and SMTP secrets are redacted as "***redacted***". Omit branch_id to read the default branch. Requires Neon Auth on the branch (auth.create).',
+				"Returns a branch's Neon Auth integration and every setting: trusted origins, localhost, email and password, OAuth and email providers, plugins, and webhook, with secrets redacted. Needs Neon Auth on the branch ({{auth.create}}).",
 			inputSchema: getAuthConfigInputSchema,
 			annotations: {
 				readOnlyHint: true,

@@ -7,7 +7,9 @@ import {
 	type ToolClientOptions,
 } from "../../../ergonomic/bind.js";
 import {
+	branchIdField,
 	computeIdField,
+	projectIdField,
 	resolveConnection,
 	SQL_METADATA,
 	sqlClient,
@@ -39,18 +41,9 @@ export class InspectDiagnosticError extends Error {
 }
 
 export const inspectDatabaseInputSchema = z.strictObject({
-	check: z
-		.enum(INSPECT_CHECKS)
-		.describe(
-			"Which diagnostic to run: table or index sizes, unused indexes, sequential scans, long-running or stalled queries, locks, pg_stat_statements outliers and calls, LFC hit rate, working set, vacuum stats, bloat, replication.",
-		),
-	project_id: z.string().describe("The ID of the project to inspect"),
-	branch_id: z
-		.string()
-		.optional()
-		.describe(
-			"An optional ID of the branch. If not provided the default branch is used.",
-		),
+	check: z.enum(INSPECT_CHECKS).describe("The diagnostic to run."),
+	project_id: projectIdField,
+	branch_id: branchIdField,
 	database_name: z
 		.string()
 		.min(
@@ -59,7 +52,7 @@ export const inspectDatabaseInputSchema = z.strictObject({
 		)
 		.optional()
 		.describe(
-			"The database to inspect, or for a compute-wide check the database to connect through. Omit to cover every database on the branch; one failing database fails the run.",
+			"Database to inspect, or to connect through for a compute-wide check. Omit for every database; one failure fails the run.",
 		),
 	compute_id: computeIdField,
 	limit: z
@@ -68,9 +61,7 @@ export const inspectDatabaseInputSchema = z.strictObject({
 		.min(1)
 		.max(INSPECT_MAX_LIMIT)
 		.default(INSPECT_DEFAULT_LIMIT)
-		.describe(
-			"Maximum number of rows to return from the combined result. The response reports how many rows the check produced; raise this only when `truncated` is true.",
-		),
+		.describe("Rows to return. Raise it only when truncated is true."),
 });
 
 /**
@@ -118,7 +109,7 @@ const runInspectOnDatabase = async (
 		);
 		if (installed.length === 0) {
 			throw new NeonClientError(
-				`The "${check}" check needs the "${extension}" extension, which is not installed on database "${databaseName}". Installing it writes to the user's database, so ask the user first, then run \`CREATE EXTENSION IF NOT EXISTS ${extension};\` with sql.run.`,
+				`The "${check}" check needs the "${extension}" extension, which is not installed on database "${databaseName}". Installing it writes to the user's database, so ask the user first, then run \`CREATE EXTENSION IF NOT EXISTS ${extension};\`.`,
 			);
 		}
 	}
@@ -152,7 +143,7 @@ export const inspectDatabaseTool = (options: ToolClientOptions) =>
 			id: publishedId("database.inspect"),
 			title: "Inspect Database",
 			description:
-				"Run one read-only neon inspect db check (pick `check` from the input schema). Not for arbitrary SQL (`sql.run`), one statement's plan (`sql.explain`), or applying indexes (`queryTuning.prepare`). Omit `database_name` to cover every database; some checks are compute-wide. If a check needs an extension, the tool names `CREATE EXTENSION`; ask before running it.",
+				"Runs one read-only neon inspect db check; some are compute-wide. If a check needs an extension, the error gives the CREATE EXTENSION; ask before running it. Other SQL: {{sql.run}}; one plan: {{sql.explain}}; new indexes: {{queryTuning.prepare}}.",
 			inputSchema: inspectDatabaseInputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,

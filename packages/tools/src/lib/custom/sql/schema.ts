@@ -7,6 +7,7 @@ import {
 } from "../../ergonomic/bind.js";
 import type { NeonToolAnnotations } from "../../operation.js";
 import {
+	branchIdField,
 	databaseNameField,
 	projectIdField,
 	resolveConnection,
@@ -22,13 +23,8 @@ export const sqlReadAnnotations: NeonToolAnnotations = {
 };
 
 export const listTablesInputSchema = z.strictObject({
-	project_id: z.string().describe("The ID of the project"),
-	branch_id: z
-		.string()
-		.optional()
-		.describe(
-			"An optional ID of the branch. If not provided the default branch is used.",
-		),
+	project_id: projectIdField,
+	branch_id: branchIdField,
 	database_name: databaseNameField,
 });
 
@@ -39,12 +35,7 @@ export const describeTableInputSchema = z.strictObject({
 			"The table name, optionally schema-qualified (for example, crm.contacts)",
 		),
 	project_id: projectIdField,
-	branch_id: z
-		.string()
-		.optional()
-		.describe(
-			"An optional ID of the branch to execute the query against. If not provided the default branch is used.",
-		),
+	branch_id: branchIdField,
 	database_name: databaseNameField,
 });
 
@@ -267,7 +258,7 @@ export const listTablesTool = (options: ToolClientOptions) =>
 			id: publishedId("schema.listTables"),
 			title: "Get Database Tables",
 			description:
-				"List all tables in a Neon database. Do not use when you need column-level detail for a specific table (use `schema.describeTable` instead).",
+				"Lists a database's tables and views outside the system schemas. For one table's columns, use {{schema.describeTable}}.",
 			inputSchema: listTablesInputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
@@ -292,7 +283,7 @@ export const describeTableTool = (options: ToolClientOptions) =>
 			id: publishedId("schema.describeTable"),
 			title: "Describe Table Schema",
 			description:
-				"Get column definitions, data types, and constraints for a specific table. Do not use when you need all tables in a database (use `schema.listTables` instead).",
+				"Returns a table's columns, indexes, constraints, and sizes. For every table, use {{schema.listTables}}.",
 			inputSchema: describeTableInputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,

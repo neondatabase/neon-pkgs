@@ -7,6 +7,7 @@ import {
 	type Paginated,
 } from "@neon/sdk";
 import * as z from "zod";
+import { toolDescriptions } from "../../descriptions.gen.js";
 import {
 	type NeonOperationId,
 	operationFactories,
@@ -359,13 +360,14 @@ export function fromGenerated(
 		spec.omit === undefined || spec.omit.length === 0
 			? schema
 			: omitObjectKeys(schema, spec.omit);
+	const description = toolDescriptions[spec.id] ?? generated.description;
 	return {
 		operationId: spec.id,
 		id: publishedId(spec.id),
 		title: generated.title,
 		description: spec.list
-			? `${generated.description.trimEnd()}${ALL_PAGES}`
-			: generated.description,
+			? `${description.trimEnd()}${ALL_PAGES}`
+			: description,
 		inputSchema,
 		annotations: spec.annotations ?? generated.annotations,
 		requiresApproval: spec.requiresApproval ?? generated.requiresApproval,

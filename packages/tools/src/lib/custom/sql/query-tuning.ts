@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { NeonClientError } from "@neon/sdk";
 import * as z from "zod";
+import { pathInputDescriptions } from "../../../descriptions.gen.js";
 import {
 	bindTool,
 	publishedId,
 	type ToolClientOptions,
 } from "../../ergonomic/bind.js";
 import {
+	projectIdField,
 	refuseInReadOnly,
 	resolveConnection,
 	SQL_METADATA,
@@ -21,62 +23,52 @@ import {
 import { describeTableAt } from "./schema.js";
 
 export const prepareQueryTuningInputSchema = z.strictObject({
-	sql: z.string().describe("The SQL statement to analyze and tune"),
-	database_name: z
-		.string()
-		.describe("The name of the database to execute the query against"),
-	project_id: z
-		.string()
-		.describe("The ID of the project to execute the query against"),
+	sql: z.string().describe("The slow SQL statement to analyze."),
+	database_name: z.string().describe("The database the statement runs in."),
+	project_id: projectIdField,
 	role_name: z
 		.string()
 		.optional()
-		.describe(
-			'The name of the role to connect with. If not provided, the default role (usually "neondb_owner") will be used.',
-		),
+		.describe("Postgres role to connect as. Omit for the database owner."),
 });
 
 export const completeQueryTuningInputSchema = z.strictObject({
 	suggested_sql_statements: z
 		.array(z.string())
 		.describe(
-			"The SQL DDL statements to execute to improve performance. These statements are the result of the prior steps, for example creating additional indexes.",
+			"The DDL statements that improved the plan on the temporary branch, for example CREATE INDEX.",
 		),
 	apply_changes: z
 		.boolean()
 		.default(false)
-		.describe("Whether to apply the suggested changes to the main branch"),
+		.describe("Apply suggested_sql_statements to branch_id."),
 	tuning_id: z
 		.string()
 		.describe(
-			"The ID of the tuning to complete. This is NOT the branch ID. Remember this ID from the prior step using queryTuning.prepare.",
+			"The tuning_id from {{queryTuning.prepare}}, not a branch id.",
 		),
 	database_name: z
 		.string()
-		.describe("The name of the database to execute the query against"),
-	project_id: z
-		.string()
-		.describe("The ID of the project to execute the query against"),
+		.describe("The database_name from {{queryTuning.prepare}}."),
+	project_id: projectIdField,
 	role_name: z
 		.string()
 		.optional()
 		.describe(
-			'The name of the role to connect with. If you have used a specific role in queryTuning.prepare you MUST pass the same role again to this tool. If not provided, the default role (usually "neondb_owner") will be used.',
+			"The role_name passed to {{queryTuning.prepare}}, if any. Omit for the database owner.",
 		),
 	should_delete_temporary_branch: z
 		.boolean()
 		.default(true)
-		.describe("Whether to delete the temporary branch after tuning"),
+		.describe("Delete the temporary branch."),
 	temporary_branch_id: z
 		.string()
-		.describe(
-			"The ID of the temporary branch that needs to be deleted after tuning.",
-		),
+		.describe("The temporary_branch_id from {{queryTuning.prepare}}."),
 	branch_id: z
 		.string()
 		.optional()
 		.describe(
-			"The ID or name of the branch that receives the changes. If not provided, the default (main) branch will be used.",
+			`${pathInputDescriptions.branch_id} The branch that receives the changes; omit it for the default branch.`,
 		),
 });
 
@@ -88,7 +80,7 @@ export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 			id: publishedId("queryTuning.prepare"),
 			title: "Prepare Query Tuning",
 			description:
-				"Analyze a slow query on a temporary branch and return a tuning_id. Apply suggested SQL with sql.run on that branch, re-run sql.explain there, then queryTuning.complete with the response's `complete` object (tuning_id is not the branch id): apply_changes true if they accept, omit it or pass false if they reject, so the temporary branch is deleted. Do not use migrations.prepare.",
+				"Runs EXPLAIN ANALYZE for a slow query on a new temporary branch; returns the plan, table schemas, and a tuning_id. Try changes there with {{sql.run}} and {{sql.explain}}, then always call {{queryTuning.complete}} with the complete object so the branch is deleted. Not {{migrations.prepare}}.",
 			inputSchema: prepareQueryTuningInputSchema,
 			annotations: {
 				readOnlyHint: false,
@@ -100,7 +92,7 @@ export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 			metadata: SQL_METADATA,
 		},
 		async (neonClient, input, signal, context) => {
-			refuseInReadOnly(context, "queryTuning.prepare");
+			refuseInReadOnly(context);
 			const projectId = input.project_id;
 			return withTemporaryBranch(
 				neonClient,
@@ -184,14 +176,14 @@ export const completeQueryTuningTool = (options: ToolClientOptions) =>
 			id: publishedId("queryTuning.complete"),
 			title: "Complete Query Tuning",
 			description:
-				"Apply or discard query-tuning changes and delete the temporary branch. NEVER run autonomously. Before calling, apply suggested SQL with sql.run on the temporary branch and re-run sql.explain. Pass the `complete` object from queryTuning.prepare (its tuning_id is not the branch id) plus suggested_sql_statements. Set apply_changes true to apply; omitting it discards. Call this even when the user rejects the changes. Do not use migrations.prepare.",
+				"Applies or discards query-tuning changes and deletes the temporary branch. NEVER run autonomously. Pass the complete object from {{queryTuning.prepare}} and suggested_sql_statements; apply_changes true applies, omitted discards. Call it even when the user rejects.",
 			inputSchema: completeQueryTuningInputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,
 		},
 		async (neonClient, input, signal, context) => {
-			refuseInReadOnly(context, "queryTuning.complete");
+			refuseInReadOnly(context);
 			const operationLog: string[] = [];
 			let results: Awaited<ReturnType<typeof runTransaction>> | undefined;
 			if (

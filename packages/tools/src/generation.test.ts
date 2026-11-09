@@ -174,20 +174,9 @@ describe("generated operation coverage", () => {
 			"Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth` instead.",
 		);
 
-		const listProjects = createNeonTool("projects.list", {
-			apiKey: "test-key",
-		});
-		expect(listProjects.description).toBe(
-			"Retrieves a list of projects for the specified organization. Returns every page. Pass limit to cap how many.",
+		expect(operationFactories.listProjects(client).description).toBe(
+			"Retrieves a list of projects for the specified organization.",
 		);
-
-		const permissions = createNeonTool("projects.permissions.list", {
-			apiKey: "test-key",
-		});
-		expect(permissions.description).toBe(
-			"Retrieves details about users who have access to the project, including the permission `id`, the granted-to email address, and the date project access was granted.",
-		);
-		expect(permissions.description).not.toMatch(/https?:\/\//);
 
 		for (const operationId of operationIds) {
 			const tool = operationFactories[operationId](client);
@@ -250,7 +239,10 @@ describe("generated operation coverage", () => {
 			description("projects.members.setRole", "confirm_self_demotion"),
 		).toBe("Set true to lower your own role on the project.");
 		expect(description("consumption.perProjectV2", "metrics")).toBe(
-			"Required. List the metrics to return.",
+			"Metric names from the tool description. An unknown name returns no data rather than an error.",
+		);
+		expect(description("consumption.perProjectV2", "org_id")).toBe(
+			"Organization id from organizations_user.",
 		);
 		expect(description("credentials.revoke", "token_id")).toBe(
 			"The opaque credential id (e.g. nak_live_<32hex>).",
@@ -267,11 +259,9 @@ describe("generated operation coverage", () => {
 		const createAndConnect = createNeonTool("projects.createAndConnect", {
 			apiKey: "test-key",
 		});
-		expect(create.description).toContain(
-			"Does not return a connection string",
-		);
+		expect(create.description).toContain("Returns no connection string");
 		expect(createAndConnect.description).toContain(
-			"return a connection string",
+			"returns a connection string",
 		);
 	});
 });

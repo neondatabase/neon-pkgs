@@ -1,9 +1,15 @@
 import * as z from "zod";
+import { publishedId as defaultPublishedId } from "./ergonomic/bind.js";
 import type {
 	NeonTool,
 	NeonToolExecutionContext,
 	NeonToolResult,
 } from "./operation.js";
+import {
+	resolveInputReferences,
+	resolveToolReferences,
+	type ToolNameOf,
+} from "./references.js";
 
 export type NeonToolInjectValue =
 	| string
@@ -142,24 +148,43 @@ export const assertToolCustomizeOptions = (
 	}
 };
 
-export const hasToolCustomization = (
-	options: NeonToolCustomizeOptions,
-): boolean =>
-	options.descriptions !== undefined ||
-	options.names !== undefined ||
-	options.name !== undefined ||
-	options.onExecute !== undefined ||
-	resolveInject(options.inject).hasAny;
-
+/**
+ * Runs for every tool, customized or not: `{{selector}}` references resolve with
+ * these `names` and `name`, including references to tools that are not selected.
+ */
 export const applyToolCustomization = <Tool extends NeonTool>(
 	tool: Tool,
 	options: NeonToolCustomizeOptions,
 ): Omit<Tool, "id"> & { id: string } => {
 	const inject = resolveInject(options.inject);
 	const id = publishedId(tool, options);
-	const description = applyDescription(tool, options.descriptions);
+	const nameOf: ToolNameOf = (selector) =>
+		publishedId(
+			{ operationId: selector, id: defaultPublishedId(selector) },
+			options,
+		);
+	const where = `the description of ${tool.operationId}`;
+	const description = resolveToolReferences(
+		applyDescription(
+			{
+				...tool,
+				description: resolveToolReferences(
+					tool.description,
+					nameOf,
+					where,
+				),
+			},
+			options.descriptions,
+		),
+		nameOf,
+		where,
+	);
 	const inputSchema = publishInputSchema(
-		tool.inputSchema,
+		resolveInputReferences(
+			tool.inputSchema,
+			nameOf,
+			`the input of ${tool.operationId}`,
+		),
 		inject,
 		pathTemplateParams(tool.metadata.path),
 	);
@@ -177,7 +202,7 @@ export const applyToolCustomization = <Tool extends NeonTool>(
 };
 
 function publishedId(
-	tool: NeonTool,
+	tool: NeonToolNameSource,
 	options: NeonToolCustomizeOptions,
 ): string {
 	let id = tool.id;

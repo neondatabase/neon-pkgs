@@ -54,7 +54,7 @@ export const searchDocsInputSchema = z.strictObject({
 		})
 		.optional()
 		.describe(
-			"Only return pages in these categories: docs, api (API reference), postgresql (PostgreSQL tutorial), guides, faqs, blog, changelog. Omit to search everything.",
+			"Only these categories; api is the API reference, postgresql the PostgreSQL tutorial.",
 		),
 	limit: z
 		.number()
@@ -62,14 +62,14 @@ export const searchDocsInputSchema = z.strictObject({
 		.min(1)
 		.max(40)
 		.default(10)
-		.describe("Maximum number of pages to return (1-40)."),
+		.describe("Maximum number of pages to return."),
 });
 
 export const getDocInputSchema = z.strictObject({
 	slug: z
 		.string()
 		.describe(
-			"The slug of a hit returned by docs.search, e.g. 'docs/guides/prisma' or 'postgresql/tutorial/inner-join'.",
+			"The slug of a {{docs.search}} hit, e.g. 'docs/guides/prisma' or 'postgresql/tutorial/inner-join'.",
 		),
 });
 
@@ -157,7 +157,7 @@ export const searchDocsTool = (options: ToolClientOptions) => {
 			id: publishedId("docs.search"),
 			title: "Search Documentation",
 			description:
-				"Search neon.com: docs, API reference, PostgreSQL tutorial, guides, FAQs, changelog, and blog. Returns ranked pages with title, URL, the matching section, and a slug; read a full page with docs.get.",
+				"Searches neon.com docs, API reference, PostgreSQL tutorial, guides, FAQs, changelog, and blog for ranked pages with the slug {{docs.get}} reads.",
 			inputSchema: searchDocsInputSchema,
 			annotations: docsAnnotations,
 			requiresApproval: false,
@@ -217,7 +217,7 @@ export const getDocTool = (options: ToolClientOptions) => {
 			id: publishedId("docs.get"),
 			title: "Get Documentation Page",
 			description:
-				"Fetch one neon.com page as markdown. Pass the slug of a docs.search hit (for example docs/guides/prisma). Returns `{ url, markdown }`.",
+				"Returns one neon.com page as markdown, by the slug of a {{docs.search}} hit.",
 			inputSchema: getDocInputSchema,
 			annotations: docsAnnotations,
 			requiresApproval: false,
@@ -238,7 +238,7 @@ export const getDocTool = (options: ToolClientOptions) => {
 			});
 			if (response.status === 404) {
 				throw new NeonClientError(
-					`Doc page not found: "${mdSlug}". Pass a slug returned by docs.search.`,
+					`Doc page not found: "${mdSlug}". Pass the slug of a docs search hit.`,
 				);
 			}
 			if (!response.ok) {

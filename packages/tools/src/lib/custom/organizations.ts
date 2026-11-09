@@ -8,9 +8,7 @@ import {
 export const userOrganizationsInputSchema = z.strictObject({
 	search: z
 		.string()
-		.describe(
-			"Search organizations by name or ID. You can specify partial name or ID values to filter results.",
-		)
+		.describe("Part of an organization name or id, ignoring case.")
 		.optional(),
 });
 
@@ -33,7 +31,7 @@ export const userOrganizationsTool = (options: ToolClientOptions) =>
 			id: publishedId("user.organizations"),
 			title: "List organizations for the current user",
 			description:
-				"Retrieves the organizations that the currently authenticated user belongs to. An organization API key returns its own organization. Pass `search` to filter by name or ID.",
+				"Lists the organizations the user belongs to; an organization API key gets its own organization. search filters by name or id.",
 			inputSchema: userOrganizationsInputSchema,
 			annotations: { readOnlyHint: true, openWorldHint: false },
 			requiresApproval: false,

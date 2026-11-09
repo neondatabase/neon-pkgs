@@ -21,6 +21,7 @@ import { createNeonTools, customToolIds, publishedId } from "../src/index.js";
 import { registerNeonTools } from "../src/mcp.js";
 
 const sqlToolIds = [
+	"postgres.connectionString",
 	"sql.run",
 	"sql.runTransaction",
 	"sql.explain",
@@ -180,7 +181,7 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		);
 		await expect(transaction).rejects.toBeInstanceOf(NeonClientError);
 		await expect(transaction).rejects.toThrow(
-			"sql.runTransaction is unavailable in read-only mode",
+			"This tool is unavailable in read-only mode because it runs caller SQL that can leave a read-only transaction.",
 		);
 		const migration = tools["migrations.prepare"].execute(
 			{ project_id: projectId, migration_sql: "SELECT 1" },
@@ -188,7 +189,7 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		);
 		await expect(migration).rejects.toBeInstanceOf(NeonClientError);
 		await expect(migration).rejects.toThrow(
-			"migrations.prepare is unavailable in read-only mode",
+			"This tool is unavailable in read-only mode because it runs caller SQL that can leave a read-only transaction.",
 		);
 		const branchesAfter = await neon.branches.list({ projectId }).all();
 		expect(branchesAfter).toHaveLength(branchesBefore.length);
@@ -213,6 +214,71 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		await expect(mismatch).rejects.toThrow(
 			`This connection is pinned to Postgres role "${READ_ONLY_ROLE}"; role_name "neondb_owner" is not allowed.`,
 		);
+	});
+
+	it("postgres.connectionString resolves the database and role like the SQL tools", async () => {
+		await neon.postgres.databases.create(
+			{
+				projectId,
+				branchId: mainBranchId,
+				name: "analytics",
+				owner_name: "neondb_owner",
+			},
+			{ waitForReadiness: true },
+		);
+		// A second database would change what later tests inspect, so it is dropped here.
+		try {
+			const connect = (
+				input: {
+					database_name?: string;
+					role_name?: string;
+					pooled?: boolean;
+				},
+				context = {},
+			) =>
+				tools["postgres.connectionString"].execute(
+					{ project_id: projectId, ...input },
+					context,
+				);
+
+			// Two databases and two roles: @neon/sdk alone would refuse to pick.
+			const omitted = new URL((await connect({})).data);
+			expect(omitted.pathname).toBe("/neondb");
+			expect(omitted.username).toBe("neondb_owner");
+			expect(omitted.hostname).toContain("-pooler");
+
+			const analytics = new URL(
+				(await connect({ database_name: "analytics", pooled: false }))
+					.data,
+			);
+			expect(analytics.pathname).toBe("/analytics");
+			expect(analytics.username).toBe("neondb_owner");
+			expect(analytics.hostname).not.toContain("-pooler");
+
+			const pinned = new URL(
+				(await connect({}, { postgresRole: READ_ONLY_ROLE })).data,
+			);
+			expect(pinned.username).toBe(READ_ONLY_ROLE);
+			expect(pinned.pathname).toBe("/neondb");
+
+			const mismatch = connect(
+				{ role_name: "neondb_owner" },
+				{ postgresRole: READ_ONLY_ROLE },
+			);
+			await expect(mismatch).rejects.toBeInstanceOf(NeonClientError);
+			await expect(mismatch).rejects.toThrow(
+				`This connection is pinned to Postgres role "${READ_ONLY_ROLE}"; role_name "neondb_owner" is not allowed.`,
+			);
+		} finally {
+			await neon.postgres.databases.delete(
+				{
+					projectId,
+					branchId: mainBranchId,
+					databaseName: "analytics",
+				},
+				{ waitForReadiness: true },
+			);
+		}
 	});
 
 	it("sql.runTransaction returns rows per statement", async () => {
@@ -289,21 +355,47 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		});
 		expect(data.branch.id).toBe(mainBranchId);
 		expect(data.text).toContain("Branch Details:");
+		expect(data.database_structure?.[0]).toEqual([]);
+		expect(data.database_structure?.[1]).toContainEqual({
+			tree_structure: ":file_folder: neondb (DATABASE)",
+		});
 		expect(JSON.stringify(data.database_structure)).toContain(
 			"items (TABLE)",
 		);
 		expect(data).not.toHaveProperty("database_structure_error");
 	});
 
-	it("branches.describe reports why the tree is missing for a role that cannot create it", async () => {
+	it("branches.describe only reads: it works read-only and as a role without CREATE, and leaves show_db_tree alone", async () => {
+		await run(
+			"CREATE FUNCTION public.show_db_tree() RETURNS text LANGUAGE sql AS $$ SELECT 'mine' $$",
+		);
+		for (const context of [
+			{ readOnly: true },
+			{ postgresRole: READ_ONLY_ROLE },
+		]) {
+			const { data } = await tools["branches.describe"].execute(
+				{ project_id: projectId, branch_id: mainBranchId },
+				context,
+			);
+			expect(data).not.toHaveProperty("database_structure_error");
+			expect(JSON.stringify(data.database_structure)).toContain(
+				"items (TABLE)",
+			);
+		}
+		const { data } = await run("SELECT public.show_db_tree() AS value");
+		expect(data.rows).toEqual([{ value: "mine" }]);
+		await run("DROP FUNCTION public.show_db_tree()");
+	});
+
+	it("branches.describe reports why the tree is missing when it cannot connect", async () => {
 		const { data } = await tools["branches.describe"].execute(
 			{ project_id: projectId, branch_id: mainBranchId },
-			{ postgresRole: READ_ONLY_ROLE },
+			{ postgresRole: "no_such_role" },
 		);
 		expect(data.branch.id).toBe(mainBranchId);
 		expect(data.database_structure).toBeNull();
 		expect(data.database_structure_error).toContain(
-			`Database structure unavailable as Postgres role "${READ_ONLY_ROLE}"`,
+			'Database structure unavailable as Postgres role "no_such_role"',
 		);
 	});
 
