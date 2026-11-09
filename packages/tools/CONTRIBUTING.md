@@ -45,7 +45,7 @@ Agents choose a tool and fill its arguments from the tool description and the in
 | `@neon/tools` | `scripts/tool-descriptions.json` for `fromGenerated` tools, `description` in code for composed and custom tools | `scripts/input-descriptions.json` for generated inputs, `.describe()` where a composed or custom tool builds its schema |
 | Host | The `descriptions` option | The host's own schema |
 
-A description names another tool as `{{selector}}`. `createNeonTools` and `createNeonTool` replace it with the name that tool publishes under after `names` and `name`, so the same text reads `get_connection_string` on the Neon MCP server and `connection_string_postgres` with default names. Tokens work in tool descriptions, top-level input descriptions, and host `descriptions`.
+A description names another tool as `{{selector}}`. `createNeonTools` and `createNeonTool` replace it with the name that tool publishes under after `names` and `name`, or its default id when it is not selected, so the same text reads `get_connection_string` on the Neon MCP server and `connection_string_postgres` with default names. Tokens work in tool descriptions, top-level input descriptions, and host `descriptions`.
 
 `scripts/tool-descriptions.json` is keyed by selector. `list: true` tools get `Returns every page. Pass limit to cap how many.` appended, so leave pagination out:
 

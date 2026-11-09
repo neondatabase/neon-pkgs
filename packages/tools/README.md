@@ -198,7 +198,7 @@ result; // { rows: [{ id: 1, email: "a@example.com" }, { id: 2, email: "b@exampl
 
 `user.organizations` takes an optional `search` that filters by a case-insensitive part of the name or id. An organization API key gets its own organization.
 
-`resources.search` leaves out a resource whose list the API refuses, and fails on any other error, including an aborted `signal`. It reads up to 400 projects per organization and 400 shared projects, and lists each project's branches, compute endpoints, and snapshots in parallel. Resources that belong to a branch (databases, roles, functions, buckets, triggers, credentials) are not searched, since each would cost one request per branch. `resources.fetch` reads the first page of an organization's members and projects and skips either when the API refuses it. An id without a known prefix throws `NeonClientError`. Console URLs follow `baseUrl`: `https://console.neon.tech/api/v2` links to `https://console.neon.tech`.
+`resources.search` leaves out a resource whose list the API refuses with 403 or 404, and fails on any other error, including a 5xx, an exhausted 429, and an aborted `signal`. It reads up to 400 projects per organization and 400 shared projects, and lists each project's branches, compute endpoints, and snapshots in parallel. Resources that belong to a branch (databases, roles, functions, buckets, triggers, credentials) are not searched, since each would cost one request per branch. `resources.fetch` reads the first page of an organization's members and projects and skips either when the API refuses it with 403 or 404; other errors fail the call. An id without a known prefix throws `NeonClientError`. Console URLs follow `baseUrl`: `https://console.neon.tech/api/v2` links to `https://console.neon.tech`.
 
 ### SQL tools
 
@@ -283,7 +283,7 @@ const { data: role } = await tools["postgres.roles.create"].execute({
 
 ### Descriptions
 
-Every tool and every top-level input has a description. A description that names another tool uses the name that tool publishes under, after `names` and `name`. A tool you did not select gets its default `id` with `name` applied, since `names` only takes selected tools.
+Every tool and every top-level input has a description. A description that names another tool uses the name that tool publishes under, after `names` and `name`. `names` and `name` run once per selected tool. A tool you did not select is named by its default `id`, without calling them.
 
 Pass `descriptions` to replace the package's copy: a map keyed by SDK path or the current published `id`, or a function that receives the package's text. A key that matches neither is ignored. Write `{{selector}}` to name another tool the same way; an unknown selector throws.
 

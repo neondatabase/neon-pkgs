@@ -136,7 +136,7 @@ describe("tool references", () => {
 		);
 	});
 
-	test("follow names and name, including for tools that are not selected", () => {
+	test("follow names and name for selected tools; an unselected tool keeps its default id", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: [
@@ -162,7 +162,69 @@ describe("tool references", () => {
 			),
 		).toBe("The migration_id from neon_prepare_database_migration.");
 		expect(tools["branches.get"].description).toContain(
-			"use neon_describe_branches.",
+			"use describe_branches.",
+		);
+	});
+
+	test("never call names or name for a tool that is not selected", () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.create"] as const,
+			names: ({ operationId }) => {
+				if (operationId === "projects.create") return "new_project";
+				throw new Error(`Unexpected tool: ${operationId}`);
+			},
+		});
+		expect(tools["projects.create"].id).toBe("new_project");
+		expect(tools["projects.create"].description).toContain(
+			"use connection_string_postgres.",
+		);
+
+		const named: string[] = [];
+		createNeonTool("projects.create", {
+			apiKey: "test-key",
+			name: (id) => {
+				named.push(id);
+				return id;
+			},
+		});
+		expect(named).toEqual(["create_projects"]);
+	});
+
+	test("call names and name once per selected tool, and references use those results", () => {
+		const namesCalls: string[] = [];
+		const nameCalls: string[] = [];
+		let counter = 0;
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: [
+				"projects.create",
+				"postgres.connectionString",
+				"branches.create",
+			] as const,
+			names: ({ id }) => {
+				namesCalls.push(id);
+				return id;
+			},
+			name: (id) => {
+				nameCalls.push(id);
+				counter += 1;
+				return `${id}_${counter}`;
+			},
+		});
+		expect(namesCalls).toEqual([
+			"create_projects",
+			"connection_string_postgres",
+			"create_branches",
+		]);
+		expect(nameCalls).toEqual(namesCalls);
+		const connectionString = tools["postgres.connectionString"].id;
+		expect(connectionString).toBe("connection_string_postgres_2");
+		expect(tools["projects.create"].description).toContain(
+			`use ${connectionString}.`,
+		);
+		expect(tools["branches.create"].description).toContain(
+			`use ${connectionString}.`,
 		);
 	});
 

@@ -149,20 +149,23 @@ export const assertToolCustomizeOptions = (
 };
 
 /**
- * Runs for every tool, customized or not: `{{selector}}` references resolve with
- * these `names` and `name`, including references to tools that are not selected.
+ * Runs for every tool, customized or not. `publishedIds` holds the final id of
+ * each selected tool, computed once with `publishedToolId`, so `names` and `name`
+ * run once per selected tool. A reference to a tool that is not selected
+ * resolves to its default id without calling them.
  */
 export const applyToolCustomization = <Tool extends NeonTool>(
 	tool: Tool,
 	options: NeonToolCustomizeOptions,
+	publishedIds: ReadonlyMap<string, string>,
 ): Omit<Tool, "id"> & { id: string } => {
 	const inject = resolveInject(options.inject);
-	const id = publishedId(tool, options);
+	const id = publishedIds.get(tool.operationId);
+	if (id === undefined) {
+		throw new TypeError(`No published id for ${tool.operationId}`);
+	}
 	const nameOf: ToolNameOf = (selector) =>
-		publishedId(
-			{ operationId: selector, id: defaultPublishedId(selector) },
-			options,
-		);
+		publishedIds.get(selector) ?? defaultPublishedId(selector);
 	const where = `the description of ${tool.operationId}`;
 	const description = resolveToolReferences(
 		applyDescription(
@@ -201,7 +204,8 @@ export const applyToolCustomization = <Tool extends NeonTool>(
 	};
 };
 
-function publishedId(
+/** Applies `names`, then `name`, to a tool's default id. Call it once per selected tool. */
+export function publishedToolId(
 	tool: NeonToolNameSource,
 	options: NeonToolCustomizeOptions,
 ): string {

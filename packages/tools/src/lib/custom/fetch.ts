@@ -1,9 +1,4 @@
-import {
-	NeonApiError,
-	type NeonClient,
-	NeonClientError,
-	type Paginated,
-} from "@neon/sdk";
+import { type NeonClient, NeonClientError, type Paginated } from "@neon/sdk";
 import * as z from "zod";
 import {
 	bindTool,
@@ -11,7 +6,11 @@ import {
 	type ToolClientOptions,
 } from "../ergonomic/bind.js";
 import type { NeonToolExecutionContext } from "../operation.js";
-import { consoleBaseUrl, DEFAULT_API_BASE_URL } from "./resources.js";
+import {
+	consoleBaseUrl,
+	DEFAULT_API_BASE_URL,
+	isAccessRefusal,
+} from "./resources.js";
 import { describeBranch } from "./sql/describe-branch.js";
 
 export const fetchResourceInputSchema = z.strictObject({
@@ -30,7 +29,7 @@ const firstPageIfAllowed = async <T>(
 	try {
 		return (await list.page()).items;
 	} catch (error) {
-		if (error instanceof NeonApiError) return [];
+		if (isAccessRefusal(error)) return [];
 		throw error;
 	}
 };

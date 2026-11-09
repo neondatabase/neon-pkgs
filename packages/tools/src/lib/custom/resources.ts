@@ -29,12 +29,20 @@ type SearchResult = {
 export const consoleBaseUrl = (apiBaseUrl: string) =>
 	apiBaseUrl.replace(/\/api\/v2\/?$/, "");
 
+/**
+ * 403 and 404 mean the credential may not read that list. Any other API error,
+ * such as a 5xx or an exhausted 429, is a failure the caller must see.
+ */
+export const isAccessRefusal = (error: unknown): boolean =>
+	error instanceof NeonApiError &&
+	(error.status === 403 || error.status === 404);
+
 /** A resource the API refuses to list is left out of the results; anything else fails the search. */
 const skipIfRefused = async <T>(read: () => Promise<T[]>): Promise<T[]> => {
 	try {
 		return await read();
 	} catch (error) {
-		if (error instanceof NeonApiError) return [];
+		if (isAccessRefusal(error)) return [];
 		throw error;
 	}
 };
