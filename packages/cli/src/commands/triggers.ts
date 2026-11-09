@@ -221,8 +221,9 @@ type CreateProps = BranchScopeProps & {
 	enabled?: boolean;
 };
 
-type UpdateProps = BranchScopeProps & {
-	id: string;
+type TriggerRefProps = BranchScopeProps & { "trigger-id": string };
+
+type UpdateProps = TriggerRefProps & {
 	"function-slug"?: string;
 	name?: string;
 	cron?: string;
@@ -256,10 +257,10 @@ export const builder = (argv: yargs.Argv) =>
 			(args) => list(args as any),
 		)
 		.command(
-			"get <id>",
+			"get <trigger-id>",
 			"Show a trigger",
 			(yargs) =>
-				yargs.positional("id", {
+				yargs.positional("trigger-id", {
 					describe: "Trigger ID",
 					type: "string",
 				}),
@@ -308,11 +309,11 @@ export const builder = (argv: yargs.Argv) =>
 			(args) => create(args as any),
 		)
 		.command(
-			"update <id>",
+			"update <trigger-id>",
 			"Update a trigger",
 			(yargs) =>
 				yargs
-					.positional("id", {
+					.positional("trigger-id", {
 						describe: "Trigger ID",
 						type: "string",
 					})
@@ -350,30 +351,30 @@ export const builder = (argv: yargs.Argv) =>
 			(args) => update(args as any),
 		)
 		.command(
-			"enable <id>",
+			"enable <trigger-id>",
 			"Enable a trigger",
 			(yargs) =>
-				yargs.positional("id", {
+				yargs.positional("trigger-id", {
 					describe: "Trigger ID",
 					type: "string",
 				}),
 			(args) => setEnabled(args as any, true),
 		)
 		.command(
-			"disable <id>",
+			"disable <trigger-id>",
 			"Disable a trigger without deleting it",
 			(yargs) =>
-				yargs.positional("id", {
+				yargs.positional("trigger-id", {
 					describe: "Trigger ID",
 					type: "string",
 				}),
 			(args) => setEnabled(args as any, false),
 		)
 		.command(
-			"delete <id>",
+			"delete <trigger-id>",
 			"Delete a trigger",
 			(yargs) =>
-				yargs.positional("id", {
+				yargs.positional("trigger-id", {
 					describe: "Trigger ID",
 					type: "string",
 				}),
@@ -395,13 +396,14 @@ export const list = async (props: BranchScopeProps) => {
 	});
 };
 
-export const get = async (props: BranchScopeProps & { id: string }) => {
+export const get = async (props: TriggerRefProps) => {
+	const triggerId = props["trigger-id"];
 	const branchId = await branchIdFromProps(props);
-	const { data } = await withTriggerNotFound(props.id, branchId, () =>
+	const { data } = await withTriggerNotFound(triggerId, branchId, () =>
 		props.apiClient.getProjectBranchTrigger(
 			props.projectId,
 			branchId,
-			props.id,
+			triggerId,
 		),
 	);
 	writeTrigger(props, data.trigger);
@@ -466,21 +468,22 @@ function createBody(props: CreateProps): TriggerCreateRequest {
 }
 
 export const update = async (props: UpdateProps) => {
+	const triggerId = props["trigger-id"];
 	const branchId = await branchIdFromProps(props);
 	const { data: existing } = await withTriggerNotFound(
-		props.id,
+		triggerId,
 		branchId,
 		() =>
 			props.apiClient.getProjectBranchTrigger(
 				props.projectId,
 				branchId,
-				props.id,
+				triggerId,
 			),
 	);
 	const trigger = existing.trigger;
 	if (props.cron !== undefined && trigger.type !== "schedule") {
 		throw new Error(
-			`Trigger ${props.id} is type ${trigger.type}; --cron applies to schedule triggers.`,
+			`Trigger ${triggerId} is type ${trigger.type}; --cron applies to schedule triggers.`,
 		);
 	}
 	if (
@@ -488,7 +491,7 @@ export const update = async (props: UpdateProps) => {
 		trigger.type !== "storage_object_created"
 	) {
 		throw new Error(
-			`Trigger ${props.id} is type ${trigger.type}; --bucket and --prefix apply to storage_object_created triggers.`,
+			`Trigger ${triggerId} is type ${trigger.type}; --bucket and --prefix apply to storage_object_created triggers.`,
 		);
 	}
 
@@ -498,12 +501,12 @@ export const update = async (props: UpdateProps) => {
 		throw new Error(noFieldsToUpdateMessage(trigger.type));
 	}
 
-	const { data } = await withTriggerNotFound(props.id, branchId, () =>
+	const { data } = await withTriggerNotFound(triggerId, branchId, () =>
 		retryOnLock(() =>
 			props.apiClient.updateProjectBranchTrigger(
 				props.projectId,
 				branchId,
-				props.id,
+				triggerId,
 				body,
 			),
 		),
@@ -511,27 +514,25 @@ export const update = async (props: UpdateProps) => {
 	writeTrigger(props, data.trigger);
 };
 
-const setEnabled = async (
-	props: BranchScopeProps & { id: string },
-	enabled: boolean,
-) => {
+const setEnabled = async (props: TriggerRefProps, enabled: boolean) => {
+	const triggerId = props["trigger-id"];
 	const branchId = await branchIdFromProps(props);
 	const { data: existing } = await withTriggerNotFound(
-		props.id,
+		triggerId,
 		branchId,
 		() =>
 			props.apiClient.getProjectBranchTrigger(
 				props.projectId,
 				branchId,
-				props.id,
+				triggerId,
 			),
 	);
-	const { data } = await withTriggerNotFound(props.id, branchId, () =>
+	const { data } = await withTriggerNotFound(triggerId, branchId, () =>
 		retryOnLock(() =>
 			props.apiClient.updateProjectBranchTrigger(
 				props.projectId,
 				branchId,
-				props.id,
+				triggerId,
 				enabledPatch(existing.trigger.type, enabled),
 			),
 		),
@@ -539,18 +540,17 @@ const setEnabled = async (
 	writeTrigger(props, data.trigger);
 };
 
-export const deleteTrigger = async (
-	props: BranchScopeProps & { id: string },
-) => {
+export const deleteTrigger = async (props: TriggerRefProps) => {
+	const triggerId = props["trigger-id"];
 	const branchId = await branchIdFromProps(props);
-	await withTriggerNotFound(props.id, branchId, () =>
+	await withTriggerNotFound(triggerId, branchId, () =>
 		retryOnLock(() =>
 			props.apiClient.deleteProjectBranchTrigger(
 				props.projectId,
 				branchId,
-				props.id,
+				triggerId,
 			),
 		),
 	);
-	log.info(`Trigger ${props.id} deleted`);
+	log.info(`Trigger ${triggerId} deleted`);
 };

@@ -132,6 +132,42 @@ describe("enrichFromContext", () => {
 		expect(args.branch).toBe("br-legacy");
 		rmSync(dir, { recursive: true, force: true });
 	});
+
+	const enrichWithPinnedBranch = (args: Record<string, unknown>) => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-name-enrich-"));
+		const contextFile = join(dir, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({ projectId: "proj-file", branch: "dev" })}\n`,
+		);
+		const enriched = { ...args, contextFile } as Parameters<
+			typeof enrichFromContext
+		>[0];
+		enrichFromContext(enriched);
+		rmSync(dir, { recursive: true, force: true });
+		return enriched;
+	};
+
+	test.each([
+		[["databases", "create"], { name: "app" }],
+		[["roles", "create"], { name: "app" }],
+		[["snapshots", "create"], { name: "pre-migration" }],
+		[["triggers", "create"], { name: "nightly" }],
+	])("%j with %j inherits the pinned branch", (command, flags) => {
+		expect(enrichWithPinnedBranch({ _: command, ...flags }).branch).toBe(
+			"dev",
+		);
+	});
+
+	test.each([
+		[["branches", "get"], { id: "main" }],
+		[["branch", "create"], { name: "feature" }],
+		[["checkout"], { id: "main" }],
+	])("%j with %j does not inherit the pinned branch", (command, flags) => {
+		expect(
+			enrichWithPinnedBranch({ _: command, ...flags }),
+		).not.toHaveProperty("branch");
+	});
 });
 
 describe("isSkillsCommand", () => {
