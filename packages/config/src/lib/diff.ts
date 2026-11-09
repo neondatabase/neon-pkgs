@@ -137,6 +137,7 @@ export type PlanStep =
 			triggerId: string;
 			functionSlug: string;
 			trigger: ResolvedFunctionTrigger;
+			changes: TriggerFieldChange[];
 	  }
 	| {
 			kind: "register-custom-domain";
@@ -396,7 +397,8 @@ function diffPreview(args: {
 			});
 			continue;
 		}
-		if (triggerNeedsUpdate(trigger, remoteTrigger)) {
+		const changes = triggerChanges(trigger, remoteTrigger);
+		if (changes.length > 0) {
 			plan.push({
 				kind: "update-trigger",
 				projectId: remote.projectId,
@@ -405,26 +407,64 @@ function diffPreview(args: {
 				triggerId: remoteTrigger.triggerId,
 				functionSlug: trigger.functionSlug,
 				trigger,
+				changes,
 			});
 		}
 	}
 }
 
-function triggerNeedsUpdate(
+/** One trigger field an update changes. `null` is an unset value (a storage trigger with no prefix). */
+export interface TriggerFieldChange {
+	field:
+		| "functionSlug"
+		| "functionPath"
+		| "enabled"
+		| "cron"
+		| "bucketName"
+		| "prefix";
+	current: string | boolean | null;
+	desired: string | boolean | null;
+}
+
+/**
+ * The fields where `desired` differs from the remote trigger. `enabled` is compared only when
+ * the policy sets it: an omitted `enabled` leaves the remote state to `neon triggers enable` /
+ * `disable`, and keeps inherited triggers disabled on child branches.
+ */
+function triggerChanges(
 	desired: ResolvedFunctionTrigger,
 	remote: NeonTriggerSnapshot,
-): boolean {
-	if (remote.functionSlug !== desired.functionSlug) return true;
-	if (remote.functionPath !== desired.functionPath) return true;
-	if (remote.enabled !== desired.enabled) return true;
-	if (desired.type === "schedule") {
-		return remote.type !== "schedule" || remote.cron !== desired.cron;
+): TriggerFieldChange[] {
+	const changes: TriggerFieldChange[] = [];
+	const compare = (
+		field: TriggerFieldChange["field"],
+		current: string | boolean | undefined,
+		next: string | boolean | undefined,
+	) => {
+		if (current !== next) {
+			changes.push({
+				field,
+				current: current ?? null,
+				desired: next ?? null,
+			});
+		}
+	};
+	compare("functionSlug", remote.functionSlug, desired.functionSlug);
+	compare("functionPath", remote.functionPath, desired.functionPath);
+	if (desired.enabled !== undefined) {
+		compare("enabled", remote.enabled, desired.enabled);
 	}
-	return (
-		remote.type !== "storage_object_created" ||
-		remote.bucketName !== desired.bucketName ||
-		remote.prefix !== desired.prefix
-	);
+	if (desired.type === "schedule" && remote.type === "schedule") {
+		compare("cron", remote.cron, desired.cron);
+	}
+	if (
+		desired.type === "storage_object_created" &&
+		remote.type === "storage_object_created"
+	) {
+		compare("bucketName", remote.bucketName, desired.bucketName);
+		compare("prefix", remote.prefix, desired.prefix);
+	}
+	return changes;
 }
 
 const FUNCTION_CUSTOM_DOMAIN_ENTITY = "function";

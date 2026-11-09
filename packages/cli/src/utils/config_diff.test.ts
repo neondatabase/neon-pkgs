@@ -142,6 +142,42 @@ describe("renderAppliedChanges", () => {
 		).toBe("");
 	});
 
+	it("lists the before → after fields of a trigger update", () => {
+		const text = renderAppliedChanges(
+			[
+				{
+					kind: "service",
+					action: "update",
+					identifier: "trigger:hello:nightly",
+					details: {
+						changes: [
+							{ field: "enabled", current: false, desired: true },
+							{
+								field: "cron",
+								current: "0 3 * * *",
+								desired: "*/30 * * * *",
+							},
+							{
+								field: "prefix",
+								current: "logos/",
+								desired: null,
+							},
+						],
+					},
+				},
+			],
+			"Planned changes",
+			{ color: false },
+		);
+		expect(text.split("\n")).toEqual([
+			"Planned changes",
+			"  ~ trigger:hello:nightly",
+			"      enabled  false → true",
+			"      cron     0 3 * * * → */30 * * * *",
+			"      prefix   logos/ → (unset)",
+		]);
+	});
+
 	it("lists service changes as + adds and branch updates as desired-only", () => {
 		const changes: AppliedChange[] = [
 			{ kind: "service", action: "create", identifier: "auth" },

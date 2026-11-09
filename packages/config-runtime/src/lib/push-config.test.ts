@@ -1085,8 +1085,8 @@ describe("pushConfig", () => {
 			functionSlug: "fn1",
 			cron: "0 * * * *",
 			functionPath: "/",
-			enabled: true,
 		});
+		expect(created[0].args[2]).not.toHaveProperty("enabled");
 		const triggers = await api.listBranchTriggers(projectId, "br-main");
 		expect(triggers).toEqual([
 			expect.objectContaining({
@@ -1094,6 +1094,7 @@ describe("pushConfig", () => {
 				name: "hourly",
 				functionSlug: "fn1",
 				cron: "0 * * * *",
+				enabled: true,
 			}),
 		]);
 	});
@@ -1145,8 +1146,8 @@ describe("pushConfig", () => {
 			bucketName: "assets",
 			prefix: "logos/",
 			functionPath: "/object",
-			enabled: true,
 		});
+		expect(created[0].args[2]).not.toHaveProperty("enabled");
 		const triggers = await api.listBranchTriggers(projectId, "br-main");
 		expect(triggers).toEqual([
 			expect.objectContaining({
@@ -1212,14 +1213,104 @@ describe("pushConfig", () => {
 		expect(updated[0].args[3]).toMatchObject({
 			type: "schedule",
 			cron: "0 * * * *",
-			enabled: true,
 			functionPath: "/",
 		});
+		expect(updated[0].args[3]).not.toHaveProperty("enabled");
+		expect(
+			result.applied.find((c) => c.identifier === "trigger:fn1:hourly")
+				?.details?.changes,
+		).toEqual([
+			{ field: "cron", current: "0 0 * * *", desired: "0 * * * *" },
+		]);
 		const triggers = await api.listBranchTriggers(projectId, "br-main");
 		expect(triggers[0]).toMatchObject({
 			type: "schedule",
 			cron: "0 * * * *",
 		});
+	});
+
+	test("keeps a disabled trigger disabled when neon.ts omits enabled", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-existing",
+			slug: "fn1",
+			name: "Hello World",
+			invocationUrl: "https://x/functions/fn1",
+		});
+		api.seedTrigger(projectId, "br-main", {
+			triggerId: "trg-hourly",
+			type: "schedule",
+			name: "hourly",
+			functionSlug: "fn1",
+			functionPath: "/",
+			cron: "0 0 * * *",
+			enabled: false,
+			inherited: false,
+			nextRunAt: null,
+		});
+		const config = defineConfig({
+			functions: { fn1: { name: "Hello World", source: fnSource } },
+			triggers: {
+				hourly: {
+					type: "schedule",
+					function: "fn1",
+					cron: "0 * * * *",
+				},
+			},
+		});
+
+		await pushConfig(config, { api, projectId, branchId: "br-main" });
+
+		const triggers = await api.listBranchTriggers(projectId, "br-main");
+		expect(triggers[0]).toMatchObject({
+			cron: "0 * * * *",
+			enabled: false,
+		});
+	});
+
+	test("re-enables a disabled trigger when neon.ts sets enabled: true", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-existing",
+			slug: "fn1",
+			name: "Hello World",
+			invocationUrl: "https://x/functions/fn1",
+		});
+		api.seedTrigger(projectId, "br-main", {
+			triggerId: "trg-hourly",
+			type: "schedule",
+			name: "hourly",
+			functionSlug: "fn1",
+			functionPath: "/",
+			cron: "0 * * * *",
+			enabled: false,
+			inherited: false,
+			nextRunAt: null,
+		});
+		const config = defineConfig({
+			functions: { fn1: { name: "Hello World", source: fnSource } },
+			triggers: {
+				hourly: {
+					type: "schedule",
+					function: "fn1",
+					cron: "0 * * * *",
+					enabled: true,
+				},
+			},
+		});
+
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(
+			result.applied.find((c) => c.identifier === "trigger:fn1:hourly")
+				?.details?.changes,
+		).toEqual([{ field: "enabled", current: false, desired: true }]);
+		const triggers = await api.listBranchTriggers(projectId, "br-main");
+		expect(triggers[0]).toMatchObject({ enabled: true });
 	});
 
 	test("surfaces a first-deployed function's invocation URL in the applied details", async () => {

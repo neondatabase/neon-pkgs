@@ -290,7 +290,7 @@ describe("resolveConfig", () => {
 		});
 	});
 
-	test("defaults schedule trigger functionPath and enabled", () => {
+	test("defaults schedule trigger functionPath and leaves enabled unset", () => {
 		const config = defineConfig({
 			functions: {
 				fn1: {
@@ -317,12 +317,32 @@ describe("resolveConfig", () => {
 				functionSlug: "fn1",
 				cron: "0 * * * *",
 				functionPath: "/",
-				enabled: true,
 			},
 		]);
 	});
 
-	test("defaults storage_object_created trigger functionPath and enabled", () => {
+	test("keeps an explicit trigger enabled: false", () => {
+		const config = defineConfig({
+			functions: {
+				fn1: {
+					name: "Hello World",
+					source: "./functions/hello-world.ts",
+				},
+			},
+			triggers: {
+				hourly: {
+					type: "schedule",
+					function: "fn1",
+					cron: "0 * * * *",
+					enabled: false,
+				},
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.triggers).toMatchObject([{ enabled: false }]);
+	});
+
+	test("defaults storage_object_created trigger functionPath and leaves enabled unset", () => {
 		const config = defineConfig({
 			buckets: { assets: { access: "public_read" } },
 			functions: {
@@ -352,7 +372,6 @@ describe("resolveConfig", () => {
 				bucketName: "assets",
 				prefix: "logos/",
 				functionPath: "/",
-				enabled: true,
 			},
 		]);
 	});
@@ -1096,7 +1115,6 @@ describe("defineConfig — Data API config", () => {
 					functionSlug: "hello",
 					cron: "0 * * * *",
 					functionPath: "/",
-					enabled: true,
 				},
 			]);
 		});

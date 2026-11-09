@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { diffConfig, type RemoteState } from "./diff.js";
+import { diffConfig, type PlanStep, type RemoteState } from "./diff.js";
+import type {
+	NeonScheduleTriggerSnapshot,
+	NeonTriggerSnapshot,
+} from "./neon-api.js";
+import type { ResolvedFunctionTrigger } from "./types.js";
 
 describe("diffConfig", () => {
 	const remote: RemoteState = {
@@ -536,6 +541,142 @@ describe("diffConfig", () => {
 			triggerId: "trg-1",
 			functionSlug: "fn1",
 			trigger: hourly,
+			changes: [
+				{ field: "cron", current: "0 0 * * *", desired: "0 * * * *" },
+			],
+		});
+	});
+
+	describe("trigger enabled state", () => {
+		const policy = (trigger: ResolvedFunctionTrigger) => ({
+			authEnabled: false,
+			dataApiEnabled: false,
+			preview: { functions: [], buckets: [], aiGatewayEnabled: false },
+			triggers: [trigger],
+		});
+		const withTriggers = (
+			triggers: NeonTriggerSnapshot[],
+		): RemoteState => ({
+			...remote,
+			preview: { buckets: [], functions: [], triggers },
+		});
+		const nightly = {
+			type: "schedule" as const,
+			name: "nightly",
+			functionSlug: "fn1",
+			cron: "0 3 * * *",
+			functionPath: "/",
+		};
+		const remoteNightly = (
+			overrides: Partial<NeonScheduleTriggerSnapshot> = {},
+		): NeonScheduleTriggerSnapshot => ({
+			type: "schedule",
+			triggerId: "trg-1",
+			name: "nightly",
+			functionSlug: "fn1",
+			functionPath: "/",
+			cron: "0 3 * * *",
+			enabled: false,
+			inherited: false,
+			nextRunAt: null,
+			...overrides,
+		});
+		const triggerSteps = (
+			trigger: ResolvedFunctionTrigger,
+			snapshot: NeonTriggerSnapshot,
+		) =>
+			diffConfig(policy(trigger), withTriggers([snapshot]), {
+				updateExisting: false,
+			}).plan.filter(
+				(step): step is Extract<PlanStep, { kind: "update-trigger" }> =>
+					step.kind === "update-trigger",
+			);
+
+		test("an omitted enabled leaves a disabled trigger alone", () => {
+			expect(triggerSteps(nightly, remoteNightly())).toEqual([]);
+		});
+
+		test("an omitted enabled leaves an inherited disabled trigger alone", () => {
+			expect(
+				triggerSteps(nightly, remoteNightly({ inherited: true })),
+			).toEqual([]);
+		});
+
+		test("an omitted enabled is not sent when another field changes", () => {
+			const steps = triggerSteps(
+				{ ...nightly, cron: "*/30 * * * *" },
+				remoteNightly(),
+			);
+			expect(steps).toMatchObject([
+				{
+					changes: [
+						{
+							field: "cron",
+							current: "0 3 * * *",
+							desired: "*/30 * * * *",
+						},
+					],
+				},
+			]);
+			expect(steps[0]?.trigger).not.toHaveProperty("enabled");
+		});
+
+		test("an explicit enabled: true re-enables a disabled trigger", () => {
+			expect(
+				triggerSteps({ ...nightly, enabled: true }, remoteNightly()),
+			).toMatchObject([
+				{
+					changes: [
+						{ field: "enabled", current: false, desired: true },
+					],
+				},
+			]);
+		});
+
+		test("an explicit enabled: false disables an enabled trigger", () => {
+			expect(
+				triggerSteps(
+					{ ...nightly, enabled: false },
+					remoteNightly({ enabled: true }),
+				),
+			).toMatchObject([
+				{
+					changes: [
+						{ field: "enabled", current: true, desired: false },
+					],
+				},
+			]);
+		});
+
+		test("a storage trigger reports prefix changes and ignores an omitted enabled", () => {
+			const remoteUpload: NeonTriggerSnapshot = {
+				type: "storage_object_created",
+				triggerId: "trg-2",
+				name: "on-upload",
+				functionSlug: "fn1",
+				functionPath: "/",
+				bucketName: "assets",
+				enabled: false,
+				inherited: false,
+			};
+			const steps = triggerSteps(
+				{
+					type: "storage_object_created",
+					name: "on-upload",
+					functionSlug: "fn1",
+					functionPath: "/",
+					bucketName: "assets",
+					prefix: "logos/",
+				},
+				remoteUpload,
+			);
+			expect(steps).toMatchObject([
+				{
+					changes: [
+						{ field: "prefix", current: null, desired: "logos/" },
+					],
+				},
+			]);
 		});
 	});
 
