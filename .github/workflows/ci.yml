@@ -134,6 +134,14 @@ jobs:
               run: |
                   mapfile -t filters < <(jq -r '.[] | select(. != "cli" and . != "neonctl") | "--filter=./packages/\(.)"' <<<"$DIRS")
                   pnpm --recursive "${filters[@]}" test:ci --coverage --coverage.reporter=json
+            # Docker-backed suites (testcontainers) that a package keeps out of `test:ci`.
+            - if: matrix.suite == 'non-cli'
+              name: Integration tests
+              env:
+                  DIRS: ${{ needs.changes.outputs.dirs }}
+              run: |
+                  mapfile -t filters < <(jq -r '.[] | select(. != "cli" and . != "neonctl") | "--filter=./packages/\(.)"' <<<"$DIRS")
+                  pnpm --recursive "${filters[@]}" run --if-present test:integration
             - name: Collect coverage
               run: |
                   shopt -s nullglob

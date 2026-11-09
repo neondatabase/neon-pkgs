@@ -1,0 +1,5 @@
+---
+"@neon/convex-to-postgres": minor
+---
+
+Add `@neon/convex-to-postgres` — migrate a Convex deployment to Neon Postgres. Generates Postgres DDL from a Convex schema (ids and deferrable foreign keys, with ids nested in arrays, objects and records converted to match, literal-union `CHECK`s, snake_case identifiers, Neon Lakebase BM25 full-text search indexes, or stock GIN via `--search-index gin`, and `lakebase_ann` vector indexes), and loads a `convex export` snapshot through a jsonb staging table so `v.int64` precision survives a round-trip. Leave tables out with `--exclude-table <name>`, or Convex Auth's tables with `--skip-auth-tables`. Run it with `npx @neon/convex-to-postgres` and its `schema`, `seed`, and `import` commands: SQL goes to stdout for piping into `psql`, warnings and progress go to stderr, and `seed --split <dir>` writes the load as editable step files (`01-schema.sql` … `04-indexes.sql`) so you can change the schema and still migrate the data. The same functionality is available as a library: a pure, side-effect-free SQL-generation core (`generateDdl`, `generateDataSql`, `generateSeedSql`, …) plus `importConvexExport` for a direct `pg` load.

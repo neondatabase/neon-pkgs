@@ -1,0 +1,951 @@
+import { describe, expect, test } from "vitest";
+import { generateTransformSql } from "../data/transform.js";
+import { field, schema, table, v } from "../test-fixtures.js";
+import { generateDdl, generateIndexDdl } from "./generate-ddl.js";
+import { parseExportedSchema } from "./parse.js";
+
+function ddl(
+	exported: ReturnType<typeof schema>,
+	options?: Parameters<typeof generateDdl>[1],
+) {
+	return generateDdl(parseExportedSchema(exported), options);
+}
+
+function indexDdl(
+	exported: ReturnType<typeof schema>,
+	options?: Parameters<typeof generateIndexDdl>[1],
+) {
+	return generateIndexDdl(parseExportedSchema(exported), options);
+}
+
+/** A table with one text search index on `body`, no filter fields. */
+function searchSchema() {
+	return schema([
+		table({
+			name: "messages",
+			fields: { author: field(v.string()), body: field(v.string()) },
+			searchIndexes: [
+				{
+					indexDescriptor: "search_body",
+					searchField: "body",
+					filterFields: [],
+				},
+			],
+		}),
+	]);
+}
+
+/** A table with one vector index on `embedding` (1536-d), filtering `cuisine`. */
+function vectorSchema() {
+	return schema([
+		table({
+			name: "foods",
+			fields: {
+				description: field(v.string()),
+				cuisine: field(v.string()),
+				embedding: field(v.array(v.number())),
+			},
+			vectorIndexes: [
+				{
+					indexDescriptor: "by_embedding",
+					vectorField: "embedding",
+					dimensions: 1536,
+					filterFields: ["cuisine"],
+				},
+			],
+		}),
+	]);
+}
+
+describe("generateDdl column types", () => {
+	const { sql } = ddl(
+		schema([
+			table({
+				name: "everything",
+				fields: {
+					title: field(v.string()),
+					score: field(v.number()),
+					active: field(v.boolean()),
+					big: field(v.int64()),
+					blob: field(v.bytes()),
+					meta: field(v.object({ k: field(v.string()) })),
+					tags: field(v.array(v.string())),
+					bag: field(v.record()),
+					whatever: field(v.any()),
+					nothing: field(v.null()),
+				},
+			}),
+		]),
+	);
+
+	test.each([
+		["title text NOT NULL"],
+		["score double precision NOT NULL"],
+		["active boolean NOT NULL"],
+		["big bigint NOT NULL"],
+		["blob bytea NOT NULL"],
+		["meta jsonb NOT NULL"],
+		["tags jsonb NOT NULL"],
+		["bag jsonb NOT NULL"],
+		["whatever jsonb NOT NULL"],
+		["nothing jsonb NOT NULL"],
+	])("emits `%s`", (line) => {
+		expect(sql).toContain(line);
+	});
+});
+
+describe("generateDdl id strategies", () => {
+	const s = schema([table({ name: "t", fields: { x: field(v.string()) } })]);
+
+	test("uuid strategy (default): uuid primary key", () => {
+		expect(ddl(s).sql).toContain("id uuid PRIMARY KEY");
+	});
+
+	test("text strategy: text primary key", () => {
+		expect(ddl(s, { idStrategy: "text" }).sql).toContain(
+			"id text PRIMARY KEY",
+		);
+	});
+});
+
+describe("generateDdl synthesized columns", () => {
+	const s = schema([table({ name: "t", fields: { x: field(v.string()) } })]);
+	const { sql } = ddl(s);
+
+	// Convex fills `_creationTime` on every insert, so after the migration an app
+	// insert that omits created_at must still succeed.
+	test("creation time maps to created_at timestamptz NOT NULL DEFAULT now()", () => {
+		expect(sql).toContain("created_at timestamptz NOT NULL DEFAULT now(),");
+	});
+
+	test("the text id strategy also defaults created_at to now()", () => {
+		expect(ddl(s, { idStrategy: "text" }).sql).toContain(
+			"created_at timestamptz NOT NULL DEFAULT now(),",
+		);
+	});
+
+	// Convex fills `_id` on every insert too, so an app insert that omits id gets
+	// a generated one, and one that supplies id keeps it.
+	test.each([
+		["uuid", "id uuid PRIMARY KEY DEFAULT gen_random_uuid(),"],
+		["text", "id text PRIMARY KEY DEFAULT gen_random_uuid()::text,"],
+	] as const)("the %s id defaults to a generated id", (idStrategy, line) => {
+		const out = ddl(s, { idStrategy }).sql;
+		expect(out).toContain(line);
+		expect(out.match(/DEFAULT/g)).toHaveLength(2);
+	});
+
+	test("id comes before created_at before user columns", () => {
+		expect(sql.indexOf("id uuid")).toBeLessThan(sql.indexOf("created_at"));
+		expect(sql.indexOf("created_at")).toBeLessThan(sql.indexOf("x text"));
+	});
+});
+
+describe("generateDdl optionality", () => {
+	const { sql } = ddl(
+		schema([
+			table({
+				name: "users",
+				fields: {
+					name: field(v.string()),
+					bio: field(v.string(), true),
+				},
+			}),
+		]),
+	);
+
+	test("required fields are NOT NULL", () => {
+		expect(sql).toContain("name text NOT NULL");
+	});
+
+	test("optional fields are nullable (no NOT NULL)", () => {
+		expect(sql).toContain("bio text");
+		expect(sql).not.toContain("bio text NOT NULL");
+	});
+});
+
+describe("generateDdl unions and literals", () => {
+	test("string-literal union -> text + CHECK IN by default", () => {
+		const { sql } = ddl(
+			schema([
+				table({
+					name: "posts",
+					fields: {
+						status: field(
+							v.union(v.literal("draft"), v.literal("published")),
+						),
+					},
+				}),
+			]),
+		);
+		expect(sql).toContain("status text NOT NULL");
+		expect(sql).toContain("CHECK (status IN ('draft', 'published'))");
+	});
+
+	test("checkConstraints:false drops the CHECK", () => {
+		const { sql } = ddl(
+			schema([
+				table({
+					name: "posts",
+					fields: {
+						status: field(
+							v.union(v.literal("draft"), v.literal("published")),
+						),
+					},
+				}),
+			]),
+			{ checkConstraints: false },
+		);
+		expect(sql).toContain("status text NOT NULL");
+		expect(sql).not.toContain("CHECK");
+	});
+
+	test("union-with-null is nullable and maps on the remaining member", () => {
+		const { sql } = ddl(
+			schema([
+				table({
+					name: "t",
+					fields: { nickname: field(v.union(v.null(), v.string())) },
+				}),
+			]),
+		);
+		expect(sql).toContain("nickname text");
+		expect(sql).not.toContain("nickname text NOT NULL");
+	});
+
+	test("mixed union -> jsonb", () => {
+		const { sql } = ddl(
+			schema([
+				table({
+					name: "t",
+					fields: { x: field(v.union(v.literal("a"), v.literal(1))) },
+				}),
+			]),
+		);
+		expect(sql).toContain("x jsonb NOT NULL");
+	});
+
+	test("lone literal maps to its scalar type", () => {
+		const { sql } = ddl(
+			schema([
+				table({
+					name: "t",
+					fields: { kind: field(v.literal("only")) },
+				}),
+			]),
+		);
+		expect(sql).toContain("kind text NOT NULL");
+	});
+});
+
+describe("generateDdl foreign keys", () => {
+	test("emits a deferrable foreign key via ALTER when the target table is in the schema", () => {
+		const { sql, warnings } = ddl(
+			schema([
+				table({ name: "users", fields: { name: field(v.string()) } }),
+				table({
+					name: "messages",
+					fields: { authorId: field(v.id("users")) },
+				}),
+			]),
+		);
+		expect(sql).toContain("author_id uuid NOT NULL");
+		expect(sql).toContain(
+			"ALTER TABLE messages ADD CONSTRAINT messages_author_id_fkey FOREIGN KEY (author_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED;",
+		);
+		expect(warnings).toEqual([]);
+	});
+
+	test("a foreign key to a table declared later in the schema still applies (ALTER after all CREATEs)", () => {
+		const { sql } = ddl(
+			schema([
+				// `parent` references `child`, which is defined afterwards.
+				table({
+					name: "parent",
+					fields: { childId: field(v.id("child")) },
+				}),
+				table({ name: "child", fields: { label: field(v.string()) } }),
+			]),
+		);
+		// Both tables are created before any foreign key is added.
+		expect(sql.indexOf("CREATE TABLE child")).toBeLessThan(
+			sql.indexOf("ALTER TABLE parent ADD CONSTRAINT"),
+		);
+	});
+
+	test("omits REFERENCES and warns when the target is outside the schema", () => {
+		const { sql, warnings } = ddl(
+			schema([
+				table({
+					name: "files",
+					fields: { storageId: field(v.id("_storage")) },
+				}),
+			]),
+		);
+		expect(sql).toContain("storage_id uuid NOT NULL");
+		expect(sql).not.toContain("REFERENCES");
+		expect(warnings.some((w) => w.includes("_storage"))).toBe(true);
+	});
+
+	test("optional foreign key is nullable", () => {
+		const { sql } = ddl(
+			schema([
+				table({ name: "users", fields: { name: field(v.string()) } }),
+				table({
+					name: "messages",
+					fields: { authorId: field(v.id("users"), true) },
+				}),
+			]),
+		);
+		expect(sql).toContain("author_id uuid");
+		expect(sql).not.toContain("author_id uuid NOT NULL");
+		expect(sql).toContain(
+			"ALTER TABLE messages ADD CONSTRAINT messages_author_id_fkey FOREIGN KEY (author_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED;",
+		);
+	});
+});
+
+describe("generateDdl indexes", () => {
+	test("single and multi-column indexes with snake-cased columns", () => {
+		const { sql } = ddl(
+			schema([
+				table({
+					name: "messages",
+					fields: {
+						authorId: field(v.id("users")),
+						channelId: field(v.string()),
+					},
+					indexes: [
+						{ indexDescriptor: "by_author", fields: ["authorId"] },
+						{
+							indexDescriptor: "by_author_and_channel",
+							fields: ["authorId", "channelId"],
+						},
+					],
+				}),
+				table({ name: "users", fields: { name: field(v.string()) } }),
+			]),
+		);
+		expect(sql).toContain(
+			"CREATE INDEX messages_by_author ON messages (author_id);",
+		);
+		expect(sql).toContain(
+			"CREATE INDEX messages_by_author_and_channel ON messages (author_id, channel_id);",
+		);
+	});
+
+	test("nested-path index fields are skipped with a warning", () => {
+		const { sql, warnings } = ddl(
+			schema([
+				table({
+					name: "events",
+					fields: {
+						payload: field(v.object({ kind: field(v.string()) })),
+					},
+					indexes: [
+						{
+							indexDescriptor: "by_kind",
+							fields: ["payload.kind"],
+						},
+					],
+				}),
+			]),
+		);
+		expect(sql).not.toContain("CREATE INDEX events_by_kind");
+		expect(warnings.some((w) => w.includes("payload.kind"))).toBe(true);
+	});
+});
+
+describe("generateDdl naming", () => {
+	const s = schema([
+		table({
+			name: "userProfiles",
+			fields: { displayName: field(v.string()) },
+		}),
+	]);
+
+	test("snakeCase (default) converts table and column names", () => {
+		const { sql } = ddl(s);
+		expect(sql).toContain("CREATE TABLE user_profiles (");
+		expect(sql).toContain("display_name text NOT NULL");
+	});
+
+	test("snakeCase:false keeps names verbatim and quotes them", () => {
+		const { sql } = ddl(s, { snakeCase: false });
+		expect(sql).toContain('CREATE TABLE "userProfiles" (');
+		expect(sql).toContain('"displayName" text NOT NULL');
+	});
+});
+
+describe("generateDdl schemaless fallback", () => {
+	test("falls back to id, created_at, and a doc jsonb column", () => {
+		const { sql, warnings } = ddl(
+			schema([table({ name: "freeform", documentType: v.any() })]),
+		);
+		expect(sql).toContain("CREATE TABLE freeform (");
+		expect(sql).toContain("id uuid PRIMARY KEY DEFAULT gen_random_uuid(),");
+		expect(sql).toContain("created_at timestamptz NOT NULL DEFAULT now(),");
+		expect(sql).toContain("doc jsonb NOT NULL");
+		expect(
+			warnings.some(
+				(w) => w.includes("schemaless") || w.includes("no declared"),
+			),
+		).toBe(true);
+	});
+
+	test("an index on a schemaless table's declared field is skipped with a warning", () => {
+		const { sql, warnings } = ddl(
+			schema([
+				table({
+					name: "freeform",
+					documentType: v.any(),
+					indexes: [{ indexDescriptor: "by_bool", fields: ["bool"] }],
+				}),
+			]),
+		);
+		expect(sql).not.toContain("freeform_by_bool");
+		expect(
+			warnings.some(
+				(w) =>
+					w.includes("by_bool") && w.includes("not a materialized"),
+			),
+		).toBe(true);
+	});
+});
+
+describe("generateDdl column name collisions", () => {
+	test("a user field named `id` is renamed so it does not clash with the primary key", () => {
+		const { sql, warnings } = ddl(
+			schema([
+				table({ name: "empty", fields: {} }),
+				table({
+					name: "primitiveTypes",
+					fields: { id: field(v.id("empty")) },
+				}),
+			]),
+		);
+		// The synthesized primary key keeps `id`; the user field is suffixed.
+		expect(sql).toContain("id uuid PRIMARY KEY");
+		expect(sql).toContain("id_1 uuid NOT NULL");
+		expect(sql).toContain(
+			"ALTER TABLE primitive_types ADD CONSTRAINT primitive_types_id_1_fkey FOREIGN KEY (id_1) REFERENCES empty (id) DEFERRABLE INITIALLY DEFERRED;",
+		);
+		expect(warnings.some((w) => w.includes("renamed"))).toBe(true);
+	});
+
+	test("a v.number() `createdAt` becomes created_at_ms, and the warning prints the new name", () => {
+		const parsed = parseExportedSchema(
+			schema([
+				table({
+					name: "messages",
+					fields: {
+						threadId: field(v.string()),
+						createdAt: field(v.number()),
+					},
+					indexes: [
+						{
+							indexDescriptor: "by_thread_createdAt",
+							fields: ["threadId", "createdAt"],
+						},
+					],
+				}),
+			]),
+		);
+		const { sql, warnings } = generateDdl(parsed);
+		expect(sql).toContain("created_at timestamptz NOT NULL DEFAULT now()");
+		expect(sql).toContain("created_at_ms double precision NOT NULL");
+		// An index on the field follows the rename.
+		expect(sql).toContain(
+			'CREATE INDEX "messages_by_thread_createdAt" ON messages (thread_id, created_at_ms);',
+		);
+		expect(warnings).toEqual([
+			`table "messages": field "createdAt" collides with the synthesized created_at column (from _creationTime); renamed to "created_at_ms".`,
+		]);
+		// The value is still read from the original field.
+		expect(generateTransformSql(parsed)).toContain(
+			"INSERT INTO messages (id, created_at, thread_id, created_at_ms)",
+		);
+		expect(generateTransformSql(parsed)).toContain(
+			"(doc->>'createdAt')::double precision\nFROM _convex_messages;",
+		);
+	});
+
+	test.each([
+		["optional", field(v.number(), true)],
+		["nullable", field(v.union(v.number(), v.null()))],
+	])("an %s v.number() `createdAt` is renamed the same way", (_label, entry) => {
+		const { sql } = ddl(
+			schema([table({ name: "m", fields: { createdAt: entry } })]),
+		);
+		expect(sql).toMatch(/created_at_ms double precision,?\n/);
+	});
+
+	test("a `createdAt` that isn't a v.number() keeps the numeric suffix", () => {
+		const { sql, warnings } = ddl(
+			schema([
+				table({ name: "m", fields: { createdAt: field(v.string()) } }),
+			]),
+		);
+		expect(sql).toContain("created_at_1 text NOT NULL");
+		expect(warnings).toEqual([
+			`table "m": column "created_at" collides with a synthesized or earlier column; renamed to "created_at_1".`,
+		]);
+	});
+
+	test("when created_at_ms is already a field, `createdAt` falls back to the suffix", () => {
+		const { sql } = ddl(
+			schema([
+				table({
+					name: "m",
+					fields: {
+						createdAt: field(v.number()),
+						createdAtMs: field(v.number()),
+					},
+				}),
+			]),
+		);
+		expect(sql).toContain("created_at_1 double precision NOT NULL");
+		expect(sql).toContain("created_at_ms double precision NOT NULL");
+	});
+
+	test("with snakeCase off, `createdAt` doesn't collide and keeps its name", () => {
+		const { sql, warnings } = ddl(
+			schema([
+				table({ name: "m", fields: { createdAt: field(v.number()) } }),
+			]),
+			{ snakeCase: false },
+		);
+		expect(sql).toContain('"createdAt" double precision NOT NULL');
+		expect(warnings).toEqual([]);
+	});
+
+	test("a reserved-keyword column is emitted quoted", () => {
+		const { sql } = ddl(
+			schema([
+				table({
+					name: "presence",
+					fields: { user: field(v.string()) },
+				}),
+			]),
+		);
+		expect(sql).toContain('"user" text NOT NULL');
+	});
+});
+
+describe("Lakebase extensions", () => {
+	test("a vector index pulls in lakebase_vector with CASCADE", () => {
+		const { sql } = ddl(vectorSchema());
+		expect(sql).toContain(
+			"CREATE EXTENSION IF NOT EXISTS lakebase_vector CASCADE;",
+		);
+		// pgvector comes via CASCADE; only the text extension is absent here.
+		expect(sql).not.toContain("lakebase_text");
+	});
+
+	test("a search index pulls in lakebase_text, no CASCADE", () => {
+		const { sql } = ddl(searchSchema());
+		expect(sql).toContain("CREATE EXTENSION IF NOT EXISTS lakebase_text;");
+		expect(sql).not.toContain("lakebase_text CASCADE");
+		expect(sql).not.toContain("lakebase_vector");
+	});
+
+	test("searchIndex bm25 is the default spelled out", () => {
+		expect(ddl(searchSchema(), { searchIndex: "bm25" })).toEqual(
+			ddl(searchSchema()),
+		);
+	});
+
+	test("a GIN search index needs no extension", () => {
+		const { sql } = ddl(searchSchema(), { searchIndex: "gin" });
+		expect(sql).not.toContain("CREATE EXTENSION");
+		expect(sql.startsWith("CREATE TABLE messages (")).toBe(true);
+	});
+
+	test("the generated tsvector column is the same with gin", () => {
+		expect(ddl(searchSchema()).sql).toContain(
+			ddl(searchSchema(), { searchIndex: "gin" }).sql.trimEnd(),
+		);
+	});
+
+	test("neither search index kind adds a warning", () => {
+		expect(ddl(searchSchema()).warnings).toEqual([]);
+		expect(ddl(searchSchema(), { searchIndex: "gin" }).warnings).toEqual(
+			[],
+		);
+	});
+
+	test("the extension line precedes the first CREATE TABLE", () => {
+		const { sql } = ddl(vectorSchema());
+		expect(sql.indexOf("CREATE EXTENSION")).toBeLessThan(
+			sql.indexOf("CREATE TABLE"),
+		);
+	});
+
+	test("a schema with neither emits no extension lines (byte-identical DDL)", () => {
+		const plain = schema([
+			table({ name: "t", fields: { x: field(v.string()) } }),
+		]);
+		const withHelper = generateDdl(parseExportedSchema(plain));
+		const direct = generateDdl(parseExportedSchema(plain));
+		expect(withHelper.sql).not.toContain("CREATE EXTENSION");
+		// The exact prior shape: starts with CREATE TABLE, no leading blank line.
+		expect(withHelper.sql.startsWith("CREATE TABLE t (")).toBe(true);
+		expect(direct.sql).toBe(withHelper.sql);
+	});
+});
+
+describe("generateDdl vector column", () => {
+	test("retypes the embedding column to vector(<dimensions>) NOT NULL", () => {
+		const { sql } = ddl(vectorSchema());
+		expect(sql).toContain("embedding vector(1536) NOT NULL");
+		// It is no longer a jsonb column.
+		expect(sql).not.toContain("embedding jsonb");
+	});
+
+	test("an optional embedding is a nullable vector column", () => {
+		const { sql } = ddl(
+			schema([
+				table({
+					name: "foods",
+					fields: {
+						embedding: field(v.array(v.number()), true),
+					},
+					vectorIndexes: [
+						{
+							indexDescriptor: "by_embedding",
+							vectorField: "embedding",
+							dimensions: 8,
+							filterFields: [],
+						},
+					],
+				}),
+			]),
+		);
+		expect(sql).toContain("embedding vector(8)");
+		expect(sql).not.toContain("embedding vector(8) NOT NULL");
+	});
+
+	test("warns and leaves the schema untouched when the vector field is absent", () => {
+		const { sql, warnings } = ddl(
+			schema([
+				table({
+					name: "foods",
+					fields: { description: field(v.string()) },
+					vectorIndexes: [
+						{
+							indexDescriptor: "by_embedding",
+							vectorField: "embedding",
+							dimensions: 8,
+							filterFields: [],
+						},
+					],
+				}),
+			]),
+		);
+		expect(sql).not.toContain("vector(");
+		expect(sql).not.toContain("lakebase_vector");
+		expect(
+			warnings.some(
+				(w) =>
+					w.includes("by_embedding") &&
+					w.includes("not a materialized column"),
+			),
+		).toBe(true);
+	});
+});
+
+describe("generateDdl generated tsvector column", () => {
+	test("emits a STORED GENERATED tsvector column from the search field", () => {
+		const { sql } = ddl(searchSchema());
+		expect(sql).toContain(
+			"body_tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', body)) STORED",
+		);
+	});
+
+	test("honours a custom searchLanguage", () => {
+		const { sql } = ddl(searchSchema(), { searchLanguage: "simple" });
+		expect(sql).toContain(
+			"body_tsv tsvector GENERATED ALWAYS AS (to_tsvector('simple', body)) STORED",
+		);
+	});
+
+	test("quotes a reserved-word search column inside the generated expression", () => {
+		const { sql } = ddl(
+			schema([
+				table({
+					name: "docs",
+					fields: { user: field(v.string()) },
+					searchIndexes: [
+						{
+							indexDescriptor: "search_user",
+							searchField: "user",
+							filterFields: [],
+						},
+					],
+				}),
+			]),
+		);
+		// The tsv column name `user_tsv` is safe unquoted; only the source
+		// column `"user"` (a reserved word) is quoted inside the expression.
+		expect(sql).toContain(
+			`user_tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', "user")) STORED`,
+		);
+	});
+});
+
+describe("generateIndexDdl post-load indexes", () => {
+	test("empty for a schema with no search or vector indexes", () => {
+		expect(
+			indexDdl(
+				schema([
+					table({
+						name: "t",
+						fields: { x: field(v.string()) },
+						indexes: [{ indexDescriptor: "by_x", fields: ["x"] }],
+					}),
+				]),
+			),
+		).toBe("");
+	});
+
+	test("bm25 index on the tsvector column with the default WITH params", () => {
+		expect(indexDdl(searchSchema())).toContain(
+			"CREATE INDEX messages_body_bm25 ON messages USING lakebase_bm25 (body_tsv) WITH (k1 = 1.2, b = 0.75);",
+		);
+	});
+
+	test("searchK1 / searchB flow into the BM25 WITH clause", () => {
+		expect(
+			indexDdl(searchSchema(), { searchK1: 2, searchB: 0.5 }),
+		).toContain("WITH (k1 = 2, b = 0.5);");
+	});
+
+	test("gin: a GIN index on the tsvector column, and no Lakebase index", () => {
+		const sql = indexDdl(searchSchema(), { searchIndex: "gin" });
+		expect(sql).toBe(
+			"CREATE INDEX messages_body_gin ON messages USING gin (body_tsv);\n",
+		);
+		expect(sql).not.toContain("lakebase");
+	});
+
+	test("gin: searchK1 / searchB are ignored", () => {
+		expect(
+			indexDdl(searchSchema(), {
+				searchIndex: "gin",
+				searchK1: 2,
+				searchB: 0.5,
+			}),
+		).toBe(indexDdl(searchSchema(), { searchIndex: "gin" }));
+	});
+
+	test("gin: a filter-field btree precedes the GIN index", () => {
+		const sql = indexDdl(
+			schema([
+				table({
+					name: "events",
+					fields: {
+						calendarId: field(v.string()),
+						title: field(v.string()),
+					},
+					searchIndexes: [
+						{
+							indexDescriptor: "search_title",
+							searchField: "title",
+							filterFields: ["calendarId"],
+						},
+					],
+				}),
+			]),
+			{ searchIndex: "gin" },
+		);
+		expect(sql).toBe(
+			[
+				"CREATE INDEX events_calendar_id ON events (calendar_id);",
+				"CREATE INDEX events_title_gin ON events USING gin (title_tsv);",
+				"",
+			].join("\n"),
+		);
+	});
+
+	test("ann index on the vector column with the default opclass", () => {
+		expect(indexDdl(vectorSchema())).toContain(
+			"CREATE INDEX foods_embedding_ann ON foods USING lakebase_ann (embedding vector_cosine_ops);",
+		);
+	});
+
+	test("vectorOps overrides the ann opclass", () => {
+		expect(
+			indexDdl(vectorSchema(), { vectorOps: "vector_l2_ops" }),
+		).toContain("USING lakebase_ann (embedding vector_l2_ops);");
+	});
+
+	test("one btree per filter field, emitted before the ann index", () => {
+		const sql = indexDdl(vectorSchema());
+		expect(sql).toContain("CREATE INDEX foods_cuisine ON foods (cuisine);");
+		expect(sql.indexOf("foods_cuisine")).toBeLessThan(
+			sql.indexOf("lakebase_ann"),
+		);
+	});
+
+	test("deduplicates a filter field shared by two indexes", () => {
+		const sql = indexDdl(
+			schema([
+				table({
+					name: "items",
+					fields: {
+						title: field(v.string()),
+						embedding: field(v.array(v.number())),
+						tag: field(v.string()),
+					},
+					searchIndexes: [
+						{
+							indexDescriptor: "search_title",
+							searchField: "title",
+							filterFields: ["tag"],
+						},
+					],
+					vectorIndexes: [
+						{
+							indexDescriptor: "by_embedding",
+							vectorField: "embedding",
+							dimensions: 4,
+							filterFields: ["tag"],
+						},
+					],
+				}),
+			]),
+		);
+		const matches = sql.match(/CREATE INDEX items_tag ON/g) ?? [];
+		expect(matches).toHaveLength(1);
+	});
+});
+
+describe("generateIndexDdl maxAnnDimensions", () => {
+	test("default: the ann index is emitted regardless of dimensions", () => {
+		const { warnings } = ddl(vectorSchema());
+		expect(indexDdl(vectorSchema())).toContain("lakebase_ann");
+		expect(warnings.some((w) => w.includes("maxAnnDimensions"))).toBe(
+			false,
+		);
+	});
+
+	test("when exceeded: column still vector(d), ann skipped, warning raised", () => {
+		const options = { maxAnnDimensions: 1000 };
+		const { sql, warnings } = ddl(vectorSchema(), options);
+		// The column is still retyped and the extension is still required.
+		expect(sql).toContain("embedding vector(1536) NOT NULL");
+		expect(sql).toContain("lakebase_vector CASCADE");
+		// ...but no ANN index is created.
+		expect(indexDdl(vectorSchema(), options)).not.toContain("lakebase_ann");
+		expect(
+			warnings.some(
+				(w) =>
+					w.includes("maxAnnDimensions") &&
+					w.includes("by_embedding"),
+			),
+		).toBe(true);
+	});
+
+	test("under the cap: the ann index is still emitted", () => {
+		const options = { maxAnnDimensions: 4096 };
+		expect(indexDdl(vectorSchema(), options)).toContain("lakebase_ann");
+	});
+});
+
+describe("generated name collisions", () => {
+	test("a field that snake-cases onto a search index's tsvector column throws", () => {
+		const exported = schema([
+			table({
+				name: "items",
+				fields: {
+					title: field(v.string()),
+					titleTsv: field(v.string()),
+				},
+				searchIndexes: [
+					{
+						indexDescriptor: "search_title",
+						searchField: "title",
+						filterFields: [],
+					},
+				],
+			}),
+		]);
+		expect(() => ddl(exported)).toThrow(
+			'column "title_tsv" in table "items"',
+		);
+	});
+
+	test("two tables that snake-case onto one name throw", () => {
+		const exported = schema([
+			table({ name: "userProfiles", fields: { a: field(v.string()) } }),
+			table({ name: "user_profiles", fields: { a: field(v.string()) } }),
+		]);
+		expect(() => ddl(exported)).toThrow('table or index "user_profiles"');
+	});
+
+	test("an index named pkey collides with the primary key's index", () => {
+		const exported = schema([
+			table({
+				name: "items",
+				fields: { title: field(v.string()) },
+				indexes: [{ indexDescriptor: "pkey", fields: ["title"] }],
+			}),
+		]);
+		expect(() => ddl(exported)).toThrow('table or index "items_pkey"');
+	});
+
+	test("a 63-byte table name keeps a distinct primary-key name", () => {
+		const exported = schema([
+			table({ name: "a".repeat(63), fields: { b: field(v.string()) } }),
+		]);
+		expect(ddl(exported).sql).toContain(`CREATE TABLE ${"a".repeat(63)} (`);
+	});
+
+	test("foreign keys whose constraint names truncate alike throw", () => {
+		const stem = "a".repeat(57);
+		const exported = schema([
+			table({ name: "users", fields: { name: field(v.string()) } }),
+			table({
+				name: "items",
+				fields: {
+					[`${stem}1`]: field(v.id("users")),
+					[`${stem}2`]: field(v.id("users")),
+				},
+			}),
+		]);
+		expect(() => ddl(exported)).toThrow('constraint "items_');
+	});
+
+	test("names equal in their first 63 bytes throw", () => {
+		const long = "a".repeat(63);
+		const exported = schema([
+			table({
+				name: "items",
+				fields: {
+					[`${long}_one`]: field(v.string()),
+					[`${long}_two`]: field(v.string()),
+				},
+			}),
+		]);
+		expect(() => ddl(exported)).toThrow(`column "${long}"`);
+	});
+});
+
+describe("vectorOps", () => {
+	test("accepts plain and schema-qualified operator classes", () => {
+		expect(
+			indexDdl(vectorSchema(), { vectorOps: "vector_l2_ops" }),
+		).toContain("(embedding vector_l2_ops)");
+		expect(
+			indexDdl(vectorSchema(), { vectorOps: "my_schema.my_ops" }),
+		).toContain("(embedding my_schema.my_ops)");
+	});
+
+	test("refuses anything that isn't an operator class name", () => {
+		expect(() =>
+			indexDdl(vectorSchema(), {
+				vectorOps: "vector_cosine_ops); DROP TABLE victim; --",
+			}),
+		).toThrow("is not an operator class name");
+	});
+});
