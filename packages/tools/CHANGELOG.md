@@ -1,5 +1,11 @@
 # @neon/tools
 
+## 2.14.1
+
+### Patch Changes
+
+- d2ed118: `auth.getConfig` reports the branch's Neon Auth logs export setting as `logs_export`, or `null` where logs export is not available.
+
 ## 2.14.0
 
 ### Minor Changes
