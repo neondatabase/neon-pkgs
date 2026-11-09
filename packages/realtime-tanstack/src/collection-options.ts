@@ -127,6 +127,10 @@ type SyncStart<Row> =
 	| { readonly subscription: RawLiveQuerySubscription<Row> }
 	| { readonly error: unknown };
 
+function monotonicNow(): number {
+	return typeof performance === "undefined" ? Date.now() : performance.now();
+}
+
 function validateTransactionWait(
 	txid: string,
 	timeout: number | undefined,
@@ -203,12 +207,12 @@ function createRealtimeCollectionOptions<
 				if (inactiveSubscriptionFailure) {
 					throw inactiveSubscriptionFailure.error;
 				}
-				const waitStarted = Date.now();
+				const waitStarted = monotonicNow();
 				subscription = await waitForSyncStart(normalizedTxid, timeout);
 				if (timeout !== undefined) {
 					remaining = Math.max(
 						0,
-						timeout - (Date.now() - waitStarted),
+						timeout - (monotonicNow() - waitStarted),
 					);
 				}
 			}
@@ -262,7 +266,12 @@ function createRealtimeCollectionOptions<
 					const failure = { error };
 					inactiveSubscriptionFailure = failure;
 					settleSyncStartWaiters(failure);
-					throw error;
+					fail(error);
+					return () => {
+						if (inactiveSubscriptionFailure === failure) {
+							inactiveSubscriptionFailure = undefined;
+						}
+					};
 				}
 				activeSubscription = subscription;
 				inactiveSubscriptionFailure = undefined;
