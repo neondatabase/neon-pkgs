@@ -86,6 +86,7 @@ export const WRAPPED: ReadonlySet<string> = new Set([
 	"updateNeonAuthPhoneNumberPlugin",
 	"getNeonAuthWebhookConfig",
 	"updateNeonAuthWebhookConfig",
+	"updateNeonAuthLogsExport",
 	// storage
 	"getProjectBranchStorage",
 	"listProjectBranchBuckets",
@@ -373,6 +374,7 @@ export const EXPECTED_OPERATIONS: ReadonlySet<string> = new Set([
 	"updateNeonAuthEmailAndPasswordConfig",
 	"updateNeonAuthEmailProvider",
 	"updateNeonAuthEmailServer",
+	"updateNeonAuthLogsExport",
 	"updateNeonAuthMagicLinkPlugin",
 	"updateNeonAuthOAuthClient",
 	"updateNeonAuthOAuthProviderPlugin",

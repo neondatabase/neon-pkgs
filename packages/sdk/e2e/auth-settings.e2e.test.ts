@@ -5,7 +5,7 @@ import {
 } from "@neon/e2e-harness";
 import { enableNeonAuth } from "@neon/e2e-harness/auth";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { NeonClient } from "../src/index.js";
+import { type NeonClient, NeonNotFoundError } from "../src/index.js";
 import { expectOk, makeClient } from "./helpers.js";
 
 /**
@@ -205,5 +205,33 @@ describe.sequential("e2e — @neon/sdk Neon Auth branch settings", () => {
 		);
 		expect(restored).toEqual(before);
 		expect(restored.webhook_url).toBeUndefined();
+	});
+
+	// Logs export is not available on every project. Where it is not, plugins.get omits
+	// logs_export and the API accepts only `enabled: false`.
+	it("logsExport.update always accepts disabling", async () => {
+		const before = expectOk(await neon.auth.plugins.get(ids)).logs_export;
+		expect(
+			expectOk(
+				await neon.auth.logsExport.update({ ...ids, enabled: false }),
+			),
+		).toEqual({ enabled: false });
+
+		if (!before) {
+			const enabled = await neon.auth.logsExport.update({
+				...ids,
+				enabled: true,
+			});
+			expect(enabled.error).toBeInstanceOf(NeonNotFoundError);
+			expect(
+				expectOk(await neon.auth.plugins.get(ids)).logs_export,
+			).toBeUndefined();
+			return;
+		}
+
+		expect(expectOk(await neon.auth.plugins.get(ids)).logs_export).toEqual({
+			enabled: false,
+		});
+		expectOk(await neon.auth.logsExport.update({ ...ids, ...before }));
 	});
 });

@@ -508,6 +508,7 @@ describe("special mappings", () => {
 				"auth.plugins.phoneNumber.update",
 				"auth.webhooks.get",
 				"auth.webhooks.update",
+				"auth.logsExport.update",
 			] as const,
 			fetch: async (input, init) => {
 				const request = new Request(input, init);
@@ -580,6 +581,10 @@ describe("special mappings", () => {
 			...ids,
 			enabled: false,
 		});
+		await tools["auth.logsExport.update"].execute({
+			...ids,
+			enabled: false,
+		});
 
 		const base = "/projects/project-id/branches/branch-id/auth";
 		expect(
@@ -602,6 +607,7 @@ describe("special mappings", () => {
 			`PATCH ${base}/plugins/phone-number`,
 			`GET ${base}/webhooks`,
 			`PUT ${base}/webhooks`,
+			`PATCH ${base}/logs_export`,
 		]);
 		expect(
 			await Promise.all(
@@ -619,6 +625,7 @@ describe("special mappings", () => {
 			{ enabled: true, expires_in: 10 },
 			{ membership_limit: 50, creator_role: "admin" },
 			{ otp_expires_in: 120 },
+			{ enabled: false },
 			{ enabled: false },
 		]);
 
@@ -653,6 +660,7 @@ describe("special mappings", () => {
 			"auth.plugins.organization.update",
 			"auth.plugins.phoneNumber.update",
 			"auth.webhooks.update",
+			"auth.logsExport.update",
 		] as const) {
 			expect(tools[id].requiresApproval).toBe(true);
 			expect(tools[id].annotations.readOnlyHint).toBe(false);

@@ -179,6 +179,7 @@ import {
 	updateNeonAuthEmailAndPasswordConfig as _updateNeonAuthEmailAndPasswordConfig,
 	updateNeonAuthEmailProvider as _updateNeonAuthEmailProvider,
 	updateNeonAuthEmailServer as _updateNeonAuthEmailServer,
+	updateNeonAuthLogsExport as _updateNeonAuthLogsExport,
 	updateNeonAuthMagicLinkPlugin as _updateNeonAuthMagicLinkPlugin,
 	updateNeonAuthOAuthClient as _updateNeonAuthOAuthClient,
 	updateNeonAuthOauthProvider as _updateNeonAuthOauthProvider,
@@ -374,6 +375,7 @@ export const updateNeonAuthConfig = wrapRaw(_updateNeonAuthConfig);
 export const updateNeonAuthEmailAndPasswordConfig = wrapRaw(_updateNeonAuthEmailAndPasswordConfig);
 export const updateNeonAuthEmailProvider = wrapRaw(_updateNeonAuthEmailProvider);
 export const updateNeonAuthEmailServer = wrapRaw(_updateNeonAuthEmailServer);
+export const updateNeonAuthLogsExport = wrapRaw(_updateNeonAuthLogsExport);
 export const updateNeonAuthMagicLinkPlugin = wrapRaw(_updateNeonAuthMagicLinkPlugin);
 export const updateNeonAuthOAuthClient = wrapRaw(_updateNeonAuthOAuthClient);
 export const updateNeonAuthOauthProvider = wrapRaw(_updateNeonAuthOauthProvider);

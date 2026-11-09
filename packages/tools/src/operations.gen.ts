@@ -185,6 +185,7 @@ export const operationIds = [
 	"updateNeonAuthEmailAndPasswordConfig",
 	"updateNeonAuthEmailProvider",
 	"updateNeonAuthEmailServer",
+	"updateNeonAuthLogsExport",
 	"updateNeonAuthMagicLinkPlugin",
 	"updateNeonAuthOAuthClient",
 	"updateNeonAuthOauthProvider",
@@ -5772,6 +5773,38 @@ export const operationFactories = {
 					raw.updateNeonAuthEmailServer({
 			path: optionalGroup({ "project_id": input["project_id"] }, true),
 			body: input.body,
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"updateNeonAuthLogsExport": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "updateNeonAuthLogsExport",
+				id: "update_neon_auth_logs_export",
+				title: "Update Neon Auth logs export setting",
+				description: "Enables or disables exporting Neon Auth events for the branch to Neon Platform logs.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zUpdateNeonAuthLogsExportPath.shape["project_id"],
+	"branch_id": zod.zUpdateNeonAuthLogsExportPath.shape["branch_id"],
+	"enabled": zod.zUpdateNeonAuthLogsExportBody.shape["enabled"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "PATCH",
+					path: "/projects/{project_id}/branches/{branch_id}/auth/logs_export",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Auth"],
+				},
+				invoke: (client, input, signal) =>
+					raw.updateNeonAuthLogsExport({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
+			body: optionalGroup({ "enabled": input["enabled"] }, true),
 			client,
 			signal,
 			throwOnError: true,

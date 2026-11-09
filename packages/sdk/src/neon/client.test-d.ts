@@ -10,6 +10,7 @@ import type {
 	GrantedCredentialScope,
 	NeonAuthEmailServerConfigResponse,
 	NeonAuthIntegration,
+	NeonAuthLogsExportConfig,
 	NeonAuthOAuthClientSecret,
 	NeonAuthOAuthProviderConfig,
 	NeonAuthOauthProvider,
@@ -330,6 +331,13 @@ it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed"
 			enabled: false,
 		}),
 	).resolves.toEqualTypeOf<NeonResult<NeonAuthWebhookConfig>>();
+	expectTypeOf(
+		neon.auth.logsExport.update({
+			projectId: "p",
+			branchId: "br",
+			enabled: false,
+		}),
+	).resolves.toEqualTypeOf<NeonResult<NeonAuthLogsExportConfig>>();
 	expectTypeOf(
 		neon.projects.permissions.list({ projectId: "p" }),
 	).resolves.toEqualTypeOf<NeonResult<ProjectPermission[]>>();

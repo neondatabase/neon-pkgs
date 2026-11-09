@@ -1339,7 +1339,7 @@ export const zEndpointUpdateRequest = z.strictObject({
         branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Deprecated. The destination branch ID; must not have an existing read-write endpoint.").optional(),
         autoscaling_limit_min_cu: z.number().gte(0.25).describe("The minimum number of Compute Units.").optional(),
         autoscaling_limit_max_cu: z.number().gte(0.25).describe("The maximum number of Compute Units.").optional(),
-        provisioner: z.string().describe("Compute provisioner.").optional(),
+        provisioner: z.string().describe("Legacy field; do not send it.").optional(),
         settings: zEndpointSettingsData.optional(),
         pooler_enabled: z.boolean().describe("Deprecated. To enable connection pooling, append `-pooler` to the endpoint ID in the connection string.").optional(),
         pooler_mode: z.enum(['transaction']).describe("Deprecated. The connection pooler mode.").optional(),
@@ -1737,7 +1737,11 @@ export const zDataApiReponse = z.strictObject({
     status: z.string().describe("The status of the Neon Data API deployment"),
     settings: zDataApiSettings.nullish(),
     available_schemas: z.array(z.string()).nullish(),
-    observed_at: z.iso.datetime().describe("When `settings` and `available_schemas` were read from the database.").optional()
+    observed_at: z.iso.datetime().describe("When `settings` and `available_schemas` were read from the database.").optional(),
+    auth_provider: z.enum(['neon_auth', 'external']).describe("How this Data API verifies JWTs, as recorded by the last create that named a provider.").optional(),
+    jwks_url: z.url().describe("URL of the JWKS endpoint the Data API verifies JWTs against.").optional(),
+    provider_name: z.string().describe("Display name of the external authentication provider, as given at creation (for example \"Clerk\").").optional(),
+    jwt_audience: z.string().describe("Expected `aud` claim in incoming JWTs, as given at creation.").optional()
 }).describe("Neon Data API response");
 
 /**
@@ -1845,6 +1849,10 @@ export const zUpdateNeonAuthUserRoleRequest = z.strictObject({
 
 export const zUpdateNeonAuthUserRoleResponse = z.strictObject({
     id: z.string().describe("ID of the updated user")
+});
+
+export const zNeonAuthLogsExportConfig = z.strictObject({
+    enabled: z.boolean().describe("Whether Neon Auth events are exported to Neon Platform logs.")
 });
 
 export const zNeonAuthAllowLocalhostResponse = z.strictObject({
@@ -2011,7 +2019,8 @@ export const zNeonAuthOauthProvider = z.strictObject({
         'github',
         'microsoft',
         'vercel',
-        'apple'
+        'apple',
+        'discord'
     ]).describe("The OAuth provider's ID."),
     type: z.enum(['standard', 'shared']).describe("OAuth provider key type."),
     client_id: z.string().describe("Public identifier for the OAuth application, issued by the provider when the application is registered.").optional(),
@@ -2030,7 +2039,8 @@ export const zNeonAuthOauthProviderId = z.enum([
     'github',
     'microsoft',
     'vercel',
-    'apple'
+    'apple',
+    'discord'
 ]);
 
 export const zNeonAuthOauthProviderType = z.enum(['standard', 'shared']);
@@ -2041,7 +2051,8 @@ export const zNeonAuthAddOAuthProviderRequest = z.strictObject({
         'github',
         'microsoft',
         'vercel',
-        'apple'
+        'apple',
+        'discord'
     ]).describe("OAuth provider to configure for Neon Auth."),
     client_id: z.string().describe("The client ID issued by the OAuth provider for your application.").optional(),
     client_secret: z.string().describe("OAuth client secret for the provider.").optional(),
@@ -2169,7 +2180,10 @@ export const zNeonAuthPluginConfigs = z.strictObject({
         revoke_sessions_on_password_reset: z.boolean().describe("Whether all of a user's sessions are revoked when their password is reset")
     }).describe("Configuration for email and password authentication.").optional(),
     oauth_providers: z.array(zNeonAuthOauthProvider).describe("OAuth provider configurations enabled for this auth setup.").optional(),
-    allow_localhost: z.boolean().describe("Permits authentication requests from localhost origins when true.").optional()
+    allow_localhost: z.boolean().describe("Permits authentication requests from localhost origins when true.").optional(),
+    logs_export: z.strictObject({
+        enabled: z.boolean().describe("Whether Neon Auth events are exported to Neon Platform logs.")
+    }).describe("Whether Neon Auth events for the branch are exported to Neon Platform logs.").optional()
 }).describe("Aggregated plugin configurations for Neon Auth");
 
 export const zNeonAuthEmailAndPasswordConfig = z.strictObject({
@@ -3224,7 +3238,8 @@ export const zDeleteNeonAuthOauthProviderPath = z.strictObject({
         'github',
         'microsoft',
         'vercel',
-        'apple'
+        'apple',
+        'discord'
     ]).describe("The OAuth provider ID")
 });
 
@@ -3237,7 +3252,8 @@ export const zUpdateNeonAuthOauthProviderPath = z.strictObject({
         'github',
         'microsoft',
         'vercel',
-        'apple'
+        'apple',
+        'discord'
     ]).describe("The OAuth provider ID")
 });
 
@@ -3249,7 +3265,8 @@ export const zDeleteBranchNeonAuthOauthProviderPath = z.strictObject({
         'github',
         'microsoft',
         'vercel',
-        'apple'
+        'apple',
+        'discord'
     ]).describe("The OAuth provider ID")
 });
 
@@ -3263,7 +3280,8 @@ export const zUpdateBranchNeonAuthOauthProviderPath = z.strictObject({
         'github',
         'microsoft',
         'vercel',
-        'apple'
+        'apple',
+        'discord'
     ]).describe("The OAuth provider ID")
 });
 
@@ -3348,6 +3366,13 @@ export const zGetNeonAuthAllowLocalhostPath = z.strictObject({
 export const zUpdateNeonAuthAllowLocalhostBody = zUpdateNeonAuthAllowLocalhostRequest;
 
 export const zUpdateNeonAuthAllowLocalhostPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
+});
+
+export const zUpdateNeonAuthLogsExportBody = zNeonAuthLogsExportConfig;
+
+export const zUpdateNeonAuthLogsExportPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });

@@ -3050,6 +3050,23 @@ export type DataApiReponse = {
      *
      */
     observed_at?: string;
+    /**
+     * How this Data API verifies JWTs, as recorded by the last create that named a provider. `neon_auth` verifies Neon Auth tokens; `external` verifies tokens from a third-party identity provider via `jwks_url`. Absent when no provider is recorded: the Data API was created before providers were recorded, or it was created without naming one. Treat an absent value as unknown and fall back to the branch's Neon Auth state (`GET /projects/{project_id}/branches/{branch_id}/auth`). The value can differ from the current setup (for example, a JWKS added later), and it is also absent in responses served from the state cache while the compute is suspended. A child branch inherits its parent's Data API and reports the parent's provider.
+     *
+     */
+    auth_provider?: 'neon_auth' | 'external';
+    /**
+     * URL of the JWKS endpoint the Data API verifies JWTs against. Only set when `auth_provider` is `external`.
+     */
+    jwks_url?: string;
+    /**
+     * Display name of the external authentication provider, as given at creation (for example "Clerk"). Only set when `auth_provider` is `external` and a name was given.
+     */
+    provider_name?: string;
+    /**
+     * Expected `aud` claim in incoming JWTs, as given at creation. Only set when `auth_provider` is `external` and an audience was given.
+     */
+    jwt_audience?: string;
 };
 
 /**
@@ -3222,6 +3239,13 @@ export type UpdateNeonAuthUserRoleResponse = {
      * ID of the updated user
      */
     id: string;
+};
+
+export type NeonAuthLogsExportConfig = {
+    /**
+     * Whether Neon Auth events are exported to Neon Platform logs.
+     */
+    enabled: boolean;
 };
 
 export type NeonAuthAllowLocalhostResponse = {
@@ -3568,6 +3592,7 @@ export type NeonAuthPluginConfigs = {
      * Permits authentication requests from localhost origins when true. Intended for local development; disable in production environments.
      */
     allow_localhost?: boolean;
+    logs_export?: NeonAuthLogsExportConfig;
 };
 
 export type NeonAuthWebhookConfig = {
@@ -3615,7 +3640,7 @@ export type NeonAuthOauthProvider = {
     apple_key_id?: string;
 };
 
-export type NeonAuthOauthProviderId = 'google' | 'github' | 'microsoft' | 'vercel' | 'apple';
+export type NeonAuthOauthProviderId = 'google' | 'github' | 'microsoft' | 'vercel' | 'apple' | 'discord';
 
 export type NeonAuthOauthProviderType = 'standard' | 'shared';
 
@@ -4262,6 +4287,9 @@ export type BucketCreateRequest = {
     /**
      * Access level for the bucket. Defaults to `private`. Set to `public_read`
      * to allow anonymous `GetObject`/`HeadObject` on objects in this bucket.
+     * For organizations on the per-project role model, creating a
+     * `public_read` bucket requires the project Admin role or an
+     * organization API key.
      *
      */
     access_level?: 'private' | 'public_read';
@@ -8587,6 +8615,54 @@ export type UpdateNeonAuthAllowLocalhostResponses = {
 };
 
 export type UpdateNeonAuthAllowLocalhostResponse = UpdateNeonAuthAllowLocalhostResponses[keyof UpdateNeonAuthAllowLocalhostResponses];
+
+export type UpdateNeonAuthLogsExportData = {
+    body: NeonAuthLogsExportConfig;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/auth/logs_export';
+};
+
+export type UpdateNeonAuthLogsExportErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type UpdateNeonAuthLogsExportError = UpdateNeonAuthLogsExportErrors[keyof UpdateNeonAuthLogsExportErrors];
+
+export type UpdateNeonAuthLogsExportResponses = {
+    /**
+     * The logs export setting has been updated
+     */
+    200: NeonAuthLogsExportConfig;
+};
+
+export type UpdateNeonAuthLogsExportResponse = UpdateNeonAuthLogsExportResponses[keyof UpdateNeonAuthLogsExportResponses];
 
 export type GetNeonAuthPluginConfigsData = {
     body?: never;
@@ -13591,6 +13667,14 @@ export type CreateProjectBranchBucketData = {
 
 export type CreateProjectBranchBucketErrors = {
     /**
+     * For organizations on the per-project role model, creating a
+     * `public_read` bucket requires the project Admin role. Organization API
+     * keys keep write-level access. Returned with code
+     * `PUBLIC_BUCKET_ADMIN_REQUIRED`.
+     *
+     */
+    403: GeneralError;
+    /**
      * The project has been deleted
      */
     410: GeneralError;
@@ -14166,6 +14250,15 @@ export type GetProjectBranchBucketObjectData = {
 
 export type GetProjectBranchBucketObjectErrors = {
     /**
+     * For organizations on the per-project role model, downloading object
+     * bytes requires the Editor role or higher. Viewers can list objects but
+     * not download them. OAuth clients also need the
+     * `urn:neoncloud:projects:update` scope. Returned with code
+     * `OBJECT_DOWNLOAD_ACCESS_DENIED`.
+     *
+     */
+    403: GeneralError;
+    /**
      * Object not found
      */
     404: GeneralError;
@@ -14297,6 +14390,15 @@ export type PresignProjectBranchBucketObjectData = {
 };
 
 export type PresignProjectBranchBucketObjectErrors = {
+    /**
+     * For organizations on the per-project role model, a `download` URL
+     * requires the Editor role or higher, because it grants access to the
+     * object's bytes. OAuth clients also need the
+     * `urn:neoncloud:projects:update` scope. Returned with code
+     * `OBJECT_DOWNLOAD_ACCESS_DENIED`.
+     *
+     */
+    403: GeneralError;
     /**
      * Bucket or branch not found
      */

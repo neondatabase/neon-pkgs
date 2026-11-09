@@ -23,6 +23,7 @@ export const NeonAuthOauthProviderId = {
 	Microsoft: "microsoft",
 	Vercel: "vercel",
 	Apple: "apple",
+	Discord: "discord",
 } as const;
 export type NeonAuthOauthProviderId =
 	(typeof NeonAuthOauthProviderId)[keyof typeof NeonAuthOauthProviderId];

@@ -262,6 +262,7 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 				webhook_url: "https://hooks.example.com/auth",
 				enabled_events: ["user.created"],
 			}),
+			await neon.auth.logsExport.update({ ...ids, enabled: false }),
 		];
 		for (const result of results) {
 			expect(result.error).toBeUndefined();
@@ -288,6 +289,7 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 			`PATCH ${base}/plugins/phone-number`,
 			`GET ${base}/webhooks`,
 			`PUT ${base}/webhooks`,
+			`PATCH ${base}/logs_export`,
 		]);
 		const bodies = await Promise.all(
 			requests.filter((r) => r.method !== "GET").map((r) => r.json()),
@@ -310,6 +312,7 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 				webhook_url: "https://hooks.example.com/auth",
 				enabled_events: ["user.created"],
 			},
+			{ enabled: false },
 		]);
 	});
 

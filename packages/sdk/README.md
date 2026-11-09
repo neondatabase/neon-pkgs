@@ -1114,6 +1114,7 @@ Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and 
 | `plugins.phoneNumber.update({ projectId, branchId, …input })` | `NeonAuthPhoneNumberConfig` | |
 | `webhooks.get({ projectId, branchId })` | `NeonAuthWebhookConfig` | |
 | `webhooks.update({ projectId, branchId, enabled, …input })` | `NeonAuthWebhookConfig` | replaces the whole configuration; omitted fields reset |
+| `logsExport.update({ projectId, branchId, enabled })` | `NeonAuthLogsExportConfig` | export Neon Auth events to Neon Platform logs; read the current value from `plugins.get().logs_export`, which is absent on a project without logs export. Such a project accepts only `enabled: false`; enabling returns 404 |
 
 ```ts
 const ids = { projectId: "proj-123", branchId: "br-main-456" };

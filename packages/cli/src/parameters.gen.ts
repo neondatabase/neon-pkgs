@@ -426,7 +426,7 @@ export const endpointUpdateRequest = {
   },
   'endpoint.provisioner': {
               type: "string",
-              description: "Compute provisioner. `k8s-neonvm` (default) supports Autoscaling; `k8s-pod` is fixed-size compute. Also `docker` and `serverless-platform`.",
+              description: "Legacy field; do not send it. An update never changes the provisioner: `k8s-neonvm` is accepted and ignored for backward compatibility, and any other value is rejected. On Lakebase, any value is rejected.\n",
               demandOption: false,
   },
   'endpoint.settings.preload_libraries.use_defaults': {
