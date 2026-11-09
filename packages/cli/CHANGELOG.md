@@ -1,5 +1,14 @@
 # neon
 
+## 9.3.1
+
+### Patch Changes
+
+- Updated dependencies [bc669f5]
+  - @neon/sdk@7.13.0
+  - @neon/config@1.13.2
+  - @neon/config-runtime@1.12.2
+
 ## 9.3.0
 
 ### Minor Changes
