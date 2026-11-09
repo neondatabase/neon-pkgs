@@ -171,6 +171,10 @@ export class QueryRefreshController<Row> {
 		try {
 			const query = await refreshQuery();
 			if (!this.isCurrent(generation)) return;
+			if (this.subscriptionEnded()) {
+				this.refreshStopped = true;
+				return;
+			}
 			try {
 				validateSealedQuery(query);
 				this.assertSameQuery(query);
@@ -199,6 +203,10 @@ export class QueryRefreshController<Row> {
 		} catch (error) {
 			if (!this.isCurrent(generation)) return;
 			this.refreshEvents.callbackFailed(error);
+			if (this.subscriptionEnded()) {
+				this.refreshStopped = true;
+				return;
+			}
 			this.scheduleRefresh(REFRESH_RETRY_MS);
 		} finally {
 			if (generation === this.generation) this.refreshInFlight = false;
