@@ -162,6 +162,7 @@ describe("getNeonModelCapabilities", () => {
 			"glm-5-2",
 			"glm-5-3",
 			"kimi-k3",
+			"kimi-k3-1-pro",
 			"grok-4-6",
 			"grok-4-7",
 			"deepseek-v4-1-flash",
