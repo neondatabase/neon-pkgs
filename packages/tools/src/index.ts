@@ -1,4 +1,5 @@
 import { NeonError } from "@neon/sdk";
+import { InspectDiagnosticError } from "./lib/custom/sql/inspect/inspect.js";
 import {
 	applyToolCustomization,
 	assertToolCustomizeOptions,
@@ -9,6 +10,7 @@ import {
 	type NeonToolNameOverrides,
 } from "./lib/customize.js";
 import {
+	customToolIds,
 	isNeonToolId,
 	type NeonToolId,
 	type PublishedId,
@@ -38,12 +40,19 @@ export type {
 	JsonSafeBlob,
 	NeonTool,
 	NeonToolAnnotations,
+	NeonToolCaller,
 	NeonToolExecutionContext,
 	NeonToolMetadata,
 	NeonToolResult,
 } from "./lib/operation.js";
 export type { NeonToolId, PublishedId };
-export { NeonError, publishedId, toolIds };
+export {
+	customToolIds,
+	InspectDiagnosticError,
+	NeonError,
+	publishedId,
+	toolIds,
+};
 
 type ToolFactories = typeof toolFactories;
 

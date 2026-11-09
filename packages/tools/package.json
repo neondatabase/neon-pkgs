@@ -74,18 +74,21 @@
 		"prepare": "npm run build",
 		"test": "vitest --passWithNoTests",
 		"test:ci": "pnpm generate:check && vitest run --passWithNoTests",
-		"tsc": "tsc"
+		"tsc": "tsc",
+		"test:e2e": "vitest run --config vitest.e2e.config.ts"
 	},
 	"dependencies": {
 		"@neon/sdk": "workspace:*",
+		"@neondatabase/serverless": "1.0.0",
 		"zod": "^4.5.4"
 	},
 	"devDependencies": {
 		"@hey-api/openapi-ts": "0.98.2",
 		"@mastra/core": "1.56.0-alpha.5",
 		"@modelcontextprotocol/client": "2.0.0",
-		"@modelcontextprotocol/server": "2.0.0",
 		"@modelcontextprotocol/sdk-v1": "npm:@modelcontextprotocol/sdk@1.30.0",
+		"@modelcontextprotocol/server": "2.0.0",
+		"@neon/e2e-harness": "workspace:*",
 		"@types/node": "catalog:",
 		"@vitest/coverage-v8": "catalog:",
 		"console-fail-test": "catalog:",
