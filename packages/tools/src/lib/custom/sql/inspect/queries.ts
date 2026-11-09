@@ -296,7 +296,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
       FROM pg_stat_statements s
       JOIN pg_database d ON d.oid = s.dbid
       WHERE d.datname = current_database()
-      ORDER BY total_exec_time DESC
+      ORDER BY s.total_exec_time DESC
       LIMIT 25;
     `,
 	},

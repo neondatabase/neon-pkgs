@@ -571,7 +571,7 @@ export const connectionStringTool = (options: ToolClientOptions) =>
 			id: publishedId("postgres.connectionString"),
 			title: "Get connection string",
 			description:
-				"Returns a Postgres connection string with a role password. Omitted inputs resolve like the SQL tools: default branch, neondb or the first database, and its owner. Call it after {{projects.create}} or {{branches.create}}, which return none.",
+				"Returns a Postgres connection string with a role password; the branch needs a compute. Omitted inputs resolve like the SQL tools: default branch, neondb or the first database, and its owner. Call it after {{projects.create}} or {{branches.create}}, which return none.",
 			inputSchema: connectionStringInputSchema,
 			annotations: readAnnotations,
 			requiresApproval: true,

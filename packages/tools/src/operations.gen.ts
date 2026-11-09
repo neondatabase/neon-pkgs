@@ -5932,7 +5932,7 @@ export const operationFactories = {
 	"enabled": zod.zUpdateNeonAuthOAuthProviderPluginBody.shape["enabled"],
 	"login_page": zod.zUpdateNeonAuthOAuthProviderPluginBody.shape["login_page"],
 	"consent_page": zod.zUpdateNeonAuthOAuthProviderPluginBody.shape["consent_page"],
-	"mcp": zod.zUpdateNeonAuthOAuthProviderPluginBody.shape["mcp"],
+	"mcp": zod.zUpdateNeonAuthOAuthProviderPluginBody.shape["mcp"].describe("Needs resource; resource \"\" removes the MCP configuration. Omitted booleans keep their value. Prefer client_id_metadata_documents over the deprecated dynamic_registration."),
 	"resources": zod.zUpdateNeonAuthOAuthProviderPluginBody.shape["resources"],
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
