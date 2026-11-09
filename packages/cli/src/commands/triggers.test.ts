@@ -1,6 +1,9 @@
-import { describe, expect } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect } from "vitest";
 
-import { test } from "../test_utils/fixtures";
+import { type RecordedRequest, test } from "../test_utils/fixtures";
 
 const BRANCH = ["--project-id", "test", "--branch", "test_branch"];
 
@@ -323,5 +326,62 @@ describe("triggers", () => {
 		// The distinct missing-function 404 passes through, NOT the trigger-not-found message.
 		expect(stderr).toContain("target function not visible on branch");
 		expect(stderr).not.toContain("not found on branch");
+	});
+});
+
+describe("triggers in a linked directory", () => {
+	let workspace: string;
+	let contextFile: string;
+
+	beforeEach(() => {
+		workspace = mkdtempSync(join(tmpdir(), "neon-triggers-linked-"));
+		contextFile = join(workspace, ".neon");
+		writeFileSync(
+			contextFile,
+			JSON.stringify({ projectId: "test", branch: "test_branch" }),
+		);
+	});
+
+	afterEach(() => {
+		rmSync(workspace, { recursive: true, force: true });
+	});
+
+	const TRIGGER_PATH =
+		"/projects/test/branches/br-sunny-branch-123456/triggers/trigger-test-123";
+
+	test("get uses the branch from .neon", async ({ testCliCommand }) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			[
+				"triggers",
+				"get",
+				"trigger-test-123",
+				"--context-file",
+				contextFile,
+			],
+			{ snapshot: false, onRequest: (r) => requests.push(r) },
+		);
+		expect(requests).toContainEqual(
+			expect.objectContaining({ method: "GET", path: TRIGGER_PATH }),
+		);
+	});
+
+	test("disable uses the branch from .neon", async ({ testCliCommand }) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			[
+				"triggers",
+				"disable",
+				"trigger-test-123",
+				"--context-file",
+				contextFile,
+			],
+			{ snapshot: false, onRequest: (r) => requests.push(r) },
+		);
+		expect(requests).toContainEqual({
+			method: "PATCH",
+			path: TRIGGER_PATH,
+			body: { type: "schedule", enabled: false },
+		});
 	});
 });
