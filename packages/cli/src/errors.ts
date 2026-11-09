@@ -52,6 +52,7 @@ const ERROR_MATCHERS = [
 	],
 	[/^Could not install the Neon dependencies/, "DEPENDENCY_INSTALL_FAILED"],
 	[/^Could not reach neonstatus\.com /, "NETWORK_ERROR"],
+	[/^Timed out waiting for neonstatus\.com /, "REQUEST_TIMEOUT"],
 	[
 		/ (is|are) no longer pulled\. Pull NEON_BRANCH_ID /,
 		"LEGACY_FUNCTION_ENV_KEY",

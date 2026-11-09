@@ -111,6 +111,16 @@ describe("neon incidents terminal safety", () => {
 });
 
 describe("fetchReport", () => {
+	test("counts a status page timeout as REQUEST_TIMEOUT", async () => {
+		const error = await fetchReport({
+			requestTimeoutMs: 10,
+			fetch: () => new Promise<Response>(() => {}),
+		}).catch((caught: unknown) => caught);
+		expect(
+			error instanceof Error ? matchErrorCode(error.message) : undefined,
+		).toBe("REQUEST_TIMEOUT");
+	});
+
 	test("names neonstatus.com when the status page is unreachable", async () => {
 		const failing: typeof fetch = async () => {
 			throw Object.assign(new TypeError("fetch failed"), {
