@@ -36,8 +36,8 @@ export interface RealtimeCollectionUtils extends UtilsRecord {
 	 * for synchronization to start. By default, the promise remains pending
 	 * until the transaction arrives, synchronization stops terminally, or the
 	 * collection is cleaned up.
-	 * @throws If a supplied timeout elapses, synchronization stops terminally,
-	 * or the collection is cleaned up.
+	 * @throws If the transaction ID or timeout is invalid, a supplied timeout
+	 * elapses, synchronization stops terminally, or the collection is cleaned up.
 	 */
 	awaitTxId(txid: string, timeout?: number): Promise<boolean>;
 }
@@ -127,6 +127,28 @@ type SyncStart<Row> =
 	| { readonly subscription: RawLiveQuerySubscription<Row> }
 	| { readonly error: unknown };
 
+function validateTransactionWait(
+	txid: string,
+	timeout: number | undefined,
+): string {
+	if (typeof txid !== "string" || !/^\d+$/.test(txid)) {
+		throw new Error("Live-query transaction ID must be a decimal string");
+	}
+	const parsed = BigInt(txid);
+	if (parsed > 18_446_744_073_709_551_615n) {
+		throw new Error("Live-query transaction ID exceeds uint64");
+	}
+	if (
+		timeout !== undefined &&
+		(!Number.isFinite(timeout) || timeout < 0)
+	) {
+		throw new Error(
+			"Live-query transaction timeout must be a non-negative number",
+		);
+	}
+	return parsed.toString();
+}
+
 function createRealtimeCollectionOptions<
 	Row extends object,
 	Key extends string | number,
@@ -174,6 +196,7 @@ function createRealtimeCollectionOptions<
 		});
 	const utils: RealtimeCollectionUtils = Object.freeze({
 		awaitTxId: async (txid, timeout) => {
+			const normalizedTxid = validateTransactionWait(txid, timeout);
 			let subscription = activeSubscription;
 			let remaining = timeout;
 			if (!subscription) {
@@ -181,7 +204,7 @@ function createRealtimeCollectionOptions<
 					throw inactiveSubscriptionFailure.error;
 				}
 				const waitStarted = Date.now();
-				subscription = await waitForSyncStart(txid, timeout);
+				subscription = await waitForSyncStart(normalizedTxid, timeout);
 				if (timeout !== undefined) {
 					remaining = Math.max(
 						0,
@@ -190,7 +213,7 @@ function createRealtimeCollectionOptions<
 				}
 			}
 			try {
-				await subscription.awaitTxId(txid, remaining);
+				await subscription.awaitTxId(normalizedTxid, remaining);
 			} catch (error) {
 				const terminalFailure =
 					terminalSubscriptionFailures.get(subscription);
