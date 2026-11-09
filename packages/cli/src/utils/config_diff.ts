@@ -187,7 +187,6 @@ const appliedBranchFields = (change: AppliedChange): FieldChange[] => {
 	}
 };
 
-/** The `current → desired` fields of a service update that reports them (trigger updates). */
 const serviceFieldChanges = (change: AppliedChange): FieldChange[] => {
 	const changes = change.details?.changes;
 	if (!Array.isArray(changes)) return [];
