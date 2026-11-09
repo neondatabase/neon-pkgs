@@ -160,6 +160,17 @@ export type {
 	FunctionsListParams,
 	FunctionsUpdateParams,
 } from "./neon/resources/functions.js";
+export {
+	type ListNeonIncidentsOptions,
+	listNeonIncidents,
+	NEON_STATUS_API_URL,
+	type NeonAffectedComponent,
+	type NeonIncident,
+	type NeonIncidentState,
+	type NeonIncidentsReport,
+	type NeonMaintenance,
+	type NeonServiceStatus,
+} from "./neon/resources/incidents.js";
 export type {
 	LogFieldValuesQuery,
 	LogQueryInput,

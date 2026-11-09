@@ -128,6 +128,7 @@ const OPTIONS_ONLY = {
 	"regions.list": true,
 	"user.me": true,
 	"user.organizations": true,
+	"incidents.list": true,
 } as const satisfies Record<OptionsOnlyPath, true>;
 
 const paginated: ReadonlySet<string> = new Set(Object.keys(PAGINATED));

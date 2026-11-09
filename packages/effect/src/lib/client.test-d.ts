@@ -3,6 +3,7 @@ import type {
 	CurrentUserInfoResponse,
 	LokiQueryRangeResponse,
 	MemberWithUser,
+	NeonIncidentsReport,
 	Operation,
 	Organization,
 	Project,
@@ -74,6 +75,9 @@ describe("NeonEffectClient", () => {
 	it("keeps array-returning methods that are not paginated as Effects", () => {
 		expectTypeOf(neon.regions.list()).toEqualTypeOf<
 			Effect.Effect<RegionResponse[], NeonEffectError>
+		>();
+		expectTypeOf(neon.incidents.list()).toEqualTypeOf<
+			Effect.Effect<NeonIncidentsReport, NeonEffectError>
 		>();
 	});
 

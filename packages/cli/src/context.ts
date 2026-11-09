@@ -185,6 +185,10 @@ export const isFeedbackCommand = (args: { _: (string | number)[] }): boolean =>
 export const isDocsCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "docs";
 
+/** Incidents read the public neonstatus.com API, so they need no credentials or `.neon` context. */
+export const isIncidentsCommand = (args: { _: (string | number)[] }): boolean =>
+	args._[0] === "incidents";
+
 /**
  * `inspect db --db-url` talks to Postgres with that URI. Skip only when the
  * parsed value is nonempty: empty `--db-url` still goes through project
@@ -335,7 +339,12 @@ export const enrichFromContext = (
 	if (isSkillsCommand(args) || isPluginsCommand(args)) {
 		return;
 	}
-	if (isAskCommand(args) || isFeedbackCommand(args) || isDocsCommand(args)) {
+	if (
+		isAskCommand(args) ||
+		isFeedbackCommand(args) ||
+		isDocsCommand(args) ||
+		isIncidentsCommand(args)
+	) {
 		return;
 	}
 	// Claim commands bypass enrichment so `claim list` never targets the current directory.

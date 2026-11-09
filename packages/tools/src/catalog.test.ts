@@ -49,6 +49,65 @@ describe("ergonomic catalog coverage", () => {
 	});
 });
 
+describe("incidents.list", () => {
+	const operational = {
+		result: {
+			status_overall: {
+				updated: "2026-11-02T22:27:18.595Z",
+				status: "Operational",
+				status_code: 100,
+			},
+			status: [],
+			incidents: [],
+			maintenance: { active: [], upcoming: [] },
+		},
+	};
+
+	test("reads neonstatus.com without a credential", async () => {
+		const requests: Request[] = [];
+		const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+			requests.push(new Request(input, init));
+			return new Response(JSON.stringify(operational));
+		};
+		const tool = createNeonTool("incidents.list", { fetch });
+		expect(tool.id).toBe("list_incidents");
+
+		const anonymous = await tool.execute({});
+		expect(anonymous.data).toMatchObject({
+			status: "operational",
+			incidents: [],
+		});
+		await tool.execute({}, { apiKey: undefined });
+		await createNeonTool("incidents.list", {
+			apiKey: "napi-secret",
+			fetch,
+		}).execute({}, { apiKey: "napi-other" });
+
+		expect(requests.map((request) => request.url)).toEqual([
+			"https://api.status.io/1.0/status/6878fc85709daa75be6c7e3c",
+			"https://api.status.io/1.0/status/6878fc85709daa75be6c7e3c",
+			"https://api.status.io/1.0/status/6878fc85709daa75be6c7e3c",
+		]);
+		for (const request of requests) {
+			expect(request.headers.has("authorization")).toBe(false);
+		}
+	});
+
+	test("rejects unknown input before fetching", async () => {
+		let called = false;
+		const tool = createNeonTool("incidents.list", {
+			fetch: async () => {
+				called = true;
+				return new Response(JSON.stringify(operational));
+			},
+		});
+		await expect(
+			Reflect.apply(tool.execute, tool, [{ region: "aws-us-east-2" }]),
+		).rejects.toThrow();
+		expect(called).toBe(false);
+	});
+});
+
 describe("special mappings", () => {
 	const jsonResponse = (body: unknown, status = 200) =>
 		new Response(JSON.stringify(body), {
