@@ -1,5 +1,17 @@
 # @neon/realtime
 
+## 0.2.1
+
+### Patch Changes
+
+- f7f9c91: Pace automatic capability refreshes when replacement tokens remain inside the early-refresh window, including when the client clock is ahead.
+- b4aad99: Ignore renewal acknowledgements for subscriptions pending detachment so unsubscribing during renewal does not fail other subscriptions sharing the connection.
+- 19590ae: `QueryRefreshController` stops refreshing once its subscription is in `error` or `closed`. A failed subscription rejects every renewal, and the controller used to retry about once a second, calling `refreshQuery` (usually the app's seal endpoint) each time. `useLiveQuery` in `@neon/realtime-react` uses this controller, so it stops too.
+- d05fdbd: Reset all subscription wire state before reconnect callbacks, so a state listener can safely unsubscribe another query during a disconnect.
+- c628765: Do not resubscribe a live query when a stale-state listener unsubscribes or closes the client during capability replacement.
+- c0ad38d: Prevent late manual capability-renewal completions from overwriting newer replacements or changing a stopped refresh controller.
+- 71a7fdb: Keep a subscription connecting when an older renewal is superseded by a newer one, instead of restoring the stale state from the cancelled renewal.
+
 ## 0.2.0
 
 ### Minor Changes

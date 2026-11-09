@@ -27,12 +27,18 @@ export interface RealtimeCollectionUtils extends UtilsRecord {
 	 * This does not determine whether a transaction committed, so pass only IDs
 	 * from transactions known to have committed.
 	 *
+	 * Before the collection starts syncing, this waits for it to start. It does
+	 * not start synchronization itself. Cleanup before synchronization starts
+	 * has no active run to cancel, so the wait continues into the next run.
+	 *
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
-	 * @param timeout - Optional maximum wait in milliseconds. By default, the
-	 * promise remains pending until the transaction arrives, synchronization
-	 * stops terminally, or the collection is cleaned up.
-	 * @throws If a supplied timeout elapses, synchronization stops terminally,
-	 * or the collection is cleaned up.
+	 * @param timeout - Optional maximum wait in milliseconds, including any wait
+	 * for synchronization to start. By default, the promise remains pending
+	 * until the transaction arrives, synchronization stops terminally, or an
+	 * active synchronization run is cleaned up.
+	 * @throws If the transaction ID or timeout is invalid, a supplied timeout
+	 * elapses, synchronization stops terminally, or an active synchronization
+	 * run is cleaned up.
 	 */
 	awaitTxId(txid: string, timeout?: number): Promise<boolean>;
 }
@@ -62,6 +68,9 @@ export interface RealtimeCollectionConfig<
 	/**
 	 * Obtain a replacement capability for the same exact query before expiry.
 	 * Transient failures are retried while the current capability remains valid.
+	 * A collection that restarts or reloads subscribes with the newest
+	 * capability this returned, and calls it straight away if that one has
+	 * expired.
 	 */
 	readonly refreshQuery?: () => Promise<SealedLiveQuery<Row>>;
 	/** Derive the stable unique TanStack DB key for a row. */
@@ -114,6 +123,34 @@ export function realtimeCollectionOptions<
 	return withCollectionConfigFactory(createOptions(), createOptions);
 }
 
+/** How a sync run started: subscribed, or failed while subscribing. */
+type SyncStart<Row> =
+	| { readonly subscription: RawLiveQuerySubscription<Row> }
+	| { readonly error: unknown };
+
+function monotonicNow(): number {
+	return typeof performance === "undefined" ? Date.now() : performance.now();
+}
+
+function validateTransactionWait(
+	txid: string,
+	timeout: number | undefined,
+): string {
+	if (typeof txid !== "string" || !/^\d+$/.test(txid)) {
+		throw new Error("Live-query transaction ID must be a decimal string");
+	}
+	const parsed = BigInt(txid);
+	if (parsed > 18_446_744_073_709_551_615n) {
+		throw new Error("Live-query transaction ID exceeds uint64");
+	}
+	if (timeout !== undefined && (!Number.isFinite(timeout) || timeout < 0)) {
+		throw new Error(
+			"Live-query transaction timeout must be a non-negative number",
+		);
+	}
+	return parsed.toString();
+}
+
 function createRealtimeCollectionOptions<
 	Row extends object,
 	Key extends string | number,
@@ -122,23 +159,63 @@ function createRealtimeCollectionOptions<
 	config: RealtimeCollectionConfig<Row, Key, Schema>,
 ): RealtimeCollectionOptions<Row, Key, Schema> {
 	const { client, query: initialQuery, refreshQuery, ...baseConfig } = config;
+	// The newest capability this collection has obtained. A restarted or
+	// reloaded sync run subscribes with it rather than with the initial query,
+	// which has often expired by then.
+	let latestQuery = initialQuery;
 	let activeSubscription: RawLiveQuerySubscription<Row> | undefined;
 	let inactiveSubscriptionFailure: { readonly error: unknown } | undefined;
 	const terminalSubscriptionFailures = new WeakMap<
 		RawLiveQuerySubscription<Row>,
 		{ readonly error: unknown }
 	>();
+	// awaitTxId calls made before the collection started syncing.
+	const syncStartWaiters = new Set<(start: SyncStart<Row>) => void>();
+	const settleSyncStartWaiters = (start: SyncStart<Row>) => {
+		const waiters = [...syncStartWaiters];
+		syncStartWaiters.clear();
+		for (const waiter of waiters) waiter(start);
+	};
+	const waitForSyncStart = (txid: string, timeout: number | undefined) =>
+		new Promise<RawLiveQuerySubscription<Row>>((resolve, reject) => {
+			const timer =
+				timeout === undefined
+					? undefined
+					: setTimeout(() => {
+							syncStartWaiters.delete(waiter);
+							reject(
+								new Error(
+									`Timed out waiting for live-query transaction ${txid}`,
+								),
+							);
+						}, timeout);
+			const waiter = (start: SyncStart<Row>) => {
+				clearTimeout(timer);
+				if ("subscription" in start) resolve(start.subscription);
+				else reject(start.error);
+			};
+			syncStartWaiters.add(waiter);
+		});
 	const utils: RealtimeCollectionUtils = Object.freeze({
 		awaitTxId: async (txid, timeout) => {
-			const subscription = activeSubscription;
+			const normalizedTxid = validateTransactionWait(txid, timeout);
+			let subscription = activeSubscription;
+			let remaining = timeout;
 			if (!subscription) {
 				if (inactiveSubscriptionFailure) {
 					throw inactiveSubscriptionFailure.error;
 				}
-				throw new Error("Realtime collection is not syncing");
+				const waitStarted = monotonicNow();
+				subscription = await waitForSyncStart(normalizedTxid, timeout);
+				if (timeout !== undefined) {
+					remaining = Math.max(
+						0,
+						timeout - (monotonicNow() - waitStarted),
+					);
+				}
 			}
 			try {
-				await subscription.awaitTxId(txid, timeout);
+				await subscription.awaitTxId(normalizedTxid, remaining);
 			} catch (error) {
 				const terminalFailure =
 					terminalSubscriptionFailures.get(subscription);
@@ -178,9 +255,22 @@ function createRealtimeCollectionOptions<
 					| undefined;
 				let rowIds = new Map<string, Key>();
 				let keys = new Map<Key, string>();
-				const subscription = client.subscribe(initialQuery, {
-					materialize: false,
-				});
+				let subscription: RawLiveQuerySubscription<Row>;
+				try {
+					subscription = client.subscribe(latestQuery, {
+						materialize: false,
+					});
+				} catch (error) {
+					const failure = { error };
+					inactiveSubscriptionFailure = failure;
+					settleSyncStartWaiters(failure);
+					fail(error);
+					return () => {
+						if (inactiveSubscriptionFailure === failure) {
+							inactiveSubscriptionFailure = undefined;
+						}
+					};
+				}
 				activeSubscription = subscription;
 				inactiveSubscriptionFailure = undefined;
 				let unsubscribeUpdate: () => void = () => undefined;
@@ -190,6 +280,7 @@ function createRealtimeCollectionOptions<
 				const detach = () => {
 					if (detached) return;
 					detached = true;
+					latestQuery = queryRefresh?.currentQuery() ?? latestQuery;
 					queryRefresh?.stop();
 					unsubscribeUpdate();
 					unsubscribeState();
@@ -215,7 +306,7 @@ function createRealtimeCollectionOptions<
 					fail(error);
 				};
 				queryRefresh = new QueryRefreshController({
-					query: initialQuery,
+					query: latestQuery,
 					refreshQuery,
 					renewSubscription: (replacement) =>
 						subscription.renew(replacement),
@@ -405,6 +496,10 @@ function createRealtimeCollectionOptions<
 					stateChanged(state);
 				}
 				if (!stopped) queryRefresh.start();
+				const start: SyncStart<Row> = terminalSubscriptionFailures.get(
+					subscription,
+				) ?? { subscription };
+				settleSyncStartWaiters(start);
 
 				return () => {
 					cleaned = true;

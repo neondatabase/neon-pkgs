@@ -554,6 +554,8 @@ export class ConnectionCoordinator {
 	}
 
 	private renewed(liveId: string): void {
+		// A renewal sent before unsubscribe may finish while detach is pending.
+		if (this.detachingLiveIds.has(liveId)) return;
 		const subscription = this.liveSubscriptions.get(liveId);
 		if (!subscription?.renewing)
 			throw new ProtocolError("unexpected renewal response");
@@ -720,8 +722,10 @@ export class ConnectionCoordinator {
 		) {
 			this.noteConnectionLost(this.pendingConnectionError);
 		}
-		for (const subscription of this.activeSubscriptions) {
+		// Reset every peer before callbacks can synchronously unsubscribe one.
+		for (const subscription of this.activeSubscriptions)
 			subscription.resetWire();
+		for (const subscription of this.activeSubscriptions) {
 			subscription.callbacks.connecting();
 		}
 		if (
@@ -884,6 +888,12 @@ export class ConnectionCoordinator {
 		subscription.resetWire();
 		subscription.events.queryUnavailable(error);
 		subscription.callbacks.queryUnavailable();
+		if (
+			this.disposed ||
+			subscription.state === "closed" ||
+			subscription.state === "failed"
+		)
+			return;
 
 		if (
 			rejectedCapability !== undefined &&
