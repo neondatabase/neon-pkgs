@@ -1,5 +1,11 @@
 # @neon/ai-sdk-provider
 
+## 1.3.2
+
+### Patch Changes
+
+- 8915ac8: Add `kimi-k3-1-pro` to the known model ids, so it autocompletes in `neon("…")`.
+
 ## 1.3.1
 
 ### Patch Changes
