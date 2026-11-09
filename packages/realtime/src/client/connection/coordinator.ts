@@ -888,6 +888,12 @@ export class ConnectionCoordinator {
 		subscription.resetWire();
 		subscription.events.queryUnavailable(error);
 		subscription.callbacks.queryUnavailable();
+		if (
+			this.disposed ||
+			subscription.state === "closed" ||
+			subscription.state === "failed"
+		)
+			return;
 
 		if (
 			rejectedCapability !== undefined &&
