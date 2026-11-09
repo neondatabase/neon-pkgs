@@ -396,7 +396,8 @@ export const selectTemplateFiles = (
 	entries: TarEntry[],
 	subdir: string,
 ): TemplateFile[] => {
-	const prefix = `${subdir.replace(/^\/+|\/+$/g, "")}/`;
+	const trimmed = subdir.replace(/^\/+|\/+$/g, "");
+	const prefix = trimmed ? `${trimmed}/` : "";
 	const files: TemplateFile[] = [];
 	for (const entry of entries) {
 		// codeload wraps everything in a single top-level dir ("<repo>-<ref>/");

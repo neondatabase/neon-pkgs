@@ -246,11 +246,12 @@ describe("openRegistry with the default sources", () => {
 		const registry = await openRegistry(undefined, {
 			primary: primary.url("/registry.json"),
 			fallback: fallback.url("/registry.json"),
+			neonRegistry: false,
 			env,
 		});
-		expect(describeRegistrySource(registry.source)).toBe(
+		expect(registry.sources.map(describeRegistrySource)).toEqual([
 			primary.url("/registry.json"),
-		);
+		]);
 		expect(fallback.requests).toEqual([]);
 	});
 
@@ -260,11 +261,107 @@ describe("openRegistry with the default sources", () => {
 		const registry = await openRegistry(undefined, {
 			primary: primary.url("/registry.json"),
 			fallback: fallback.url("/registry.json"),
+			neonRegistry: false,
 			env,
 		});
-		expect(describeRegistrySource(registry.source)).toBe(
+		expect(registry.sources.map(describeRegistrySource)).toEqual([
 			fallback.url("/registry.json"),
-		);
+		]);
+	});
+
+	const entryFor = (id: string) => ({
+		id,
+		title: id,
+		description: "d",
+		path: `${id}/template.json`,
+		categories: ["first-party"],
+	});
+	const templateFor = (id: string, description: string) =>
+		JSON.stringify({ id, title: id, description, layout: "router" });
+
+	it("lists neondatabase/registry first and drops examples entries with the same id", async () => {
+		const neon = await start({
+			"/registry.json": JSON.stringify({
+				templates: [entryFor("fresh"), entryFor("shared")],
+			}),
+			"/shared/template.json": templateFor("shared", "From registry."),
+			"/shared/functions/index.ts": "export default 1;\n",
+		});
+		const primary = await start({
+			"/registry.json": JSON.stringify({
+				templates: [entryFor("shared"), entryFor("legacy")],
+			}),
+		});
+		const fallback = await start({});
+		const registry = await openRegistry(undefined, {
+			primary: primary.url("/registry.json"),
+			fallback: fallback.url("/registry.json"),
+			neonRegistry: neon.url("/registry.json"),
+			env,
+		});
+		expect(registry.entries.map((entry) => entry.id)).toEqual([
+			"fresh",
+			"shared",
+			"legacy",
+		]);
+		expect(registry.sources.map(describeRegistrySource)).toEqual([
+			neon.url("/registry.json"),
+			primary.url("/registry.json"),
+		]);
+		const shared = registry.entries[1];
+		if (!shared) throw new Error("shared entry did not parse");
+		const loaded = await registry.load(shared);
+		expect(loaded.template.description).toBe("From registry.");
+		expect(fallback.requests).toEqual([]);
+	});
+
+	it("uses only the examples registry while neondatabase/registry is missing or broken", async () => {
+		for (const reply of [
+			{ status: 404 },
+			{ status: 503 },
+			"not json",
+		] satisfies Reply[]) {
+			const neon = await start({ "/registry.json": reply });
+			const primary = await start({ "/registry.json": demoIndex });
+			const registry = await openRegistry(undefined, {
+				primary: primary.url("/registry.json"),
+				neonRegistry: neon.url("/registry.json"),
+				env,
+			});
+			expect(registry.entries.map((entry) => entry.id)).toEqual(["demo"]);
+			expect(registry.sources.map(describeRegistrySource)).toEqual([
+				primary.url("/registry.json"),
+			]);
+		}
+	});
+
+	it("uses only neondatabase/registry when the examples registry is unavailable", async () => {
+		const neon = await start({ "/registry.json": demoIndex });
+		const primary = await start({ "/registry.json": { status: 503 } });
+		const fallback = await start({ "/registry.json": { status: 503 } });
+		const registry = await openRegistry(undefined, {
+			primary: primary.url("/registry.json"),
+			fallback: fallback.url("/registry.json"),
+			neonRegistry: neon.url("/registry.json"),
+			env,
+		});
+		expect(registry.sources.map(describeRegistrySource)).toEqual([
+			neon.url("/registry.json"),
+		]);
+	});
+
+	it("reports the examples error when neondatabase/registry does not exist yet", async () => {
+		const neon = await start({});
+		const primary = await start({ "/registry.json": { status: 503 } });
+		const fallback = await start({ "/registry.json": { status: 502 } });
+		await expect(
+			openRegistry(undefined, {
+				primary: primary.url("/registry.json"),
+				fallback: fallback.url("/registry.json"),
+				neonRegistry: neon.url("/registry.json"),
+				env,
+			}),
+		).rejects.toThrow(/answered 502/);
 	});
 
 	it("loads template files from the fallback, not the primary", async () => {
@@ -276,6 +373,7 @@ describe("openRegistry with the default sources", () => {
 		const registry = await openRegistry(undefined, {
 			primary: primary.url("/registry.json"),
 			fallback: fallback.url("/registry.json"),
+			neonRegistry: false,
 			env,
 		});
 		const [entry] = registry.entries;
@@ -295,6 +393,7 @@ describe("openRegistry with the default sources", () => {
 		const registry = await openRegistry(undefined, {
 			primary: primary.url("/registry.json"),
 			fallback: fallback.url("/registry.json"),
+			neonRegistry: false,
 			env,
 		});
 		const [entry] = registry.entries;
@@ -838,6 +937,7 @@ describe("openRegistry reads neondatabase/examples from one tarball", () => {
 		});
 		const registry = await openRegistry(undefined, {
 			primary: primary.url("/registry.json"),
+			neonRegistry: false,
 			env: { NEON_BOOTSTRAP_GITHUB_CODELOAD: codeload.url("") },
 			githubRaw: raw.url("/"),
 		});
