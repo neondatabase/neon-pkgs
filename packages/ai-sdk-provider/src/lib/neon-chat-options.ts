@@ -81,6 +81,7 @@ export const NEON_MODELS_DEV_IDS = [
 	"grok-4-7",
 	// Moonshot (unified MLflow endpoint)
 	"kimi-k3",
+	"kimi-k3-1-pro",
 	// DeepSeek (unified MLflow endpoint)
 	"deepseek-v4-1-flash",
 ] as const;

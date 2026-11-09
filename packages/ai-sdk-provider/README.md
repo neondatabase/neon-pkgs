@@ -77,7 +77,7 @@ These rules apply on the Anthropic Messages and Chat Completions routes. The Res
 | All Claude | `frequencyPenalty`, `presencePenalty`, `seed`, `reasoningEffort`, and `topP` when you set both `temperature` and `topP` (Anthropic accepts only one) |
 | `gpt-oss` | `frequencyPenalty`, `presencePenalty`, `seed`, `stopSequences` |
 | Qwen, Gemma | `frequencyPenalty`, `presencePenalty`, `seed` |
-| `glm-5-2`, `glm-5-3`, `glm-5-3-flash`, `kimi-k3` | `frequencyPenalty`, `presencePenalty` |
+| `glm-5-2`, `glm-5-3`, `glm-5-3-flash`, `kimi-k3`, `kimi-k3-1-pro` | `frequencyPenalty`, `presencePenalty` |
 | Grok, DeepSeek | `frequencyPenalty`, `presencePenalty` |
 | Meta Llama | `frequencyPenalty`, `presencePenalty`, `seed` |
 | `gemini-3-5-flash-lite` | `frequencyPenalty`, `presencePenalty` |
