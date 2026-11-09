@@ -137,5 +137,6 @@
 	"organizations.apiKeys.list": "Lists an organization's API keys, without their tokens.",
 	"organizations.apiKeys.create": "Creates an organization API key, optionally limited to one project. The key is returned once: show it to the user and tell them to store it.",
 	"organizations.apiKeys.revoke": "Revokes an organization API key. Irreversible.",
-	"user.me": "Gets the authenticated Neon user: ids, plan, and linked login accounts. An organization API key gets 404."
+	"user.me": "Gets the authenticated Neon user: ids, plan, and linked login accounts. An organization API key gets 404.",
+	"auth.logsExport.update": "Turns the export of a branch's Neon Auth events to Neon Platform logs on or off. A project without logs export accepts only enabled: false; enabling there returns 404 feature not available. {{auth.getConfig}} reports the current value as logs_export, or null where logs export is not available."
 }
