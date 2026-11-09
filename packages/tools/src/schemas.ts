@@ -241,6 +241,8 @@ export {
 	zUpdateNeonAuthEmailProviderPath,
 	zUpdateNeonAuthEmailServerBody,
 	zUpdateNeonAuthEmailServerPath,
+	zUpdateNeonAuthLogsExportBody,
+	zUpdateNeonAuthLogsExportPath,
 	zUpdateNeonAuthMagicLinkPluginBody,
 	zUpdateNeonAuthMagicLinkPluginPath,
 	zUpdateNeonAuthOAuthClientBody,

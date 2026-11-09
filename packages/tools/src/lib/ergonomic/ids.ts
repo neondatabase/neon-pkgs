@@ -141,6 +141,7 @@ export const toolIds = [
 	"auth.plugins.phoneNumber.update",
 	"auth.webhooks.get",
 	"auth.webhooks.update",
+	"auth.logsExport.update",
 	"consumption.perProject",
 	"consumption.perProjectV2",
 	"consumption.perBranchV2",

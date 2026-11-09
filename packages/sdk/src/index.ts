@@ -60,6 +60,7 @@ export type {
 	AuthEmailProviderSendTestParams,
 	AuthEmailProviderUpdateParams,
 	AuthGetParams,
+	AuthLogsExportUpdateParams,
 	AuthOauthClientsCreateParams,
 	AuthOauthClientsDeleteParams,
 	AuthOauthClientsGetParams,

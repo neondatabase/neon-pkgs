@@ -1878,6 +1878,20 @@ export const toolFactories = {
 					{ signal },
 				),
 		}),
+	"auth.logsExport.update": (options) =>
+		fromGenerated(options, {
+			id: "auth.logsExport.update",
+			generated: "updateNeonAuthLogsExport",
+			run: (neon, input, signal) =>
+				neon.auth.logsExport.update(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						enabled: input.enabled,
+					},
+					{ signal },
+				),
+		}),
 	"consumption.perProject": (options) =>
 		fromGenerated(options, {
 			id: "consumption.perProject",

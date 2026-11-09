@@ -28,6 +28,7 @@ import {
 	updateNeonAuthConfig,
 	updateNeonAuthEmailAndPasswordConfig,
 	updateNeonAuthEmailProvider,
+	updateNeonAuthLogsExport,
 	updateNeonAuthMagicLinkPlugin,
 	updateNeonAuthOAuthClient,
 	updateNeonAuthOAuthProviderPlugin,
@@ -52,6 +53,7 @@ import type {
 	NeonAuthEmailServerConfig,
 	NeonAuthEmailServerConfigResponse,
 	NeonAuthIntegration,
+	NeonAuthLogsExportConfig,
 	NeonAuthMagicLinkConfig,
 	NeonAuthMagicLinkConfigUpdate,
 	NeonAuthOAuthClient,
@@ -149,6 +151,9 @@ export type AuthPluginsPhoneNumberUpdateParams = BranchParams &
 
 export type AuthWebhooksGetParams = BranchParams;
 export type AuthWebhooksUpdateParams = BranchParams & NeonAuthWebhookConfig;
+
+export type AuthLogsExportUpdateParams = BranchParams &
+	NeonAuthLogsExportConfig;
 
 export type AuthGetParams = BranchParams;
 export type AuthCreateParams = BranchParams & EnableNeonAuthIntegrationRequest;
@@ -1548,9 +1553,61 @@ export class AuthWebhooks<DThrow extends boolean> {
 }
 
 /**
+ * Branch-scoped export of Neon Auth events to Neon Platform logs. There is no `get`; the
+ * current setting is `logs_export` on `auth.plugins.get`, which omits it on a project
+ * without logs export. Such a project accepts only `enabled: false`; enabling returns 404.
+ */
+export class AuthLogsExport<DThrow extends boolean> {
+	readonly #ctx: RequestContext;
+
+	constructor(ctx: RequestContext) {
+		this.#ctx = ctx;
+	}
+
+	/** @apiCall PATCH /projects/{project_id}/branches/{branch_id}/auth/logs_export */
+	update(
+		params: AuthLogsExportUpdateParams,
+	): Promise<Outcome<NeonAuthLogsExportConfig, DThrow>>;
+	update<Throw extends boolean = DThrow>(
+		params: AuthLogsExportUpdateParams,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<NeonAuthLogsExportConfig, Throw>>;
+	update(
+		params: AuthLogsExportUpdateParams,
+		opts?: CallOptions,
+	): Promise<
+		NeonAuthLogsExportConfig | NeonResult<NeonAuthLogsExportConfig>
+	> {
+		const invalid = validateParams(params, "auth.logsExport.update", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<NeonAuthLogsExportConfig>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
+		return this.#ctx.run(
+			opts,
+			(client, signal) =>
+				updateNeonAuthLogsExport({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					body: input,
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data,
+		);
+	}
+}
+
+/**
  * Branch-scoped Neon Auth. Enable/disable the integration, tune its config, and manage
  * OAuth providers, the OAuth server (provider plugin) and its clients, trusted domains,
- * users, sign-in settings, the email provider, plugins, and the webhook. The legacy
+ * users, sign-in settings, the email provider, plugins, the webhook, and logs export. The legacy
  * project-scoped auth endpoints are deprecated and stay raw-only.
  */
 export class Auth<DThrow extends boolean> {
@@ -1565,6 +1622,7 @@ export class Auth<DThrow extends boolean> {
 	readonly emailProvider: AuthEmailProvider<DThrow>;
 	readonly plugins: AuthPlugins<DThrow>;
 	readonly webhooks: AuthWebhooks<DThrow>;
+	readonly logsExport: AuthLogsExport<DThrow>;
 
 	constructor(ctx: RequestContext) {
 		this.#ctx = ctx;
@@ -1578,6 +1636,7 @@ export class Auth<DThrow extends boolean> {
 		this.emailProvider = new AuthEmailProvider<DThrow>(ctx);
 		this.plugins = new AuthPlugins<DThrow>(ctx);
 		this.webhooks = new AuthWebhooks<DThrow>(ctx);
+		this.logsExport = new AuthLogsExport<DThrow>(ctx);
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/auth */

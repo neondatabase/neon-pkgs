@@ -3328,6 +3328,64 @@
                 }
             }
         },
+        "/projects/{project_id}/branches/{branch_id}/auth/logs_export": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The Neon project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The Neon branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                }
+            ],
+            "patch": {
+                "summary": "Update Neon Auth logs export setting",
+                "description": "Enables or disables exporting Neon Auth events for the branch to Neon Platform logs.\nOnly supported for Neon Auth (`better_auth`) integrations.\nWhen logs export is not available for the project, only disabling is accepted.\n",
+                "tags": [
+                    "Auth"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "updateNeonAuthLogsExport",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/NeonAuthLogsExportConfig"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "The logs export setting has been updated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NeonAuthLogsExportConfig"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
         "/projects/{project_id}/branches/{branch_id}/auth/plugins": {
             "parameters": [
                 {
@@ -8963,6 +9021,16 @@
                             }
                         }
                     },
+                    "403": {
+                        "description": "For organizations on the per-project role model, creating a\n`public_read` bucket requires the project Admin role. Organization API\nkeys keep write-level access. Returned with code\n`PUBLIC_BUCKET_ADMIN_REQUIRED`.\n",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GeneralError"
+                                }
+                            }
+                        }
+                    },
                     "410": {
                         "description": "The project has been deleted",
                         "content": {
@@ -9663,7 +9731,7 @@
             ],
             "get": {
                 "summary": "Download an object's bytes",
-                "description": "Streams the raw bytes of the named object from the bucket on the\nspecified branch, including objects inherited from ancestor branches.\nServed by the user's session (no customer S3 credentials required).\n\nThe body is returned as `application/octet-stream` so a browser treats\nit as a download; the `Content-Length` and `ETag` response headers echo\nthe stored object metadata.\n\nBINARY-STREAM EXCEPTION TO THE BUILD-GENERATED-TYPES RULE (#7029): the\nsuccessful 200 body is the raw object stream, proxied verbatim from the\nplatform object storage admin endpoint. It is modeled as an\n`application/octet-stream` binary body (not a JSON response schema) and\nis streamed without buffering the whole object in memory. Error\nresponses still use the generated `GeneralError` shape.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "description": "Streams the raw bytes of the named object from the bucket on the\nspecified branch, including objects inherited from ancestor branches.\nServed by the user's session (no customer S3 credentials required).\n\nFor organizations on the per-project role model, downloading object\nbytes requires the Editor role or higher. Viewers can list objects\nbut not download them.\n\nThe body is returned as `application/octet-stream` so a browser treats\nit as a download; the `Content-Length` and `ETag` response headers echo\nthe stored object metadata.\n\nBINARY-STREAM EXCEPTION TO THE BUILD-GENERATED-TYPES RULE (#7029): the\nsuccessful 200 body is the raw object stream, proxied verbatim from the\nplatform object storage admin endpoint. It is modeled as an\n`application/octet-stream` binary body (not a JSON response schema) and\nis streamed without buffering the whole object in memory. Error\nresponses still use the generated `GeneralError` shape.\n\n**Note**: This endpoint is currently in Beta.\n",
                 "tags": [
                     "Buckets"
                 ],
@@ -9704,6 +9772,16 @@
                                 "schema": {
                                     "type": "string",
                                     "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "For organizations on the per-project role model, downloading object\nbytes requires the Editor role or higher. Viewers can list objects but\nnot download them. OAuth clients also need the\n`urn:neoncloud:projects:update` scope. Returned with code\n`OBJECT_DOWNLOAD_ACCESS_DENIED`.\n",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GeneralError"
                                 }
                             }
                         }
@@ -9853,7 +9931,7 @@
             ],
             "post": {
                 "summary": "Presign an upload or download for an object in a bucket",
-                "description": "Returns a presigned URL that transfers bytes directly to or from the\nobject's bucket on the specified branch, without the caller ever\nhandling S3 credentials. The `operation` field selects the direction:\n\n- `upload` returns a presigned `PUT` URL (the caller `PUT`s the file\n  bytes straight to `url` with the returned `headers`). Authorized with\n  project write access.\n- `download` returns a presigned `GET` URL (the caller `GET`s the\n  bytes straight from `url`). Authorized with project read access.\n\nThe platform mints a short-lived credential and builds the SigV4-signed\nURL against the branch's S3 data-plane host, returning it together with\nthe HTTP method, any headers the caller must echo, and the URL's expiry.\n\nServed by the user's session (no customer S3 credentials required).\n\n**Note**: This endpoint is currently in Beta.\n",
+                "description": "Returns a presigned URL that transfers bytes directly to or from the\nobject's bucket on the specified branch, without the caller ever\nhandling S3 credentials. The `operation` field selects the direction:\n\n- `upload` returns a presigned `PUT` URL (the caller `PUT`s the file\n  bytes straight to `url` with the returned `headers`). Authorized with\n  project write access.\n- `download` returns a presigned `GET` URL (the caller `GET`s the\n  bytes straight from `url`). Authorized with project read access.\n  For organizations on the per-project role model, it also requires\n  the Editor role or higher, because the URL grants access to the\n  object's bytes.\n\nThe platform mints a short-lived credential and builds the SigV4-signed\nURL against the branch's S3 data-plane host, returning it together with\nthe HTTP method, any headers the caller must echo, and the URL's expiry.\n\nServed by the user's session (no customer S3 credentials required).\n\n**Note**: This endpoint is currently in Beta.\n",
                 "tags": [
                     "Buckets"
                 ],
@@ -9876,6 +9954,16 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/PresignResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "For organizations on the per-project role model, a `download` URL\nrequires the Editor role or higher, because it grants access to the\nobject's bytes. OAuth clients also need the\n`urn:neoncloud:projects:update` scope. Returned with code\n`OBJECT_DOWNLOAD_ACCESS_DENIED`.\n",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GeneralError"
                                 }
                             }
                         }
@@ -10634,7 +10722,7 @@
             ],
             "post": {
                 "summary": "Register a custom domain on a branch",
-                "description": "Registers a customer-owned domain (for example `dashboard.acme.com`) on the\nbranch and points it at a target entity, chosen by `entity_type` +\n`entity_id`. In v1 only `entity_type: function` is supported (an\nunsupported type is rejected with `400`), where `entity_id` is the function\nslug and the function must already exist on the branch (else `404`).\n\nThe response includes the `cname_target` the customer must point their\ndomain at with a CNAME record; the domain goes live only once that DNS\nresolves and a certificate is issued on the first request. A domain already\nregistered to another resource is rejected with `409` and no detail about\nthe owner. Re-registering the same domain for the same entity is idempotent.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "description": "Registers a customer-owned domain (for example `dashboard.acme.com`) on the\nbranch and points it at a target entity, chosen by `entity_type` +\n`entity_id`. In v1 only `entity_type: function` is supported (an\nunsupported type is rejected with `400`), where `entity_id` is the function\nslug and the function must already exist on the branch (else `404`).\n\nThe response includes the `cname_target` the customer must point their\ndomain at with a CNAME record; the domain goes live only once that DNS\nresolves and a certificate is issued on the first request. A domain already\nregistered to another resource is rejected with `409` and no detail about\nthe owner. Re-registering the same domain for the same entity is idempotent.\n\nFor organizations on the per-project role model, registering a custom\ndomain requires the project Admin role. Other callers receive `403` with\ncode `CUSTOM_DOMAIN_ADMIN_REQUIRED`. Organization API keys keep write-level\naccess.\n\n**Note**: This endpoint is currently in Beta.\n",
                 "tags": [
                     "Functions"
                 ],
@@ -10750,7 +10838,7 @@
             ],
             "delete": {
                 "summary": "Delete a custom domain from a branch",
-                "description": "Removes a custom domain registered on the branch and stops routing it.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "description": "Removes a custom domain registered on the branch and stops routing it.\n\nFor organizations on the per-project role model, deleting a custom domain\nrequires the project Admin role. Other callers receive `403` with code\n`CUSTOM_DOMAIN_ADMIN_REQUIRED`. Organization API keys keep write-level\naccess.\n\n**Note**: This endpoint is currently in Beta.\n",
                 "tags": [
                     "Functions"
                 ],
@@ -14025,7 +14113,7 @@
                             },
                             "provisioner": {
                                 "$ref": "#/components/schemas/Provisioner",
-                                "description": "Compute provisioner. `k8s-neonvm` (default) supports Autoscaling; `k8s-pod` is fixed-size compute. Also `docker` and `serverless-platform`."
+                                "description": "Legacy field; do not send it. An update never changes the provisioner: `k8s-neonvm` is accepted and ignored for backward compatibility, and any other value is rejected. On Lakebase, any value is rejected.\n"
                             },
                             "settings": {
                                 "$ref": "#/components/schemas/EndpointSettingsData"
@@ -15739,6 +15827,27 @@
                         "type": "string",
                         "format": "date-time",
                         "description": "When `settings` and `available_schemas` were read from the database. While the\ncompute is suspended they are served from that read, so a change made directly in\nthe database since then shows up in the first response served while the compute is\nactive.\n"
+                    },
+                    "auth_provider": {
+                        "type": "string",
+                        "description": "How this Data API verifies JWTs, as recorded by the last create that named a provider. `neon_auth` verifies Neon Auth tokens; `external` verifies tokens from a third-party identity provider via `jwks_url`. Absent when no provider is recorded: the Data API was created before providers were recorded, or it was created without naming one. Treat an absent value as unknown and fall back to the branch's Neon Auth state (`GET /projects/{project_id}/branches/{branch_id}/auth`). The value can differ from the current setup (for example, a JWKS added later), and it is also absent in responses served from the state cache while the compute is suspended. A child branch inherits its parent's Data API and reports the parent's provider.\n",
+                        "enum": [
+                            "neon_auth",
+                            "external"
+                        ]
+                    },
+                    "jwks_url": {
+                        "type": "string",
+                        "format": "uri",
+                        "description": "URL of the JWKS endpoint the Data API verifies JWTs against. Only set when `auth_provider` is `external`."
+                    },
+                    "provider_name": {
+                        "type": "string",
+                        "description": "Display name of the external authentication provider, as given at creation (for example \"Clerk\"). Only set when `auth_provider` is `external` and a name was given."
+                    },
+                    "jwt_audience": {
+                        "type": "string",
+                        "description": "Expected `aud` claim in incoming JWTs, as given at creation. Only set when `auth_provider` is `external` and an audience was given."
                     }
                 }
             },
@@ -16080,6 +16189,18 @@
                     "id": {
                         "description": "ID of the updated user",
                         "type": "string"
+                    }
+                }
+            },
+            "NeonAuthLogsExportConfig": {
+                "type": "object",
+                "required": [
+                    "enabled"
+                ],
+                "properties": {
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Whether Neon Auth events are exported to Neon Platform logs."
                     }
                 }
             },
@@ -16668,6 +16789,10 @@
                     "allow_localhost": {
                         "type": "boolean",
                         "description": "Permits authentication requests from localhost origins when true. Intended for local development; disable in production environments."
+                    },
+                    "logs_export": {
+                        "$ref": "#/components/schemas/NeonAuthLogsExportConfig",
+                        "description": "Whether Neon Auth events for the branch are exported to Neon Platform logs."
                     }
                 }
             },
@@ -16757,7 +16882,8 @@
                     "github",
                     "microsoft",
                     "vercel",
-                    "apple"
+                    "apple",
+                    "discord"
                 ]
             },
             "NeonAuthOauthProviderType": {
@@ -16778,7 +16904,7 @@
                 "properties": {
                     "id": {
                         "$ref": "#/components/schemas/NeonAuthOauthProviderId",
-                        "description": "OAuth provider to configure for Neon Auth. Known values: `google`, `github`, `microsoft`, `vercel`, `apple`.\n`apple` requires custom credentials: set `client_id` to the Services ID, `client_secret` to the contents of the `.p8` private key, and supply `apple_team_id` and `apple_key_id`.\n"
+                        "description": "OAuth provider to configure for Neon Auth. Known values: `google`, `github`, `microsoft`, `vercel`, `apple`, `discord`.\n`discord` requires custom credentials: set `client_id` and `client_secret` from your Discord application.\n`apple` requires custom credentials: set `client_id` to the Services ID, `client_secret` to the contents of the `.p8` private key, and supply `apple_team_id` and `apple_key_id`.\n"
                     },
                     "client_id": {
                         "type": "string",
@@ -17808,7 +17934,7 @@
                             "public_read"
                         ],
                         "default": "private",
-                        "description": "Access level for the bucket. Defaults to `private`. Set to `public_read`\nto allow anonymous `GetObject`/`HeadObject` on objects in this bucket.\n"
+                        "description": "Access level for the bucket. Defaults to `private`. Set to `public_read`\nto allow anonymous `GetObject`/`HeadObject` on objects in this bucket.\nFor organizations on the per-project role model, creating a\n`public_read` bucket requires the project Admin role or an\norganization API key.\n"
                     }
                 }
             },
