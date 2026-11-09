@@ -125,7 +125,9 @@ If the collection hasn't started syncing yet, `awaitTxId()` waits for it to
 start, within the same timeout. It doesn't start synchronization itself.
 TanStack DB starts it for `insert()`, `update()`, and `delete()`, so mutation
 handlers are covered; anywhere else, make sure something observes or preloads
-the collection, or pass a timeout.
+the collection, or pass a timeout. Cleanup before synchronization starts has
+no active sync run to cancel, so an outstanding wait continues into the next
+run. If starting that run fails, the wait rejects with the same error.
 
 `awaitTxId()` does not determine whether a transaction committed, so pass only
 the ID of a transaction known to have committed.

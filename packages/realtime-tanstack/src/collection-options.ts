@@ -28,7 +28,8 @@ export interface RealtimeCollectionUtils extends UtilsRecord {
 	 * from transactions known to have committed.
 	 *
 	 * Before the collection starts syncing, this waits for it to start. It does
-	 * not start synchronization itself.
+	 * not start synchronization itself. Cleanup before synchronization starts
+	 * has no active run to cancel, so the wait continues into the next run.
 	 *
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
 	 * @param timeout - Optional maximum wait in milliseconds, including any wait
@@ -146,6 +147,11 @@ function createRealtimeCollectionOptions<
 	>();
 	// awaitTxId calls made before the collection started syncing.
 	const syncStartWaiters = new Set<(start: SyncStart<Row>) => void>();
+	const settleSyncStartWaiters = (start: SyncStart<Row>) => {
+		const waiters = [...syncStartWaiters];
+		syncStartWaiters.clear();
+		for (const waiter of waiters) waiter(start);
+	};
 	const waitForSyncStart = (txid: string, timeout: number | undefined) =>
 		new Promise<RawLiveQuerySubscription<Row>>((resolve, reject) => {
 			const timer =
@@ -224,9 +230,17 @@ function createRealtimeCollectionOptions<
 					| undefined;
 				let rowIds = new Map<string, Key>();
 				let keys = new Map<Key, string>();
-				const subscription = client.subscribe(latestQuery, {
-					materialize: false,
-				});
+				let subscription: RawLiveQuerySubscription<Row>;
+				try {
+					subscription = client.subscribe(latestQuery, {
+						materialize: false,
+					});
+				} catch (error) {
+					const failure = { error };
+					inactiveSubscriptionFailure = failure;
+					settleSyncStartWaiters(failure);
+					throw error;
+				}
 				activeSubscription = subscription;
 				inactiveSubscriptionFailure = undefined;
 				let unsubscribeUpdate: () => void = () => undefined;
@@ -455,9 +469,7 @@ function createRealtimeCollectionOptions<
 				const start: SyncStart<Row> = terminalSubscriptionFailures.get(
 					subscription,
 				) ?? { subscription };
-				const waiters = [...syncStartWaiters];
-				syncStartWaiters.clear();
-				for (const waiter of waiters) waiter(start);
+				settleSyncStartWaiters(start);
 
 				return () => {
 					cleaned = true;
