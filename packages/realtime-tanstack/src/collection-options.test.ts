@@ -676,11 +676,48 @@ describe("Realtime TanStack DB collection", () => {
 			await expect(collection.preload()).rejects.toBe(failure);
 			await expect(pending).rejects.toBe(failure);
 		});
+
+		it("rejects pending and later waits when subscription setup throws", async () => {
+			const { client } = wireClient();
+			client.close();
+			const collection = createTestCollection(client);
+			const first = collection.utils.awaitTxId("13", 100).catch(identity);
+			const second = collection.utils
+				.awaitTxId("14", 100)
+				.catch(identity);
+
+			const failure = await collection.preload().catch(identity);
+
+			expect(failure).toMatchObject({
+				message: "Realtime client is closed",
+			});
+			expect(await first).toBe(failure);
+			expect(await second).toBe(failure);
+			await expect(collection.utils.awaitTxId("15")).rejects.toBe(
+				failure,
+			);
+		});
+
+		it("continues waiting across cleanup before synchronization starts", async () => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+			const confirmed = collection.utils.awaitTxId("16", 10_000);
+
+			await collection.cleanup();
+			const preload = collection.preload();
+			client
+				.latest()
+				.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+			await preload;
+			client.latest().batch([], ["16"]);
+
+			await expect(confirmed).resolves.toBe(true);
+		});
 	});
 });
 
 function createTestCollection(
-	client: TestClient<MessageRow>,
+	client: RealtimeClient,
 	currentQuery = query("query-1"),
 	refreshQuery?: () => Promise<SealedLiveQuery<MessageRow>>,
 ) {
@@ -695,6 +732,10 @@ function createTestCollection(
 	);
 	cleanups.push(() => collection.cleanup());
 	return collection;
+}
+
+function identity<T>(value: T): T {
+	return value;
 }
 
 /** Fake transport only: subscriptions, decoding, and reconciliation are real. */
