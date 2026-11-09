@@ -703,16 +703,8 @@ describe("Realtime TanStack DB collection", () => {
 
 		it.each([
 			["not-a-txid", 10, "transaction ID must be a decimal string"],
-			[
-				"18446744073709551616",
-				10,
-				"transaction ID exceeds uint64",
-			],
-			[
-				"42",
-				-1,
-				"transaction timeout must be a non-negative number",
-			],
+			["18446744073709551616", 10, "transaction ID exceeds uint64"],
+			["42", -1, "transaction timeout must be a non-negative number"],
 			[
 				"42",
 				Number.NaN,
@@ -723,18 +715,15 @@ describe("Realtime TanStack DB collection", () => {
 				Number.POSITIVE_INFINITY,
 				"transaction timeout must be a non-negative number",
 			],
-		] as const)(
-			"rejects invalid wait arguments before synchronization (%s, %s)",
-			async (txid, timeout, message) => {
-				const client = new TestClient<MessageRow>();
-				const collection = createTestCollection(client);
+		] as const)("rejects invalid wait arguments before synchronization (%s, %s)", async (txid, timeout, message) => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
 
-				await expect(
-					collection.utils.awaitTxId(txid, timeout),
-				).rejects.toThrow(message);
-				expect(client.subscriptions).toHaveLength(0);
-			},
-		);
+			await expect(
+				collection.utils.awaitTxId(txid, timeout),
+			).rejects.toThrow(message);
+			expect(client.subscriptions).toHaveLength(0);
+		});
 
 		it("rejects when synchronization fails as it starts", async () => {
 			const failure = liveError("ACCESS_DENIED");

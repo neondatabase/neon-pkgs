@@ -143,10 +143,7 @@ function validateTransactionWait(
 	if (parsed > 18_446_744_073_709_551_615n) {
 		throw new Error("Live-query transaction ID exceeds uint64");
 	}
-	if (
-		timeout !== undefined &&
-		(!Number.isFinite(timeout) || timeout < 0)
-	) {
+	if (timeout !== undefined && (!Number.isFinite(timeout) || timeout < 0)) {
 		throw new Error(
 			"Live-query transaction timeout must be a non-negative number",
 		);
