@@ -115,6 +115,36 @@ describe("RealtimeClient", () => {
 		}
 	});
 
+	it("closes a peer unsubscribed from a reconnect state listener", () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const first = client.subscribe(query("first"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "first");
+		const second = client.subscribe(query("second"));
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [
+				{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+				{ name: "title", type_oid: 25, typmod: -1, codec: "pg_text" },
+			],
+		});
+		baselineSync(socket, "second", "42");
+		first.onStateChange((state) => {
+			if (state.status === "connecting") second.unsubscribe();
+		});
+		try {
+			socket.finishClose();
+			expect(second.getState().status).toBe("closed");
+		} finally {
+			client.close();
+		}
+	});
+
 	it("uses a custom WebSocket factory", () => {
 		const webSocketFactory = vi.fn(
 			(url: string, protocols: string | string[]) =>
