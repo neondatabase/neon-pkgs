@@ -371,6 +371,57 @@ describe("ConnectionCoordinator", () => {
 		await second;
 	});
 
+	it("ignores a pending renewal acknowledgement after unsubscribe", async () => {
+		const coordinator = createCoordinator();
+		const closing = coordinator.subscribe({ capability: "one" }, target());
+		const socket = admit();
+		const healthy = target();
+		const remaining = coordinator.subscribe({ capability: "two" }, healthy);
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+
+		const renewal = closing.renew({ capability: "new-one" });
+		expect(socket.sent.at(-1)).toMatchObject({
+			type: "renew",
+			live_id: "41",
+		});
+		closing.unsubscribe();
+		await expect(renewal).rejects.toThrow(
+			"Live-query subscription is closed",
+		);
+		// The renewal was sent first, so its reply can precede the detach acknowledgement.
+		socket.receive({ type: "renewed", live_id: "41" });
+		socket.receive({ type: "unsubscribed", live_id: "41" });
+
+		expect(healthy.failed).not.toHaveBeenCalled();
+		expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+		const remainingRenewal = remaining.renew({ capability: "new-two" });
+		socket.receive({ type: "renewed", live_id: "42" });
+		await expect(remainingRenewal).resolves.toBeUndefined();
+		socket.receive({
+			type: "baseline_sync_start",
+			live_id: "42",
+			epoch: "1",
+			baseline_sync_attempt: "1",
+			mvcc: { xmin: "1", xmax: "2", xip: [] },
+		});
+		socket.receive({
+			type: "baseline_sync_end",
+			live_id: "42",
+			epoch: "1",
+			baseline_sync_attempt: "1",
+			batch_count: 0,
+		});
+		expect(healthy.reconciliation.caughtUp).toHaveBeenCalledOnce();
+		coordinator.close();
+	});
+
 	it("reconnects and resubscribes with the newest sealed query", async () => {
 		vi.useFakeTimers();
 		const callbacks = target();
