@@ -19,7 +19,13 @@ export const builder = (argv: yargs.Argv) =>
 		.strict()
 		.check(noPassthrough("incidents"))
 		.example("$0 incidents", describe)
-		.example("$0 incidents -o json", "Print the full report as JSON");
+		.example("$0 incidents -o json", "Print the full report as JSON")
+		.epilogue(
+			[
+				"",
+				"Reads the public status page at https://neonstatus.com. No login or linked project is needed.",
+			].join("\n"),
+		);
 
 export const handler = async (props: CommonProps) => {
 	const report = await fetchReport();
