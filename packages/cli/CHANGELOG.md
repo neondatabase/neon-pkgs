@@ -1,5 +1,18 @@
 # neon
 
+## 9.2.1
+
+### Patch Changes
+
+- Updated dependencies [f7f9c91]
+- Updated dependencies [b4aad99]
+- Updated dependencies [19590ae]
+- Updated dependencies [d05fdbd]
+- Updated dependencies [c628765]
+- Updated dependencies [c0ad38d]
+- Updated dependencies [71a7fdb]
+  - @neon/realtime@0.2.1
+
 ## 9.2.0
 
 ### Minor Changes
