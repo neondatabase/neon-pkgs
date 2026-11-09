@@ -145,6 +145,13 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		});
 	});
 
+	it("sql.run returns a bytea column the way JSON.stringify serializes a Buffer", async () => {
+		const { data } = await run("SELECT '\\xdeadbeef'::bytea AS payload");
+		expect(data.rows).toEqual([
+			{ payload: { type: "Buffer", data: [222, 173, 190, 239] } },
+		]);
+	});
+
 	it("sql.run rejects a syntax error with the Postgres NeonDbError", async () => {
 		const failure = run("SELEC 1");
 		await expect(failure).rejects.toBeInstanceOf(NeonDbError);
