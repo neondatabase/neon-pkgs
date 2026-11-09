@@ -654,6 +654,43 @@ describe("Realtime TanStack DB collection", () => {
 			expect(awaited?.timeout).toBeLessThanOrEqual(10_000);
 		});
 
+		it("normalizes the transaction ID before synchronization starts", async () => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+			const confirmed = collection.utils.awaitTxId("00042", 10_000);
+
+			const preload = collection.preload();
+			client
+				.latest()
+				.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+			await preload;
+			client.latest().batch([], ["42"]);
+
+			await expect(confirmed).resolves.toBe(true);
+			expect(client.latest().awaitedTransactions[0]?.txid).toBe("42");
+		});
+
+		it("uses a monotonic clock for the remaining timeout", async () => {
+			vi.spyOn(Date, "now")
+				.mockReturnValueOnce(10_000)
+				.mockReturnValue(100_000);
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+			const confirmed = collection.utils.awaitTxId("41", 10_000);
+
+			const preload = collection.preload();
+			client
+				.latest()
+				.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+			await preload;
+
+			const remaining = client.latest().awaitedTransactions[0]?.timeout;
+			expect(remaining).toBeGreaterThan(9_000);
+			expect(remaining).toBeLessThanOrEqual(10_000);
+			client.latest().batch([], ["41"]);
+			await expect(confirmed).resolves.toBe(true);
+		});
+
 		it("times out within the supplied timeout", async () => {
 			const client = new TestClient<MessageRow>();
 			const collection = createTestCollection(client);
@@ -731,6 +768,26 @@ describe("Realtime TanStack DB collection", () => {
 			await expect(collection.utils.awaitTxId("15")).rejects.toBe(
 				failure,
 			);
+		});
+
+		it("clears a setup failure when the collection is cleaned up", async () => {
+			const failure = new Error("Subscription setup failed");
+			const client = new TestClient<MessageRow>(undefined, [failure]);
+			const collection = createTestCollection(client);
+			const failedWait = collection.utils.awaitTxId("17", 100);
+
+			await expect(collection.preload()).rejects.toBe(failure);
+			await expect(failedWait).rejects.toBe(failure);
+			await collection.cleanup();
+
+			const confirmed = collection.utils.awaitTxId("18", 10_000);
+			const preload = collection.preload();
+			client
+				.latest()
+				.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+			await preload;
+			client.latest().batch([], ["18"]);
+			await expect(confirmed).resolves.toBe(true);
 		});
 
 		it("continues waiting across cleanup before synchronization starts", async () => {
@@ -848,6 +905,7 @@ class TestClient<Row extends object> implements RealtimeClient {
 			status: "connecting",
 			error: undefined,
 		},
+		private readonly subscribeFailures: Error[] = [],
 	) {}
 
 	subscribe<CurrentRow>(
@@ -866,6 +924,8 @@ class TestClient<Row extends object> implements RealtimeClient {
 	):
 		| MaterializedLiveQuerySubscription<CurrentRow>
 		| RawLiveQuerySubscription<CurrentRow> {
+		const failure = this.subscribeFailures.shift();
+		if (failure) throw failure;
 		if (options?.materialize !== false) {
 			throw new Error("Test client expects a raw subscription");
 		}
