@@ -1,5 +1,16 @@
 # @neon/effect
 
+## 0.4.0
+
+### Minor Changes
+
+- 3046aec: Add Neon incident reporting from neonstatus.com: `listNeonIncidents()` and `neon.incidents.list()` in `@neon/sdk` (also on the `@neon/effect` client), the `list_incidents` tool (`incidents.list`) in `@neon/tools`, and the `neon incidents` command. None of them need a Neon credential.
+
+### Patch Changes
+
+- Updated dependencies [3046aec]
+  - @neon/sdk@7.12.0
+
 ## 0.3.2
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
 	"name": "@neon/effect",
-	"version": "0.3.2",
+	"version": "0.4.0",
 	"description": "Effect v4 bindings for the Neon SDK: every API call as an Effect, every paginated list as a Stream, with tagged errors and interruption.",
 	"keywords": [
 		"neon",
