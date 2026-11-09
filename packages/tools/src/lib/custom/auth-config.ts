@@ -222,6 +222,8 @@ export const readAuthConfig = async (
 		email_provider: emailProviderValue,
 		plugins: pluginsValue,
 		webhook: webhookValue,
+		// The plugins read omits logs_export on a project without logs export.
+		logs_export: plugins.ok ? (plugins.data.logs_export ?? null) : null,
 		...(Object.keys(errors).length > 0 && { _errors: errors }),
 	};
 };
@@ -234,7 +236,7 @@ export const getAuthConfigTool = (options: ToolClientOptions) =>
 			id: publishedId("auth.getConfig"),
 			title: "Get Neon Auth configuration",
 			description:
-				"Returns a branch's Neon Auth integration and settings: trusted origins, localhost, email and password, OAuth and email providers, plugins, and webhook, with secrets redacted. Needs Neon Auth on the branch ({{auth.create}}).",
+				"Returns a branch's Neon Auth integration and settings: trusted origins, localhost, email and password, OAuth and email providers, plugins, webhook, and logs export, with secrets redacted. Needs Neon Auth on the branch ({{auth.create}}).",
 			inputSchema: getAuthConfigInputSchema,
 			annotations: {
 				readOnlyHint: true,

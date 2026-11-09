@@ -104,6 +104,7 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 			sender_email: "e2e@example.com",
 			sender_name: "E2E",
 		});
+		expect(data).toHaveProperty("logs_export");
 		expect(data).not.toHaveProperty("_errors");
 		const serialized = JSON.stringify(data);
 		expect(serialized).not.toContain(OAUTH_SECRET);
