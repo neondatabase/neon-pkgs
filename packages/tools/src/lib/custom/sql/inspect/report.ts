@@ -4,6 +4,15 @@ import {
 	type InspectQuery,
 } from "./queries.js";
 
+/** The note an empty result carries; `includeDatabaseColumn` is set when the run covered every database. */
+export const emptyResultNote = (
+	query: InspectQuery,
+	includeDatabaseColumn: boolean,
+): string =>
+	includeDatabaseColumn
+		? (query.emptyMessageAll ?? query.emptyMessage)
+		: query.emptyMessage;
+
 export type InspectDatabaseBatch = {
 	database: string;
 	rows: Record<string, unknown>[];
@@ -95,9 +104,7 @@ export function assembleInspectReport({
 	const displayed = truncated ? rows.slice(0, limit) : rows;
 	let note: string | undefined;
 	if (rows.length === 0) {
-		note = includeDatabaseColumn
-			? (query.emptyMessageAll ?? query.emptyMessage)
-			: query.emptyMessage;
+		note = emptyResultNote(query, includeDatabaseColumn);
 	} else if (truncated) {
 		note = truncationNote(
 			displayed,

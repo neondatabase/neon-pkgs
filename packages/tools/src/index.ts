@@ -1,4 +1,5 @@
 import { NeonError } from "@neon/sdk";
+import { inspectChecks } from "./lib/custom/sql/inspect/catalog.js";
 import { InspectDiagnosticError } from "./lib/custom/sql/inspect/inspect.js";
 import {
 	applyToolCustomization,
@@ -23,6 +24,8 @@ import {
 } from "./lib/ergonomic/index.js";
 
 export type { NeonBearerCredential } from "./lib/auth.js";
+export type { InspectCheckInfo } from "./lib/custom/sql/inspect/catalog.js";
+export type { InspectCheck } from "./lib/custom/sql/inspect/queries.js";
 export type {
 	InjectedNeonTool,
 	NeonToolCustomizeOptions,
@@ -49,6 +52,7 @@ export type { NeonToolId, PublishedId };
 export {
 	customToolIds,
 	InspectDiagnosticError,
+	inspectChecks,
 	NeonError,
 	publishedId,
 	toolIds,

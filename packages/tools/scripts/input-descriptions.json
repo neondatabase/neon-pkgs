@@ -24,6 +24,11 @@
 		"from": "Period start, rounded to granularity.",
 		"to": "Period end, rounded to granularity."
 	},
+	"getConsumptionHistoryPerProject": {
+		"from": "Period start, rounded to granularity.",
+		"to": "Period end, rounded to granularity.",
+		"include_v1_metrics": "Deprecated; has no effect."
+	},
 	"getConsumptionHistoryPerProjectV2": {
 		"org_id": "Organization id from {{user.organizations}}.",
 		"project_ids": "Up to 100 project ids. Omit for every project with history in the organization, including deleted ones.",
@@ -31,6 +36,9 @@
 		"metrics": "Metric names from the tool description. An unknown name returns no data rather than an error.",
 		"from": "Period start, rounded to granularity.",
 		"to": "Period end, rounded to granularity."
+	},
+	"listProjectBranchBucketObjects": {
+		"delimiter": "Groups keys up to this delimiter, usually /, into folders."
 	},
 	"listProjectBranchLogFieldValues": {
 		"field_name": "A field name from {{logs.fields}}."
@@ -55,6 +63,9 @@
 	"updateNeonAuthEmailProvider": {
 		"body": "Email provider configuration for the branch's Neon Auth integration."
 	},
+	"updateNeonAuthOAuthProviderPlugin": {
+		"mcp": "Needs resource; resource \"\" removes the MCP configuration. Omitted booleans keep their value. Prefer client_id_metadata_documents over the deprecated dynamic_registration."
+	},
 	"updateProjectBranch": {
 		"expires_at": "The timestamp when the branch is scheduled to expire and be automatically deleted."
 	},
@@ -66,13 +77,5 @@
 	},
 	"updateSnapshot": {
 		"expires_at": "The date and time when the snapshot will expire."
-	},
-	"getConsumptionHistoryPerProject": {
-		"from": "Period start, rounded to granularity.",
-		"to": "Period end, rounded to granularity.",
-		"include_v1_metrics": "Deprecated; has no effect."
-	},
-	"listProjectBranchBucketObjects": {
-		"delimiter": "Groups keys up to this delimiter, usually /, into folders."
 	}
 }

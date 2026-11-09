@@ -206,6 +206,8 @@ The SQL tools resolve a connection from `project_id` (required), then `branch_id
 
 A Postgres error rejects with the `NeonDbError` from `@neondatabase/serverless`, carrying `code` (SQLSTATE), `position`, `detail`, `hint`, and `where`. `database.inspect` throws `InspectDiagnosticError` (exported from `@neon/tools`, with `check` and the `NeonDbError` as `cause`) when Postgres rejects one of its own diagnostic queries, which is a bug in this package rather than in the input. A caller-side problem, such as a missing extension, a missing database, or a refused connection, keeps its own class.
 
+`inspectChecks` lists every `database.inspect` check from the catalog the tool runs, as frozen objects with `id`, `scope` (`database` or `compute`), `requiresExtension`, `fields`, `sqlLimit`, and the `emptyNote` an empty result carries (`emptyNoteAllDatabases` when `database_name` is omitted).
+
 `migrations.prepare` and `queryTuning.prepare` delete the temporary branch when anything after its creation fails, including the readiness wait (a `wait` timeout, a failed operation, or an aborted `signal`). Cleanup waits up to 60 seconds for the branch to finish provisioning before deleting it, regardless of `wait` and `signal`. `migrations.complete` applies first; if that fails the temporary branch stays so the call can be retried, and a failed delete after a successful apply is reported as `cleanupError`.
 
 ### Execution context

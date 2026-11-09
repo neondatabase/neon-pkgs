@@ -143,7 +143,7 @@ export const inspectDatabaseTool = (options: ToolClientOptions) =>
 			id: publishedId("database.inspect"),
 			title: "Inspect Database",
 			description:
-				"Runs one read-only neon inspect db check; some are compute-wide. If a check needs an extension, the error gives the CREATE EXTENSION; ask before running it. Other SQL: {{sql.run}}; one plan: {{sql.explain}}; new indexes: {{queryTuning.prepare}}.",
+				"Runs one read-only neon inspect db check; some are compute-wide. outliers ranks queries by total time and calls by count, both via pg_stat_statements; lfc-hit-rate and working-set need the neon extension. If one is missing, the error gives the CREATE EXTENSION; ask before running it. Other SQL: {{sql.run}}; one plan: {{sql.explain}}; new indexes: {{queryTuning.prepare}}.",
 			inputSchema: inspectDatabaseInputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
