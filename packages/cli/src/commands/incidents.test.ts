@@ -2,6 +2,7 @@ import { PassThrough } from "node:stream";
 import type { NeonIncidentsReport } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
 
+import { matchErrorCode } from "../errors.js";
 import { writer } from "../writer.js";
 import { fetchReport, renderReport } from "./incidents.js";
 
@@ -126,5 +127,8 @@ describe("fetchReport", () => {
 			"message",
 			"Could not reach neonstatus.com (ENOTFOUND). Check your internet connection and try again.",
 		);
+		expect(
+			error instanceof Error ? matchErrorCode(error.message) : undefined,
+		).toBe("NETWORK_ERROR");
 	});
 });

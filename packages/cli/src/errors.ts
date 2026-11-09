@@ -51,6 +51,7 @@ const ERROR_MATCHERS = [
 		"PLUGINS_CLI_FAILED",
 	],
 	[/^Could not install the Neon dependencies/, "DEPENDENCY_INSTALL_FAILED"],
+	[/^Could not reach neonstatus\.com /, "NETWORK_ERROR"],
 	[
 		/ (is|are) no longer pulled\. Pull NEON_BRANCH_ID /,
 		"LEGACY_FUNCTION_ENV_KEY",
