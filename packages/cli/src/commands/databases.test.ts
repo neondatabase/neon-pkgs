@@ -1,7 +1,9 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect } from "vitest";
 
-import { test } from "../test_utils/fixtures";
+import { type RecordedRequest, test } from "../test_utils/fixtures";
 
 const missingDbMessage =
 	'Database "gone_db" not found on branch test_branch; nothing to delete.';
@@ -16,6 +18,41 @@ describe("databases", () => {
 			"--branch",
 			"test_branch",
 		]);
+	});
+
+	test("create --name uses the branch from .neon", async ({
+		testCliCommand,
+	}) => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-databases-linked-"));
+		const contextFile = join(dir, ".neon");
+		writeFileSync(
+			contextFile,
+			JSON.stringify({ projectId: "test", branch: "test_branch" }),
+		);
+		const requests: RecordedRequest[] = [];
+		try {
+			await testCliCommand(
+				[
+					"databases",
+					"create",
+					"--name",
+					"test_db",
+					"--owner-name",
+					"test_owner",
+					"--context-file",
+					contextFile,
+				],
+				{ snapshot: false, onRequest: (r) => requests.push(r) },
+			);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+		expect(requests).toContainEqual(
+			expect.objectContaining({
+				method: "POST",
+				path: "/projects/test/branches/br-sunny-branch-123456/databases",
+			}),
+		);
 	});
 
 	test("create", async ({ testCliCommand }) => {

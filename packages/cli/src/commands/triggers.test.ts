@@ -384,4 +384,56 @@ describe("triggers in a linked directory", () => {
 			body: { type: "schedule", enabled: false },
 		});
 	});
+
+	test("update --name uses the branch from .neon", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			[
+				"triggers",
+				"update",
+				"trigger-test-123",
+				"--name",
+				"renamed",
+				"--context-file",
+				contextFile,
+			],
+			{ snapshot: false, onRequest: (r) => requests.push(r) },
+		);
+		expect(requests).toContainEqual({
+			method: "PATCH",
+			path: TRIGGER_PATH,
+			body: { type: "schedule", name: "renamed" },
+		});
+	});
+
+	test("create --name uses the branch from .neon", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			[
+				"triggers",
+				"create",
+				"--function-slug",
+				"ingest",
+				"--name",
+				"on-upload",
+				"--bucket",
+				"assets",
+				"--prefix",
+				"logos/",
+				"--context-file",
+				contextFile,
+			],
+			{ snapshot: false, onRequest: (r) => requests.push(r) },
+		);
+		expect(requests).toContainEqual(
+			expect.objectContaining({
+				method: "POST",
+				path: "/projects/test/branches/br-sunny-branch-123456/triggers",
+			}),
+		);
+	});
 });

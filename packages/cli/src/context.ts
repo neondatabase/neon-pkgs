@@ -360,13 +360,22 @@ export const enrichFromContext = (
 	}
 	if (
 		!args.branch &&
-		!args.id &&
-		!args.name &&
+		!(namesBranchInIdOrName(args) && (args.id || args.name)) &&
 		context.projectId === args.projectId
 	) {
 		args.branch = contextBranch(context);
 	}
 };
+
+/**
+ * Commands whose `id` / `name` argument is the branch itself (`branches get <id|name>`,
+ * `branches create --name`, `checkout [id|name]`), so the pinned branch must not be filled in.
+ * Everywhere else `--name` names the database, role, trigger, or snapshot being created.
+ */
+const namesBranchInIdOrName = (args: { _: (string | number)[] }): boolean =>
+	args._[0] === "branches" ||
+	args._[0] === "branch" ||
+	args._[0] === "checkout";
 
 export const updateContextFile = (file: string, context: Context) => {
 	writeFileSync(file, JSON.stringify(context, null, 2));
