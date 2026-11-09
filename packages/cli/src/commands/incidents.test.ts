@@ -86,6 +86,29 @@ describe("neon incidents table output", () => {
 	});
 });
 
+describe("neon incidents terminal safety", () => {
+	test("strips terminal control sequences from status page text", () => {
+		const osc52 = "\u001b]52;c;YXR0YWNrZXI=\u0007";
+		const report: NeonIncidentsReport = {
+			...DISRUPTED,
+			incidents: DISRUPTED.incidents.map((incident) => ({
+				...incident,
+				name: `\u001b[2J${incident.name}`,
+				latest_update: `${osc52}Branch creation is failing.`,
+				regions: ["AWS us-east-2\u009b31m"],
+			})),
+		};
+		const text = render(report);
+		expect(text).not.toMatch(
+			/[\u0000-\u0009\u000b-\u001a\u001c-\u001f\u007f-\u009f]/,
+		);
+		expect(text).not.toContain("\u001b]52");
+		expect(text).not.toContain("\u001b[2J");
+		expect(text).toContain("]52;c;YXR0YWNrZXI=Branch creation is failing.");
+		expect(text).toContain("ES-2400001");
+	});
+});
+
 describe("fetchReport", () => {
 	test("names neonstatus.com when the status page is unreachable", async () => {
 		const failing: typeof fetch = async () => {

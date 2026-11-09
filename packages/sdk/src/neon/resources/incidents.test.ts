@@ -226,6 +226,21 @@ describe("listNeonIncidents", () => {
 		);
 	});
 
+	it("escapes an unknown code in the error message", async () => {
+		const body = structuredClone(ALL_OPERATIONAL);
+		Object.assign(body.result.status_overall, {
+			status_code: "\u001b]52;c;eA==\u0007",
+		});
+		const error = await listNeonIncidents({ fetch: replyWith(body) }).catch(
+			(caught: unknown) => caught,
+		);
+		expect(error).toBeInstanceOf(NeonClientError);
+		expect(error).toHaveProperty(
+			"message",
+			'neonstatus.com returned an unexpected response: result.status_overall.status_code has unknown code "\\u001b]52;c;eA==\\u0007".',
+		);
+	});
+
 	it("rejects a response missing a field", async () => {
 		await expect(
 			listNeonIncidents({ fetch: replyWith({ result: {} }) }),

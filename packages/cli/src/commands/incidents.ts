@@ -48,10 +48,50 @@ export async function fetchReport(
 	}
 }
 
+// Status.io text is third-party input; escape sequences in it would reach the terminal.
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+const clean = (text: string): string => text.replace(CONTROL_CHARACTERS, "");
+
+function printable(report: NeonIncidentsReport): NeonIncidentsReport {
+	return {
+		...report,
+		updated_at: clean(report.updated_at),
+		incidents: report.incidents.map((incident) => ({
+			...incident,
+			id: clean(incident.id),
+			name: clean(incident.name),
+			started_at: clean(incident.started_at),
+			updated_at: clean(incident.updated_at),
+			latest_update: clean(incident.latest_update),
+			components: incident.components.map(clean),
+			regions: incident.regions.map(clean),
+			url: clean(incident.url),
+		})),
+		maintenance: report.maintenance.map((entry) => ({
+			...entry,
+			id: clean(entry.id),
+			name: clean(entry.name),
+			planned_start: clean(entry.planned_start),
+			planned_end: clean(entry.planned_end),
+			latest_update: clean(entry.latest_update),
+			components: entry.components.map(clean),
+			regions: entry.regions.map(clean),
+			url: clean(entry.url),
+		})),
+		affected_components: report.affected_components.map((component) => ({
+			...component,
+			name: clean(component.name),
+			regions: component.regions.map(clean),
+		})),
+	};
+}
+
 export function renderReport(
-	report: NeonIncidentsReport,
+	untrusted: NeonIncidentsReport,
 	out: ReturnType<typeof writer>,
 ): void {
+	const report = printable(untrusted);
 	out.write(
 		{
 			status: report.status,

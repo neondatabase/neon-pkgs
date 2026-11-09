@@ -257,7 +257,7 @@ function code<Name extends string>(
 ): Name {
 	const name = typeof value === "number" ? codes.get(value) : undefined;
 	if (name === undefined) {
-		throw unexpected(`${path} has unknown code ${String(value)}`);
+		throw unexpected(`${path} has unknown code ${JSON.stringify(value)}`);
 	}
 	return name;
 }
