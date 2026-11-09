@@ -1,14 +1,16 @@
 import { NeonError } from "@neon/sdk";
+import { InspectDiagnosticError } from "./lib/custom/sql/inspect/inspect.js";
 import {
 	applyToolCustomization,
 	assertToolCustomizeOptions,
-	hasToolCustomization,
 	type InjectedNeonTool,
 	type NeonToolCustomizeOptions,
 	type NeonToolInjectOptions,
 	type NeonToolNameOverrides,
+	publishedToolId,
 } from "./lib/customize.js";
 import {
+	customToolIds,
 	isNeonToolId,
 	type NeonToolId,
 	type PublishedId,
@@ -38,12 +40,19 @@ export type {
 	JsonSafeBlob,
 	NeonTool,
 	NeonToolAnnotations,
+	NeonToolCaller,
 	NeonToolExecutionContext,
 	NeonToolMetadata,
 	NeonToolResult,
 } from "./lib/operation.js";
 export type { NeonToolId, PublishedId };
-export { NeonError, publishedId, toolIds };
+export {
+	customToolIds,
+	InspectDiagnosticError,
+	NeonError,
+	publishedId,
+	toolIds,
+};
 
 type ToolFactories = typeof toolFactories;
 
@@ -153,24 +162,23 @@ const bindTools = <T extends CreateNeonToolsInput>(
 		options.names,
 		rawEntries.map(([, tool]) => tool),
 	);
-	const entries = rawEntries.map(([id, tool]) => {
-		return [
-			id,
-			hasToolCustomization(options)
-				? applyToolCustomization(tool, options)
-				: tool,
-		] as const;
-	});
 	const publishedIds = new Map<string, string>();
-	for (const [id, tool] of entries) {
-		const previous = publishedIds.get(tool.id);
+	const selectorsById = new Map<string, string>();
+	for (const [id, tool] of rawEntries) {
+		const published = publishedToolId(tool, options);
+		const previous = selectorsById.get(published);
 		if (previous !== undefined) {
 			throw new Error(
-				`Duplicate Neon tool id "${tool.id}" for ${previous}, ${id}`,
+				`Duplicate Neon tool id "${published}" for ${previous}, ${id}`,
 			);
 		}
-		publishedIds.set(tool.id, id);
+		selectorsById.set(published, id);
+		publishedIds.set(id, published);
 	}
+	const entries = rawEntries.map(
+		([id, tool]) =>
+			[id, applyToolCustomization(tool, options, publishedIds)] as const,
+	);
 	const tools: unknown = Object.fromEntries(entries);
 	assertNeonTools(tools, selected);
 	return tools as NeonTools<SelectedTools<T>>;
@@ -259,10 +267,8 @@ export function createNeonTool<
 	assertToolCustomizeOptions(options);
 	const tool = factoryFor(id)(options);
 	assertKnownNameKeys(options.names, [tool]);
-	const customized = hasToolCustomization(options)
-		? applyToolCustomization(tool, options)
-		: tool;
-	return customized as
+	const publishedIds = new Map([[id, publishedToolId(tool, options)]]);
+	return applyToolCustomization(tool, options, publishedIds) as
 		| NamedNeonTool<Id, Inject>
 		| InjectedNeonTool<ToolForId<Id>, Inject>
 		| ToolForId<Id>;

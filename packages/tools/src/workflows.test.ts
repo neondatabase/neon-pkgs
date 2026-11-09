@@ -274,7 +274,7 @@ describe("branches.createAndConnect", () => {
 
 		expect(pooled).toMatchObject({
 			type: "boolean",
-			description: expect.stringContaining("Default true"),
+			description: expect.stringContaining("default true"),
 		});
 	});
 

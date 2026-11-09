@@ -1,9 +1,11 @@
 {
 	"extends": "../../tsconfig.base.json",
 	"include": [
+		"e2e",
 		"src",
 		"openapi-ts.config.ts",
 		"vitest.config.ts",
+		"vitest.e2e.config.ts",
 		"tsdown.config.ts"
 	]
 }

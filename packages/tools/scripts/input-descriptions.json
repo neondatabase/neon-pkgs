@@ -1,4 +1,12 @@
 {
+	"*": {
+		"branch_id": "A br-... id, not a name.",
+		"org_id": "Organization id.",
+		"project_id": "Project id."
+	},
+	"countProjects": {
+		"org_id": "Organization id from {{user.organizations}}; required with a personal API key."
+	},
 	"createCredential": {
 		"scopes": "Capabilities to grant. The credential may only perform actions in these scopes."
 	},
@@ -6,26 +14,41 @@
 		"runtime": "The Node.js runtime for the deployment.",
 		"zip": "Base64-encoded ZIP of the function source. Omit to reuse the latest bundle; required for the first deployment."
 	},
-	"grantPermissionToProject": {
-		"project_id": "The Neon project ID"
+	"deleteProjectBranchBucketObjectsByPrefix": {
+		"prefix": "Key prefix to delete, ending in / (for example app/avatars/)."
 	},
-	"listProjectMembers": {
-		"project_id": "The Neon project ID"
+	"getConsumptionHistoryPerBranchV2": {
+		"org_id": "Organization id from {{user.organizations}}.",
+		"granularity": "hourly reaches back 168 hours, daily 60 days, monthly one year.",
+		"metrics": "Metric names from the tool description; any other returns HTTP 400. extra_branches_month and snapshot_storage_bytes_month are only on {{consumption.perProjectV2}}.",
+		"from": "Period start, rounded to granularity.",
+		"to": "Period end, rounded to granularity."
 	},
-	"listProjectPermissions": {
-		"project_id": "The Neon project ID"
+	"getConsumptionHistoryPerProjectV2": {
+		"org_id": "Organization id from {{user.organizations}}.",
+		"project_ids": "Up to 100 project ids. Omit for every project with history in the organization, including deleted ones.",
+		"granularity": "hourly reaches back 168 hours, daily 60 days, monthly one year.",
+		"metrics": "Metric names from the tool description. An unknown name returns no data rather than an error.",
+		"from": "Period start, rounded to granularity.",
+		"to": "Period end, rounded to granularity."
+	},
+	"listProjectBranchLogFieldValues": {
+		"field_name": "A field name from {{logs.fields}}."
+	},
+	"listProjects": {
+		"org_id": "Organization id from {{user.organizations}}; required with a personal API key."
+	},
+	"registerProjectBranchCustomDomain": {
+		"entity_id": "The function slug from {{functions.list}}."
 	},
 	"removeProjectMemberRole": {
-		"project_id": "The Neon project ID",
 		"member_id": "The organization member ID",
 		"confirm_self_lockout": "Set true to remove your own grant when you would lose manage access."
 	},
 	"revokePermissionFromProject": {
-		"project_id": "The Neon project ID",
-		"permission_id": "The permission `id` from listing project access."
+		"permission_id": "The permission id from {{projects.permissions.list}}."
 	},
 	"setProjectMemberRole": {
-		"project_id": "The Neon project ID",
 		"member_id": "The organization member ID",
 		"confirm_self_demotion": "Set true to lower your own role on the project."
 	},
@@ -35,10 +58,21 @@
 	"updateProjectBranch": {
 		"expires_at": "The timestamp when the branch is scheduled to expire and be automatically deleted."
 	},
+	"updateProjectBranchDatabase": {
+		"name": "New name for the database."
+	},
 	"updateProjectBranchFunction": {
 		"name": "New display name for the function."
 	},
 	"updateSnapshot": {
 		"expires_at": "The date and time when the snapshot will expire."
+	},
+	"getConsumptionHistoryPerProject": {
+		"from": "Period start, rounded to granularity.",
+		"to": "Period end, rounded to granularity.",
+		"include_v1_metrics": "Deprecated; has no effect."
+	},
+	"listProjectBranchBucketObjects": {
+		"delimiter": "Groups keys up to this delimiter, usually /, into folders."
 	}
 }

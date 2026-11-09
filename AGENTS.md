@@ -613,7 +613,7 @@ control stays on the API side.
 
 ### The tools package (`packages/tools`)
 
-Every public tool and every top-level input must have a description within budget; `src/generation.test.ts` fails otherwise. Descriptions are generated from the OpenAPI spec, and gaps are filled by hand in `scripts/input-descriptions.json` or with `.describe()` in composed tools. When that test names an undocumented input, fill it following [`packages/tools/CONTRIBUTING.md`](packages/tools/CONTRIBUTING.md#descriptions). Never raise a budget or skip a tool to get it green.
+Every public tool and every top-level input must have a description within budget; `src/generation.test.ts` fails otherwise. Descriptions are generated from the OpenAPI spec and replaced by hand in `scripts/tool-descriptions.json`, `scripts/input-descriptions.json`, or the composed or custom tool itself; a description names another tool as `{{selector}}`. When that test names an undocumented input, fill it following [`packages/tools/CONTRIBUTING.md`](packages/tools/CONTRIBUTING.md#descriptions). Never raise a budget or skip a tool to get it green.
 
 ### Key Implementation Details
 

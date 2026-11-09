@@ -165,7 +165,47 @@ export const toolIds = [
 	"user.me",
 	"user.organizations",
 	"incidents.list",
+	"auth.getConfig",
+	"resources.search",
+	"sql.run",
+	"sql.runTransaction",
+	"sql.explain",
+	"schema.listTables",
+	"schema.describeTable",
+	"branches.describe",
+	"queries.listSlow",
+	"database.inspect",
+	"migrations.prepare",
+	"migrations.complete",
+	"queryTuning.prepare",
+	"queryTuning.complete",
+	"resources.fetch",
+	"docs.search",
+	"docs.get",
+	"feedback.send",
 ] as const;
+
+/** Tools that compose several requests and are not a single `NeonClient` method. */
+export const customToolIds = [
+	"auth.getConfig",
+	"resources.search",
+	"sql.run",
+	"sql.runTransaction",
+	"sql.explain",
+	"schema.listTables",
+	"schema.describeTable",
+	"branches.describe",
+	"queries.listSlow",
+	"database.inspect",
+	"migrations.prepare",
+	"migrations.complete",
+	"queryTuning.prepare",
+	"queryTuning.complete",
+	"resources.fetch",
+	"docs.search",
+	"docs.get",
+	"feedback.send",
+] as const satisfies readonly (typeof toolIds)[number][];
 
 export type NeonToolId = (typeof toolIds)[number];
 

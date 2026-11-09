@@ -12,10 +12,11 @@ export default defineConfig({
 				"src/**/*.test.ts",
 				"src/generated/**",
 				"src/operations.gen.ts",
+				"src/descriptions.gen.ts",
 			],
 			reporter: ["html", "lcov"],
 		},
-		exclude: ["lib", "node_modules", "dist"],
+		exclude: ["lib", "node_modules", "dist", "e2e"],
 		setupFiles: ["console-fail-test/setup"],
 	},
 });

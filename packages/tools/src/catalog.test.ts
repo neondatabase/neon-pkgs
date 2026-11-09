@@ -1,7 +1,12 @@
 import { createNeonClient, isNeonError, NeonClientError } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
 import * as z from "zod";
-import { createNeonTool, createNeonTools, toolIds } from "./index.js";
+import {
+	createNeonTool,
+	createNeonTools,
+	customToolIds,
+	toolIds,
+} from "./index.js";
 import { hiddenToolIds } from "./lib/ergonomic/ids.js";
 
 const methodPaths = (value: object, prefix = ""): string[] => {
@@ -32,8 +37,21 @@ describe("ergonomic catalog coverage", () => {
 	test("every public NeonClient method is published or explicitly hidden", () => {
 		const neon = createNeonClient({ apiKey: "unused" });
 		const publicMethods = methodPaths(neon);
-		const decided = [...toolIds, ...hiddenToolIds].sort();
+		const custom: readonly string[] = customToolIds;
+		const decided = [
+			...toolIds.filter((id) => !custom.includes(id)),
+			...hiddenToolIds,
+		].sort();
 		expect(publicMethods).toEqual(decided);
+	});
+
+	test("custom tool ids are not NeonClient methods", () => {
+		const publicMethods = methodPaths(
+			createNeonClient({ apiKey: "unused" }),
+		);
+		for (const id of customToolIds) {
+			expect(publicMethods).not.toContain(id);
+		}
 	});
 
 	test("hidden selectors are not tools", () => {
@@ -921,7 +939,7 @@ describe("special mappings", () => {
 		expect(reset.annotations.destructiveHint).toBe(true);
 		expect(reset.requiresApproval).toBe(true);
 		expect(reset.description).toContain(
-			"Discards every change the branch has written since it diverged",
+			"discarding the branch's own changes. NEVER run autonomously; always ask the user first.",
 		);
 		const preserve = z.toJSONSchema(reset.inputSchema).properties
 			?.preserve_under_name;

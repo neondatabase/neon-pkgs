@@ -6,6 +6,29 @@ import {
 } from "@neon/sdk";
 import * as z from "zod";
 import { decodeBase64 } from "../binary.js";
+import { getAuthConfigTool } from "../custom/auth-config.js";
+import { getDocTool, searchDocsTool } from "../custom/docs.js";
+import { sendFeedbackTool } from "../custom/feedback.js";
+import { fetchResourceTool } from "../custom/fetch.js";
+import { userOrganizationsTool } from "../custom/organizations.js";
+import { searchResourcesTool } from "../custom/resources.js";
+import { describeBranchTool } from "../custom/sql/describe-branch.js";
+import { inspectDatabaseTool } from "../custom/sql/inspect/inspect.js";
+import {
+	completeMigrationTool,
+	prepareMigrationTool,
+} from "../custom/sql/migrations.js";
+import {
+	completeQueryTuningTool,
+	prepareQueryTuningTool,
+} from "../custom/sql/query-tuning.js";
+import {
+	explainSqlTool,
+	runSqlTool,
+	runSqlTransactionTool,
+} from "../custom/sql/run.js";
+import { describeTableTool, listTablesTool } from "../custom/sql/schema.js";
+import { listSlowQueriesTool } from "../custom/sql/slow-queries.js";
 import type { NeonTool, NeonToolExecutionContext } from "../operation.js";
 import { toToolResult } from "../result.js";
 import {
@@ -71,7 +94,7 @@ const listIncidentsTool = (options: ToolClientOptions) =>
 		id: publishedId("incidents.list"),
 		title: "List Neon incidents",
 		description:
-			"List open Neon incidents and maintenance from neonstatus.com, and which components and regions are not operational. Needs no credentials. Call it when Neon requests fail unexpectedly or the user asks whether Neon is down. Incident names can be ticket ids; latest_update carries the details.",
+			"Lists open Neon incidents and maintenance from neonstatus.com and the affected components and regions. Needs no credentials. Call it when Neon requests fail unexpectedly or the user asks whether Neon is down.",
 		inputSchema: listIncidentsInputSchema,
 		annotations: {
 			readOnlyHint: true,
@@ -2139,7 +2162,7 @@ export const toolFactories = {
 				id: publishedId("regions.list"),
 				title: "List regions",
 				description:
-					"Lists Neon regions available to the authenticated account.",
+					"Lists the regions you can create projects in. An organization API key gets 404.",
 				inputSchema: z.strictObject({}),
 				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
@@ -2159,11 +2182,24 @@ export const toolFactories = {
 			generated: "getCurrentUserInfo",
 			run: (neon, _input, signal) => neon.user.me({ signal }),
 		}),
-	"user.organizations": (options) =>
-		fromGenerated(options, {
-			id: "user.organizations",
-			generated: "getCurrentUserOrganizations",
-			run: (neon, _input, signal) => neon.user.organizations({ signal }),
-		}),
 	"incidents.list": listIncidentsTool,
+	"user.organizations": userOrganizationsTool,
+	"auth.getConfig": getAuthConfigTool,
+	"resources.search": searchResourcesTool,
+	"sql.run": runSqlTool,
+	"sql.runTransaction": runSqlTransactionTool,
+	"sql.explain": explainSqlTool,
+	"schema.listTables": listTablesTool,
+	"schema.describeTable": describeTableTool,
+	"branches.describe": describeBranchTool,
+	"queries.listSlow": listSlowQueriesTool,
+	"database.inspect": inspectDatabaseTool,
+	"migrations.prepare": prepareMigrationTool,
+	"migrations.complete": completeMigrationTool,
+	"queryTuning.prepare": prepareQueryTuningTool,
+	"queryTuning.complete": completeQueryTuningTool,
+	"resources.fetch": fetchResourceTool,
+	"docs.search": searchDocsTool,
+	"docs.get": getDocTool,
+	"feedback.send": sendFeedbackTool,
 } satisfies Record<NeonToolId, (options: ToolClientOptions) => unknown>;

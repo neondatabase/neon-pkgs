@@ -8,7 +8,7 @@ npm install @neon/tools
 
 ## Create tools
 
-Selectors are SDK paths. The returned record is keyed by those paths. Each tool's published `id` is the last path segment, then the resource, in snake_case (`projects.list` → `list_projects`, `postgres.roles.resetPassword` → `reset_password_postgres_roles`, `postgres.connectionString` → `connection_string_postgres`). `publishedId` derives that string. `toolIds` lists every published selector.
+Selectors are SDK paths, plus the custom tools listed in `customToolIds` (see [Custom tools](#custom-tools)). The returned record is keyed by those selectors. Each tool's published `id` is the last path segment, then the resource, in snake_case (`projects.list` → `list_projects`, `postgres.roles.resetPassword` → `reset_password_postgres_roles`, `postgres.connectionString` → `connection_string_postgres`). `publishedId` derives that string. `toolIds` lists every published selector.
 
 ```ts
 import { createNeonTools, publishedId } from "@neon/tools";
@@ -110,6 +110,144 @@ const { data } = await incidents.execute({});
 // { status: "operational", incidents: [], maintenance: [], affected_components: [], ... }
 ```
 
+## Custom tools
+
+Custom tools combine several requests into one call, or call Postgres or neon.com, and are not a single `NeonClient` method. They are selected, adapted, and executed like every other tool. `customToolIds` lists them.
+
+| Selector | Published id | Returns |
+| --- | --- | --- |
+| `auth.getConfig` | `get_config_auth` | The branch's Neon Auth integration and settings: trusted origins, localhost access, email and password, OAuth providers, email provider, the organization, magic link, and phone number plugins, and the webhook. `branch_id` defaults to the project's default branch. |
+| `resources.search` | `search_resources` | `{ results: [{ id, title, url }] }` for organizations, projects (including projects shared with the user), branches, compute endpoints, and snapshots whose name or id contains `query`. A compute endpoint also matches its host, with or without `-pooler`, so a host from a connection string finds it. The id prefix (`org:`, `project:`, `branch:<project>/<branch>`, `endpoint:<project>/<endpoint>`, `snapshot:<project>/<snapshot>`) names the kind. |
+| `resources.fetch` | `fetch_resources` | `{ id, title, text, url, metadata }` for an id from `resources.search`: markdown details in `text`, the console URL, and the organization with members and projects, the project with branches, the `branches.describe` result, the endpoint, or the snapshot in `metadata`. |
+| `sql.run` | `run_sql` | `{ rows, totalRowCount, truncated, note? }` for one statement. `rows` holds at most `max_rows` (default 100, at most 10,000). |
+| `sql.runTransaction` | `run_transaction_sql` | One `{ rows, totalRowCount, truncated, note? }` per statement, run in one transaction. |
+| `sql.explain` | `explain_sql` | The `EXPLAIN (FORMAT JSON)` rows. `analyze: true` executes the statement. |
+| `schema.listTables` | `list_tables_schema` | `{ table_schema, table_name, table_type }` for every table outside `pg_catalog` and `information_schema`. |
+| `schema.describeTable` | `describe_table_schema` | `{ raw, formatted }`: columns, indexes, constraints, and sizes. A missing table throws `NeonClientError`. |
+| `branches.describe` | `describe_branches` | `{ branch, console_url, text, database_structure }`, where `database_structure` is `[[], rows]`: one `{ tree_structure }` row per database, then the connected database's schemas and objects, read from the system catalogs in a `READ ONLY` transaction. When that query fails it is `null` and `database_structure_error` says why. |
+| `queries.listSlow` | `list_slow_queries` | `{ slow_queries, total_queries_found }` from `pg_stat_statements`, slowest mean time first. Without the extension it throws `NeonClientError`. |
+| `database.inspect` | `inspect_database` | One `neon inspect db` check: `{ check, describe, projectId, branchId, databases, fields, totalRowCount, rows, truncated, note? }`. |
+| `migrations.prepare` | `prepare_migrations` | Runs `migration_sql` on a new temporary branch and returns `{ complete, temporary_branch, migration_result }`. `complete` holds exactly the fields `migrations.complete` takes (`migration_id`, `migration_sql`, `database_name`, `project_id`, `temporary_branch_id`, `parent_branch_id`); `temporary_branch` is `{ id, name, parent_id }`; `migration_result` holds each statement's rows. |
+| `migrations.complete` | `complete_migrations` | Applies the migration to the parent unless `apply_changes` is false, deletes the temporary branch, and returns `{ applied, deletedBranchId?, cleanupError?, migrationResult? }`. |
+| `queryTuning.prepare` | `prepare_query_tuning` | Runs `EXPLAIN ANALYZE` on a new temporary branch and returns `{ complete, execution_plan, table_schemas, sql, baseline_metrics }`. `complete` holds `tuning_id`, `database_name`, `project_id`, `temporary_branch_id`, and `role_name` when one was passed; `baseline_metrics` holds time, cost, rows, and buffer counters of the root plan node. |
+| `queryTuning.complete` | `complete_query_tuning` | Applies `suggested_sql_statements` when `apply_changes` is true, deletes the temporary branch unless `should_delete_temporary_branch` is false, and returns `{ appliedChanges?, results?, deletedBranches?, message }`. |
+| `docs.search` | `search_docs` | `{ hits: [{ title, url, slug, category, breadcrumb, heading, excerpt }] }` from neon.com site search. |
+| `docs.get` | `get_docs` | `{ url, markdown }` for one neon.com page slug. |
+| `feedback.send` | `send_feedback` | Posts `{ feedback, source }` to the Neon feedback service. |
+
+```ts
+const tools = createNeonTools({
+	apiKey,
+	tools: ["auth.getConfig", "resources.search", "resources.fetch", "sql.run"],
+});
+
+const { data: config } = await tools["auth.getConfig"].execute({
+	project_id: "project-id",
+});
+config.oauth_providers; // [{ id: "google", type: "standard", client_id: "…", client_secret: "***redacted***" }]
+
+const { data: found } = await tools["resources.search"].execute({
+	query: "checkout",
+});
+found.results; // [{ id: "project:project-id", title: "checkout-service", url: "https://console.neon.tech/app/projects/project-id" }]
+
+const { data: project } = await tools["resources.fetch"].execute({
+	id: "project:project-id",
+});
+project.text; // "**Project Details**\n\n**Basic Information:**\n- Name: checkout-service\n…"
+project.metadata; // { project: { id: "project-id", … }, branches: [ … ] }
+
+const migrationTools = createNeonTools({
+	apiKey,
+	tools: ["migrations.prepare", "migrations.complete"],
+});
+const prepared = await migrationTools["migrations.prepare"].execute({
+	project_id: "project-id",
+	migration_sql: "ALTER TABLE users ADD COLUMN plan text",
+});
+await migrationTools["migrations.complete"].execute({
+	...prepared.data.complete,
+	apply_changes: true,
+});
+prepared.data.temporary_branch; // { id: "br-…", name: "mcp-migration-2026-11-06T20-05-00", parent_id: "br-main-…" }
+
+const tuningTools = createNeonTools({
+	apiKey,
+	tools: ["queryTuning.prepare", "queryTuning.complete"],
+});
+const tuning = await tuningTools["queryTuning.prepare"].execute({
+	project_id: "project-id",
+	database_name: "neondb",
+	sql: "SELECT * FROM orders WHERE customer_id = 42",
+});
+await tuningTools["queryTuning.complete"].execute({
+	...tuning.data.complete,
+	suggested_sql_statements: ["CREATE INDEX ON orders (customer_id)"],
+	apply_changes: true,
+});
+
+const { data: result } = await tools["sql.run"].execute({
+	project_id: "project-id",
+	sql: "SELECT id, email FROM users ORDER BY id",
+	max_rows: 2,
+});
+result; // { rows: [{ id: 1, email: "a@example.com" }, { id: 2, email: "b@example.com" }], totalRowCount: 40, truncated: true, note: "Showing the first 2 of 40 rows. …" }
+```
+
+`auth.getConfig` replaces OAuth client secrets and the SMTP password with `"***redacted***"`. Trusted origins, localhost access, email and password, and OAuth providers are required reads: an error on any of them fails the call, and a branch without Neon Auth throws `NeonNotFoundError`. The email provider, plugins, and webhook reads are reported under `_errors` when they fail; an email provider that was never configured is `null`.
+
+`user.organizations` takes an optional `search` that filters by a case-insensitive part of the name or id. An organization API key gets its own organization.
+
+`resources.search` leaves out a resource whose list the API refuses with 403 or 404, and fails on any other error, including a 5xx, an exhausted 429, and an aborted `signal`. It reads up to 400 projects per organization and 400 shared projects, and lists each project's branches, compute endpoints, and snapshots in parallel. Resources that belong to a branch (databases, roles, functions, buckets, triggers, credentials) are not searched, since each would cost one request per branch. `resources.fetch` reads the first page of an organization's members and projects and skips either when the API refuses it with 403 or 404; other errors fail the call. An id without a known prefix throws `NeonClientError`. Console URLs follow `baseUrl`: `https://console.neon.tech/api/v2` links to `https://console.neon.tech`.
+
+### SQL tools
+
+The SQL tools resolve a connection from `project_id` (required), then `branch_id` (default branch), `database_name` (`neondb`, else the first database), `role_name` (that database's owner), and `compute_id` (the branch's read-write compute). Their `metadata.method` is `"SQL"` and `metadata.path` is `/projects/{project_id}/connection_uri`, so `inject.projectId` fills `project_id`. Whether a tool can change data is in `annotations`, not `metadata.method`. `postgres.connectionString` resolves the same way and returns the URI, with `endpoint_id` as the compute and `pooled` defaulting to `true`.
+
+A Postgres error rejects with the `NeonDbError` from `@neondatabase/serverless`, carrying `code` (SQLSTATE), `position`, `detail`, `hint`, and `where`. `database.inspect` throws `InspectDiagnosticError` (exported from `@neon/tools`, with `check` and the `NeonDbError` as `cause`) when Postgres rejects one of its own diagnostic queries, which is a bug in this package rather than in the input. A caller-side problem, such as a missing extension, a missing database, or a refused connection, keeps its own class.
+
+`migrations.prepare` and `queryTuning.prepare` delete the temporary branch when anything after its creation fails, including the readiness wait (a `wait` timeout, a failed operation, or an aborted `signal`). Cleanup waits up to 60 seconds for the branch to finish provisioning before deleting it, regardless of `wait` and `signal`. `migrations.complete` applies first; if that fails the temporary branch stays so the call can be retried, and a failed delete after a successful apply is reported as `cleanupError`.
+
+### Execution context
+
+`execute(input, context)` takes these fields in addition to `signal` and `apiKey`:
+
+```ts
+await tools["sql.run"].execute(
+	{ project_id: "project-id", sql: "SELECT count(*) FROM orders" },
+	{
+		readOnly: true,
+		postgresRole: "app_reader",
+		caller: { source: "my_host", userAgent: "my-agent/1.0", client: "cursor" },
+	},
+);
+```
+
+| Field | Effect |
+| --- | --- |
+| `readOnly` | `sql.run` and `sql.explain` run the statement in a `READ ONLY` transaction, so Postgres rejects writes. `sql.runTransaction`, `migrations.*`, and `queryTuning.*` throw `NeonClientError` without running anything, because a caller statement such as `COMMIT` or `SET TRANSACTION READ WRITE` can leave a read-only transaction. `schema.*` and `queries.listSlow` behave the same; `branches.describe` and `database.inspect` always use a `READ ONLY` transaction. |
+| `postgresRole` | Every SQL connection logs in as this role, and `postgres.connectionString` returns a URI for it. A `role_name` that differs throws `NeonClientError`. |
+| `caller` | Sent with `docs.search` as `x-caller-source`, `x-caller-user-agent`, and `x-caller-client`. Without it, or when `source` cannot be a header value, `x-caller-source` is `neon_tools`. The search service records `website`, `cli`, `mcp`, and `monitor` by name and counts any other source as `rest`. |
+
+### Docs and feedback
+
+`docs.search`, `docs.get`, and `feedback.send` call neon.com and the Neon feedback service, not the Neon API, and run without `apiKey`. Each request times out after 10 seconds. `docs.get` rejects slugs that contain `..` or `://` or start with `/`. Configure the endpoints on `createNeonTools`:
+
+```ts
+const tools = createNeonTools({
+	tools: ["docs.search", "docs.get", "feedback.send"],
+	siteSearchUrl: "https://example.com/site-search", // default: neon.com site search
+	docsBaseUrl: "https://neon.com", // docs.get reads <docsBaseUrl>/<slug>.md
+	feedbackUrl: "https://feedback.neon.tech/",
+	feedbackSource: "my_host", // default "neon_tools"
+});
+
+const { data } = await tools["docs.search"].execute({ query: "reset a branch" });
+const { data: page } = await tools["docs.get"].execute({ slug: data.hits[0].slug });
+```
+
+Neon's feedback reporting counts `manual_test`, `neon_agent`, `neon_cli`, `neon_mcp`, and `neon_website` by name and any other `feedbackSource`, including the default, as `other`.
+
 ## Writes and waiting
 
 Tools run with `waitForReadiness: true`. When a mutation response includes an `operations` array, the call waits until those operations finish. The default deadline is five minutes (`wait.timeoutMs`). Pass `wait: { timeoutMs: 30_000 }` on `createNeonTools` or `createNeonTool` to bound that. Set it below the host's own tool-call timeout, otherwise the host gives up first.
@@ -145,21 +283,26 @@ const { data: role } = await tools["postgres.roles.create"].execute({
 
 ### Descriptions
 
-Pass a map keyed by SDK path or the current published `id`, or a function that can append to the generated text. A key that matches neither is ignored.
+Every tool and every top-level input has a description. A description that names another tool uses the name that tool publishes under, after `names` and `name`. `names` and `name` run once per selected tool. A tool you did not select is named by its default `id`, without calling them.
 
-Generated Management API tools use the first sentence of the OpenAPI description (title stays the OpenAPI summary). Every top-level input carries a description too: the first sentence of its OpenAPI description, or handwritten copy where the spec has none. Composed tools keep their handwritten copy. Hosts that need more still pass `descriptions`.
+Pass `descriptions` to replace the package's copy: a map keyed by SDK path or the current published `id`, or a function that receives the package's text. A key that matches neither is ignored. Write `{{selector}}` to name another tool the same way; an unknown selector throws.
 
 ```ts
 const tools = createNeonTools({
 	apiKey,
-	tools: ["projects.list", "projects.delete"],
+	tools: ["projects.create", "postgres.connectionString", "projects.delete"],
+	names: { "postgres.connectionString": "get_connection_string" },
 	descriptions: {
-		"projects.list":
-			"List Neon projects in your account. Do not use for projects shared with you.",
+		"postgres.connectionString":
+			"Get a connection string. Call it after {{projects.create}}.",
 		delete_projects:
 			"Delete a Neon project and all its data. NEVER run autonomously; always ask the user first.",
 	},
 });
+tools["projects.create"].description;
+// "Creates a project with a default branch and read-write compute and waits until it is ready. Returns no connection string; use get_connection_string."
+tools["postgres.connectionString"].description;
+// "Get a connection string. Call it after create_projects."
 ```
 
 ### Tracking
@@ -365,7 +508,7 @@ The adapter maps approval requirements to Mastra's `requireApproval` field and f
 
 ## Safety and binary data
 
-Every non-read operation is conservatively marked as potentially destructive and requires approval. Reads that return connection credentials also require approval.
+Every non-read operation requires approval. Generated non-read operations are conservatively marked as potentially destructive; `migrations.prepare` and `queryTuning.prepare` (which write only to a new temporary branch) and `feedback.send` are not. Reads that return connection credentials also require approval.
 
 Binary request fields accept base64 strings:
 

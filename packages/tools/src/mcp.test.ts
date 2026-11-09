@@ -128,7 +128,7 @@ describe("MCP v2 compatibility", () => {
 		expect(pooled).toMatchObject({
 			type: "boolean",
 			description:
-				"Return a pooled connection string. Default true. Set false for a direct connection.",
+				"Pooled connection string; default true, false for a direct one.",
 		});
 	});
 
@@ -660,7 +660,7 @@ describe("MCP catalog size", () => {
 			(sum, tool) => sum + JSON.stringify(tool).length,
 			0,
 		);
-		// About 37,800 tokens with a description on every input.
-		expect(chars / 4).toBeLessThan(40_000);
+		// About 43,500 tokens with a description on every input, including the custom tools.
+		expect(chars / 4).toBeLessThan(43_800);
 	});
 });

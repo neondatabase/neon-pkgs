@@ -1,9 +1,15 @@
 import * as z from "zod";
+import { publishedId as defaultPublishedId } from "./ergonomic/bind.js";
 import type {
 	NeonTool,
 	NeonToolExecutionContext,
 	NeonToolResult,
 } from "./operation.js";
+import {
+	resolveInputReferences,
+	resolveToolReferences,
+	type ToolNameOf,
+} from "./references.js";
 
 export type NeonToolInjectValue =
 	| string
@@ -142,24 +148,46 @@ export const assertToolCustomizeOptions = (
 	}
 };
 
-export const hasToolCustomization = (
-	options: NeonToolCustomizeOptions,
-): boolean =>
-	options.descriptions !== undefined ||
-	options.names !== undefined ||
-	options.name !== undefined ||
-	options.onExecute !== undefined ||
-	resolveInject(options.inject).hasAny;
-
+/**
+ * Runs for every tool, customized or not. `publishedIds` holds the final id of
+ * each selected tool, computed once with `publishedToolId`, so `names` and `name`
+ * run once per selected tool. A reference to a tool that is not selected
+ * resolves to its default id without calling them.
+ */
 export const applyToolCustomization = <Tool extends NeonTool>(
 	tool: Tool,
 	options: NeonToolCustomizeOptions,
+	publishedIds: ReadonlyMap<string, string>,
 ): Omit<Tool, "id"> & { id: string } => {
 	const inject = resolveInject(options.inject);
-	const id = publishedId(tool, options);
-	const description = applyDescription(tool, options.descriptions);
+	const id = publishedIds.get(tool.operationId);
+	if (id === undefined) {
+		throw new TypeError(`No published id for ${tool.operationId}`);
+	}
+	const nameOf: ToolNameOf = (selector) =>
+		publishedIds.get(selector) ?? defaultPublishedId(selector);
+	const where = `the description of ${tool.operationId}`;
+	const description = resolveToolReferences(
+		applyDescription(
+			{
+				...tool,
+				description: resolveToolReferences(
+					tool.description,
+					nameOf,
+					where,
+				),
+			},
+			options.descriptions,
+		),
+		nameOf,
+		where,
+	);
 	const inputSchema = publishInputSchema(
-		tool.inputSchema,
+		resolveInputReferences(
+			tool.inputSchema,
+			nameOf,
+			`the input of ${tool.operationId}`,
+		),
 		inject,
 		pathTemplateParams(tool.metadata.path),
 	);
@@ -176,8 +204,9 @@ export const applyToolCustomization = <Tool extends NeonTool>(
 	};
 };
 
-function publishedId(
-	tool: NeonTool,
+/** Applies `names`, then `name`, to a tool's default id. Call it once per selected tool. */
+export function publishedToolId(
+	tool: NeonToolNameSource,
 	options: NeonToolCustomizeOptions,
 ): string {
 	let id = tool.id;

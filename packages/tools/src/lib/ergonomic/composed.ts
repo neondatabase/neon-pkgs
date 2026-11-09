@@ -1,5 +1,12 @@
 import * as z from "zod";
+import { pathInputDescriptions } from "../../descriptions.gen.js";
 import * as zod from "../../generated/zod.gen.js";
+import {
+	COMPUTE_ID_DESCRIPTION,
+	databaseNameField,
+	resolveConnection,
+	roleNameField,
+} from "../custom/sql/connection.js";
 import { bindTool, publishedId, type ToolClientOptions } from "./bind.js";
 
 const writeAnnotations = {
@@ -15,12 +22,14 @@ const readAnnotations = {
 
 const pooledField = z
 	.boolean()
-	.describe(
-		"Return a pooled connection string. Default true. Set false for a direct connection.",
-	)
+	.describe("Pooled connection string; default true, false for a direct one.")
 	.optional();
 
 const branchCreateFields = zod.zBranchCreateRequest.shape.branch.unwrap().shape;
+
+const parentIdField = branchCreateFields.parent_id.describe(
+	"Parent branch id (br-...). Omit for the project's default branch.",
+);
 const projectCreateFields = zod.zCreateProjectBody.shape.project.shape;
 
 const computeSettingsSchema = z
@@ -56,9 +65,11 @@ const NO_COMPUTE_WITH_COMPUTE =
 
 export const createBranchInputSchema = z
 	.strictObject({
-		project_id: zod.zCreateProjectBranchPath.shape.project_id,
+		project_id: zod.zCreateProjectBranchPath.shape.project_id.describe(
+			pathInputDescriptions.project_id,
+		),
 		name: branchCreateFields.name,
-		parent_id: branchCreateFields.parent_id,
+		parent_id: parentIdField,
 		compute: computeSettingsSchema,
 		no_compute: z
 			.boolean()
@@ -78,9 +89,11 @@ export const createBranchInputSchema = z
 	});
 
 export const createBranchAndConnectInputSchema = z.strictObject({
-	project_id: zod.zCreateProjectBranchPath.shape.project_id,
+	project_id: zod.zCreateProjectBranchPath.shape.project_id.describe(
+		pathInputDescriptions.project_id,
+	),
 	name: branchCreateFields.name,
-	parent_id: branchCreateFields.parent_id,
+	parent_id: parentIdField,
 	compute: computeSettingsSchema,
 	pooled: pooledField,
 });
@@ -95,12 +108,18 @@ export const createProjectAndConnectInputSchema = z.strictObject({
 });
 
 export const getDefaultInputSchema = z.strictObject({
-	project_id: zod.zListProjectBranchesPath.shape.project_id,
+	project_id: zod.zListProjectBranchesPath.shape.project_id.describe(
+		pathInputDescriptions.project_id,
+	),
 });
 
 export const resetFromParentInputSchema = z.strictObject({
-	project_id: zod.zRestoreProjectBranchPath.shape.project_id,
-	branch_id: zod.zRestoreProjectBranchPath.shape.branch_id,
+	project_id: zod.zRestoreProjectBranchPath.shape.project_id.describe(
+		pathInputDescriptions.project_id,
+	),
+	branch_id: zod.zRestoreProjectBranchPath.shape.branch_id.describe(
+		pathInputDescriptions.branch_id,
+	),
 	preserve_under_name:
 		zod.zBranchRestoreRequest.shape.preserve_under_name.describe(
 			"Name under which to save the current branch before the reset. Required when the branch has children; those children move to the new branch.",
@@ -110,10 +129,18 @@ export const resetFromParentInputSchema = z.strictObject({
 const compareQuery = zod.zGetProjectBranchSchemaComparisonQuery.shape;
 
 export const compareSchemaInputSchema = z.strictObject({
-	project_id: zod.zGetProjectBranchSchemaComparisonPath.shape.project_id,
-	branch_id: zod.zGetProjectBranchSchemaComparisonPath.shape.branch_id,
+	project_id:
+		zod.zGetProjectBranchSchemaComparisonPath.shape.project_id.describe(
+			pathInputDescriptions.project_id,
+		),
+	branch_id:
+		zod.zGetProjectBranchSchemaComparisonPath.shape.branch_id.describe(
+			pathInputDescriptions.branch_id,
+		),
 	database_name: compareQuery.db_name,
-	base_branch_id: compareQuery.base_branch_id,
+	base_branch_id: compareQuery.base_branch_id.describe(
+		"Branch id (br-...) to compare against, not its name. Omit for the parent branch.",
+	),
 	lsn: compareQuery.lsn,
 	timestamp: compareQuery.timestamp,
 	base_lsn: compareQuery.base_lsn,
@@ -121,8 +148,12 @@ export const compareSchemaInputSchema = z.strictObject({
 });
 
 export const lokiQueryRangeInputSchema = z.strictObject({
-	project_id: zod.zQueryProjectBranchLogsPath.shape.project_id,
-	branch_id: zod.zQueryProjectBranchLogsPath.shape.branch_id,
+	project_id: zod.zQueryProjectBranchLogsPath.shape.project_id.describe(
+		pathInputDescriptions.project_id,
+	),
+	branch_id: zod.zQueryProjectBranchLogsPath.shape.branch_id.describe(
+		pathInputDescriptions.branch_id,
+	),
 	query: z
 		.string()
 		.min(1)
@@ -165,7 +196,7 @@ export const lokiQueryRangeTool = (options: ToolClientOptions) =>
 			id: publishedId("logs.loki.queryRange"),
 			title: "Query branch logs (Loki)",
 			description:
-				"Run a LogQL range query on the branch's Loki-compatible read API. Returns Loki's response: data.result groups lines by stream labels; each value is [nanosecond timestamp string, line]. No cursor: a result with limit lines, or the 10,000-line server cap (no warning), may be incomplete, so narrow the window or selector. For structured filters and cursor pagination use the logs query tool. The log fields tools list label names and values.",
+				"Runs a LogQL range query on a branch's logs and returns Loki's response: data.result groups lines by stream label as [nanosecond timestamp, line]. {{logs.query}} has structured filters; {{logs.fields}} and {{logs.fieldValues}} list labels. No cursor: limit lines, or the silent 10,000 cap, may mean more exist; narrow the window.",
 			inputSchema: lokiQueryRangeInputSchema,
 			annotations: {
 				readOnlyHint: true,
@@ -199,11 +230,17 @@ export const lokiQueryRangeTool = (options: ToolClientOptions) =>
 	);
 
 export const connectionStringInputSchema = z.strictObject({
-	project_id: zod.zGetConnectionUriPath.shape.project_id,
-	branch_id: zod.zGetConnectionUriQuery.shape.branch_id,
-	endpoint_id: zod.zGetConnectionUriQuery.shape.endpoint_id,
-	database_name: zod.zGetConnectionUriQuery.shape.database_name,
-	role_name: zod.zGetConnectionUriQuery.shape.role_name,
+	project_id: zod.zGetConnectionUriPath.shape.project_id.describe(
+		pathInputDescriptions.project_id,
+	),
+	branch_id: zod.zGetConnectionUriQuery.shape.branch_id.describe(
+		`${pathInputDescriptions.branch_id} Omit it for the default branch.`,
+	),
+	endpoint_id: zod.zGetConnectionUriQuery.shape.endpoint_id.describe(
+		COMPUTE_ID_DESCRIPTION,
+	),
+	database_name: databaseNameField,
+	role_name: roleNameField,
 	pooled: pooledField,
 });
 
@@ -214,14 +251,18 @@ const ACCESS_FIELDS_NEED_SCOPED_ACCESS =
 
 export const createRoleInputSchema = z
 	.strictObject({
-		project_id: zod.zCreateProjectBranchRolePath.shape.project_id,
-		branch_id: zod.zCreateProjectBranchRolePath.shape.branch_id,
+		project_id: zod.zCreateProjectBranchRolePath.shape.project_id.describe(
+			pathInputDescriptions.project_id,
+		),
+		branch_id: zod.zCreateProjectBranchRolePath.shape.branch_id.describe(
+			pathInputDescriptions.branch_id,
+		),
 		name: roleCreateFields.name,
 		no_login: roleCreateFields.no_login,
 		access: z
 			.enum(["admin", "read_only", "read_write"])
 			.describe(
-				"What the role may do. Default admin: the role joins neon_superuser. read_only: SELECT. read_write: SELECT, INSERT, UPDATE, DELETE and sequence use. Scoped roles get these grants on top of whatever PUBLIC already has in the database.",
+				"read_only grants SELECT; read_write adds INSERT, UPDATE, DELETE, and sequences, on top of what PUBLIC has. Default admin joins neon_superuser.",
 			)
 			.optional(),
 		database_name: z
@@ -259,14 +300,16 @@ export const createRoleInputSchema = z
 	});
 
 export const restoreSnapshotInputSchema = z.strictObject({
-	project_id: zod.zRestoreSnapshotPath.shape.project_id,
+	project_id: zod.zRestoreSnapshotPath.shape.project_id.describe(
+		pathInputDescriptions.project_id,
+	),
 	snapshot_id: zod.zRestoreSnapshotPath.shape.snapshot_id,
 	name: zod.zRestoreSnapshotBody.shape.name,
 	target_branch_id: zod.zRestoreSnapshotBody.shape.target_branch_id,
 	finalize: z
 		.boolean()
 		.describe(
-			"Finalize immediately (move computes onto the restored branch). Defaults to true when restoring as a new branch and false when restoring onto an existing branch.",
+			"Move computes onto the restored branch now. Default true for a new branch, false onto an existing one.",
 		)
 		.optional(),
 });
@@ -274,8 +317,12 @@ export const restoreSnapshotInputSchema = z.strictObject({
 const snapshotFrequency = z.enum(["daily", "weekly", "monthly"]);
 
 export const setScheduleInputSchema = z.strictObject({
-	project_id: zod.zSetSnapshotSchedulePath.shape.project_id,
-	branch_id: zod.zSetSnapshotSchedulePath.shape.branch_id,
+	project_id: zod.zSetSnapshotSchedulePath.shape.project_id.describe(
+		pathInputDescriptions.project_id,
+	),
+	branch_id: zod.zSetSnapshotSchedulePath.shape.branch_id.describe(
+		pathInputDescriptions.branch_id,
+	),
 	schedule: z
 		.array(
 			z.strictObject({
@@ -294,7 +341,7 @@ export const createBranchTool = (options: ToolClientOptions) =>
 			id: publishedId("branches.create"),
 			title: "Create branch",
 			description:
-				"Create a branch with a read-write endpoint by default. Pass no_compute to skip the endpoint. The call waits until operation-backed provisioning finishes, up to five minutes by default. Does not return a connection string; use branches.createAndConnect or postgres.connectionString for that.",
+				"Creates a branch from its parent's current data, with a read-write compute unless no_compute, and waits until it is ready. Returns no connection string; use {{postgres.connectionString}}.",
 			inputSchema: createBranchInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
@@ -338,7 +385,7 @@ export const createBranchAndConnectTool = (options: ToolClientOptions) =>
 			id: publishedId("branches.createAndConnect"),
 			title: "Create branch and connect",
 			description:
-				"Create a branch with a read-write endpoint and return its connection string. The call waits until operation-backed provisioning finishes, up to five minutes by default.",
+				"Creates a branch with a read-write compute, waits until it is ready, and returns its connection string.",
 			inputSchema: createBranchAndConnectInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
@@ -373,7 +420,7 @@ export const createProjectTool = (options: ToolClientOptions) =>
 			id: publishedId("projects.create"),
 			title: "Create project",
 			description:
-				"Create a project. The API always provisions a default branch with read-write compute. The call waits until operation-backed provisioning finishes, up to five minutes by default. Does not return a connection string; use projects.createAndConnect or postgres.connectionString for that.",
+				"Creates a project with a default branch and read-write compute and waits until it is ready. Returns no connection string; use {{postgres.connectionString}}.",
 			inputSchema: createProjectInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
@@ -396,7 +443,7 @@ export const createProjectAndConnectTool = (options: ToolClientOptions) =>
 			id: publishedId("projects.createAndConnect"),
 			title: "Create project and connect",
 			description:
-				"Create a project and return a connection string to its default branch. The call waits until operation-backed provisioning finishes, up to five minutes by default.",
+				"Creates a project, waits until its default branch is ready, and returns a connection string to it.",
 			inputSchema: createProjectAndConnectInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
@@ -420,7 +467,7 @@ export const getDefaultTool = (options: ToolClientOptions) =>
 			id: publishedId("branches.getDefault"),
 			title: "Get default branch",
 			description:
-				"Resolve the project's default branch by the default flag, not by name.",
+				"Gets the project's default branch by its default flag, not its name.",
 			inputSchema: getDefaultInputSchema,
 			annotations: readAnnotations,
 			requiresApproval: false,
@@ -447,7 +494,7 @@ export const resetFromParentTool = (options: ToolClientOptions) =>
 			id: publishedId("branches.resetFromParent"),
 			title: "Reset branch from parent",
 			description:
-				"Reset a branch to its parent's current HEAD. Discards every change the branch has written since it diverged. preserve_under_name is required when the branch has children. For an LSN or timestamp restore, use the raw restoreProjectBranch operation.",
+				"Resets a branch to its parent's current state, discarding the branch's own changes. NEVER run autonomously; always ask the user first. preserve_under_name first saves the current state as a new branch. To restore a snapshot, use {{snapshots.restore}}.",
 			inputSchema: resetFromParentInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
@@ -480,7 +527,7 @@ export const compareSchemaTool = (options: ToolClientOptions) =>
 			id: publishedId("branches.compareSchema"),
 			title: "Compare database schema",
 			description:
-				"Compare a branch database schema to another branch. Omitting base_branch_id compares against the parent. Returns a unified SQL diff.",
+				"Diffs one database's SQL schema on a branch against another branch, by default its parent. lsn, timestamp, base_lsn, and base_timestamp are only for point-in-time comparisons.",
 			inputSchema: compareSchemaInputSchema,
 			annotations: readAnnotations,
 			requiresApproval: false,
@@ -524,7 +571,7 @@ export const connectionStringTool = (options: ToolClientOptions) =>
 			id: publishedId("postgres.connectionString"),
 			title: "Get connection string",
 			description:
-				"Resolve a Postgres connection string. Auto-selects the default branch and the sole role and database when those are omitted. Errors when the selection is ambiguous.",
+				"Returns a Postgres connection string with a role password. Omitted inputs resolve like the SQL tools: default branch, neondb or the first database, and its owner. Call it after {{projects.create}} or {{branches.create}}, which return none.",
 			inputSchema: connectionStringInputSchema,
 			annotations: readAnnotations,
 			requiresApproval: true,
@@ -536,28 +583,18 @@ export const connectionStringTool = (options: ToolClientOptions) =>
 				tags: ["Project"],
 			},
 		},
-		(neon, input, signal) =>
-			neon.postgres.connectionString(
-				{
-					projectId: input.project_id,
-					...(input.branch_id === undefined
-						? {}
-						: { branchId: input.branch_id }),
-					...(input.endpoint_id === undefined
-						? {}
-						: { endpointId: input.endpoint_id }),
-					...(input.database_name === undefined
-						? {}
-						: { databaseName: input.database_name }),
-					...(input.role_name === undefined
-						? {}
-						: { roleName: input.role_name }),
-					...(input.pooled === undefined
-						? {}
-						: { pooled: input.pooled }),
-				},
-				{ signal },
-			),
+		async (neon, input, signal, context) => {
+			const { endpoint_id, ...target } = input;
+			const connection = await resolveConnection(
+				neon,
+				endpoint_id === undefined
+					? target
+					: { ...target, compute_id: endpoint_id },
+				context,
+				signal,
+			);
+			return connection.uri;
+		},
 	);
 
 export const createRoleTool = (options: ToolClientOptions) =>
@@ -568,7 +605,7 @@ export const createRoleTool = (options: ToolClientOptions) =>
 			id: publishedId("postgres.roles.create"),
 			title: "Create role",
 			description:
-				"Create a Postgres role on a branch and return it with its password. access defaults to admin: the role joins neon_superuser, so it can read and write every database, create databases and roles, and bypass row-level security, and it cannot be narrowed later. For a least-privilege credential pass access read_only or read_write, scoped to database_name and schemas. Scoped roles are created with SQL as the database owner and cover tables that owner owns, now and later.",
+				"Creates a Postgres role on a branch and returns its password. The default access, admin, joins neon_superuser: every database, creating databases and roles, bypassing row-level security, and it cannot be narrowed later. For least privilege pass read_only or read_write with database_name and schemas, covering the tables the database owner owns, now and later.",
 			inputSchema: createRoleInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
@@ -616,7 +653,7 @@ export const restoreSnapshotTool = (options: ToolClientOptions) =>
 			id: publishedId("snapshots.restore"),
 			title: "Restore snapshot",
 			description:
-				"Restore a snapshot onto a new or existing branch. The call waits until operation-backed provisioning finishes. Preview callbacks are not available on this tool.",
+				"Restores a snapshot onto a new branch or onto target_branch_id and waits until it is ready. With finalize false, swap it in later with {{branches.finalizeRestore}}.",
 			inputSchema: restoreSnapshotInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
@@ -648,8 +685,7 @@ export const setScheduleTool = (options: ToolClientOptions) =>
 			operationId: "snapshots.setSchedule",
 			id: publishedId("snapshots.setSchedule"),
 			title: "Set snapshot schedule",
-			description:
-				"Replace a branch's automatic snapshot schedule. Frequency must be daily, weekly, or monthly.",
+			description: "Replaces a branch's automatic snapshot schedule.",
 			inputSchema: setScheduleInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
