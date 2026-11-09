@@ -12,6 +12,27 @@ afterEach(() => {
 });
 
 describe("QueryRefreshController", () => {
+	it("paces successful refreshes within the early-refresh window", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const refreshQuery = vi.fn(async () => query(Date.now() / 1000 + 5));
+		const controller = new QueryRefreshController({
+			query: query(5),
+			refreshQuery,
+			renewSubscription: async () => {},
+			onRefreshExhausted: vi.fn(),
+		});
+		try {
+			controller.start();
+			await vi.advanceTimersByTimeAsync(20);
+			expect(refreshQuery).toHaveBeenCalledOnce();
+			await vi.advanceTimersByTimeAsync(980);
+			expect(refreshQuery).toHaveBeenCalledTimes(2);
+		} finally {
+			controller.stop();
+		}
+	});
+
 	it("refreshes before expiry and schedules from the replacement", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);
