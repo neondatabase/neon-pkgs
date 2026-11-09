@@ -1047,6 +1047,31 @@ await neon.organizations.spendingLimit.set({ spendingLimitCents: 50_000 }); // $
 | `user.me()` | `CurrentUserInfoResponse` |
 | `user.organizations()` | `Organization[]` |
 
+### `neon.incidents`
+
+Reads the public neonstatus.com API (Status.io) and sends no API key. `requestTimeoutMs` defaults to 10 seconds. `listNeonIncidents()` is the same call without a client, for callers that have no Neon credential; it throws instead of returning `{ data, error }`.
+
+| Method | Returns |
+| --- | --- |
+| `incidents.list()` | `NeonIncidentsReport` |
+| `listNeonIncidents({ fetch?, signal?, requestTimeoutMs? })` | `NeonIncidentsReport` |
+
+```ts
+import { listNeonIncidents } from "@neon/sdk";
+
+const report = await listNeonIncidents();
+// {
+//   status: "partial_disruption",
+//   updated_at: "2026-11-09T16:45:19.810Z",
+//   status_page_url: "https://neonstatus.com",
+//   incidents: [{ name, state, status, started_at, latest_update, components, regions, url, ... }],
+//   maintenance: [{ name, state: "active" | "pending", planned_start, planned_end, ... }],
+//   affected_components: [{ name: "Project/Branch Operations", status: "partial_disruption", regions: ["AWS us-east-2"] }],
+// }
+```
+
+Region names stay as neonstatus.com prints them (`AWS us-east-2`, `Azure eastus2`, `Global`). An unknown status code or a response that does not match the documented shape is a `NeonClientError`.
+
 ### `neon.auth`
 
 Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and stay raw-only).

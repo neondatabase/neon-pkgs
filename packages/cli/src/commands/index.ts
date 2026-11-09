@@ -20,6 +20,7 @@ import * as env from "./env.js";
 import * as feedback from "./feedback.js";
 import * as functions from "./functions.js";
 import * as git from "./git.js";
+import * as incidents from "./incidents.js";
 import * as init from "./init.js";
 import * as inspect from "./inspect.js";
 import * as ipAllow from "./ip_allow.js";
@@ -79,6 +80,7 @@ export default [
 	ask,
 	feedback,
 	docs,
+	incidents,
 	dataApi,
 	realtime,
 	functions,

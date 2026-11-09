@@ -73,6 +73,7 @@ describe("generated operation coverage", () => {
 			"auth.emailProvider.sendTest",
 			"organizations.invitations.create",
 			"organizations.spendingLimit.set",
+			"incidents.list",
 		]);
 		for (const id of toolIds) {
 			expect(

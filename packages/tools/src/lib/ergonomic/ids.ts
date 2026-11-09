@@ -163,6 +163,7 @@ export const toolIds = [
 	"regions.list",
 	"user.me",
 	"user.organizations",
+	"incidents.list",
 ] as const;
 
 export type NeonToolId = (typeof toolIds)[number];

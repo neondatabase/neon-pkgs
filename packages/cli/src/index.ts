@@ -90,6 +90,8 @@ const NO_SUBCOMMANDS_VERBS = [
 
 	"feedback",
 
+	"incidents",
+
 	"dev",
 
 	"deploy",

@@ -1,9 +1,13 @@
-import type {
-	NeonAuthEmailServerConfigResponse,
-	NeonAuthPluginConfigs,
+import {
+	listNeonIncidents,
+	NEON_STATUS_API_URL,
+	type NeonAuthEmailServerConfigResponse,
+	type NeonAuthPluginConfigs,
 } from "@neon/sdk";
 import * as z from "zod";
 import { decodeBase64 } from "../binary.js";
+import type { NeonTool, NeonToolExecutionContext } from "../operation.js";
+import { toToolResult } from "../result.js";
 import {
 	bindTool,
 	collectObjectList,
@@ -57,6 +61,46 @@ const withoutPluginSecrets = (
 		),
 	}),
 });
+
+const listIncidentsInputSchema = z.strictObject({});
+
+// Reads a public status page, so it takes no credential and ignores one if passed.
+const listIncidentsTool = (options: ToolClientOptions) =>
+	({
+		operationId: "incidents.list",
+		id: publishedId("incidents.list"),
+		title: "List Neon incidents",
+		description:
+			"List open Neon incidents and maintenance from neonstatus.com, and which components and regions are not operational. Needs no credentials. Call it when Neon requests fail unexpectedly or the user asks whether Neon is down. Incident names can be ticket ids; latest_update carries the details.",
+		inputSchema: listIncidentsInputSchema,
+		annotations: {
+			readOnlyHint: true,
+			destructiveHint: false,
+			idempotentHint: true,
+			openWorldHint: true,
+		},
+		requiresApproval: false,
+		metadata: {
+			method: "GET",
+			path: NEON_STATUS_API_URL,
+			stability: "stable",
+			deprecated: false,
+			tags: ["Status"],
+		},
+		async execute(input: unknown, context?: NeonToolExecutionContext) {
+			await listIncidentsInputSchema.parseAsync(input);
+			return toToolResult(
+				await listNeonIncidents({
+					...(options.fetch === undefined
+						? {}
+						: { fetch: options.fetch }),
+					...(context?.signal === undefined
+						? {}
+						: { signal: context.signal }),
+				}),
+			);
+		},
+	}) satisfies NeonTool<typeof listIncidentsInputSchema, "list_incidents">;
 
 export type ToolFactory = (typeof toolFactories)[NeonToolId];
 
@@ -2107,4 +2151,5 @@ export const toolFactories = {
 			generated: "getCurrentUserOrganizations",
 			run: (neon, _input, signal) => neon.user.organizations({ signal }),
 		}),
+	"incidents.list": listIncidentsTool,
 } satisfies Record<NeonToolId, (options: ToolClientOptions) => unknown>;

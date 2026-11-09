@@ -6,6 +6,7 @@ const unchanged = new Set([
 	"user.me",
 	"user.organizations",
 	"regions.list",
+	"incidents.list",
 	"apiKeys.list",
 	"projects.list",
 	"projects.count",

@@ -61,6 +61,7 @@ import {
 	isFeedbackCommand,
 	isFunctionsTemplateCommand,
 	isGitLocalCommand,
+	isIncidentsCommand,
 	isInspectDbUrl,
 	isMcpCommand,
 	isMcpOauth,
@@ -742,7 +743,8 @@ export const ensureAuth = async (
 	if (
 		isAskCommand(props) ||
 		isFeedbackCommand(props) ||
-		isDocsCommand(props)
+		isDocsCommand(props) ||
+		isIncidentsCommand(props)
 	) {
 		return;
 	}

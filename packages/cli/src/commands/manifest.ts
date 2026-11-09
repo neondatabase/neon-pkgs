@@ -218,6 +218,11 @@ export const commandManifest: CommandEntry[] = [
 		load: () => import("./docs.js"),
 	},
 	{
+		command: "incidents",
+		describe: "Show open Neon incidents and maintenance",
+		load: () => import("./incidents.js"),
+	},
+	{
 		command: "data-api",
 		describe: "Manage the Neon Data API for a database",
 		load: () => import("./data_api.js"),

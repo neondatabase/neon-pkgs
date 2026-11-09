@@ -31,6 +31,7 @@ import type {
 import { createNeonClient, type NeonClient } from "./client.js";
 import type { Page, Paginated } from "./paginate.js";
 import type { BranchConnection } from "./resources/branches.js";
+import type { NeonIncidentsReport } from "./resources/incidents.js";
 import type { ProjectConnection } from "./resources/projects.js";
 import type { NeonResult } from "./result.js";
 
@@ -834,4 +835,18 @@ it("paginated lists honour throwOnError on page() and all()", async () => {
 		expectTypeOf(branch).toEqualTypeOf<Branch>();
 		break;
 	}
+});
+
+it("incidents.list follows the client and per-call throwOnError", () => {
+	const neon = createNeonClient({ apiKey: "x" });
+	expectTypeOf(neon.incidents.list()).resolves.toEqualTypeOf<
+		NeonResult<NeonIncidentsReport>
+	>();
+	expectTypeOf(
+		neon.incidents.list({ throwOnError: true }),
+	).resolves.toEqualTypeOf<NeonIncidentsReport>();
+	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(
+		throwing.incidents.list(),
+	).resolves.toEqualTypeOf<NeonIncidentsReport>();
 });

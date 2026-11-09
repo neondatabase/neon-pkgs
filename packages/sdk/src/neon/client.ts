@@ -8,6 +8,7 @@ import { Branches } from "./resources/branches.js";
 import { Consumption } from "./resources/consumption.js";
 import { Credentials } from "./resources/credentials.js";
 import { Functions } from "./resources/functions.js";
+import { Incidents } from "./resources/incidents.js";
 import { Logs } from "./resources/logs.js";
 import { Operations } from "./resources/operations.js";
 import { Organizations } from "./resources/organizations.js";
@@ -49,6 +50,8 @@ export interface NeonClient<DThrow extends boolean = false> {
 	readonly organizations: Organizations<DThrow>;
 	readonly regions: Regions<DThrow>;
 	readonly user: User<DThrow>;
+	/** neonstatus.com. Reads a public status API and sends no API key. */
+	readonly incidents: Incidents<DThrow>;
 	/**
 	 * The underlying configured raw client. Pass it to any raw function
 	 * (`import { raw } from "@neon/sdk"`) to reuse this client's auth + base URL.
@@ -90,6 +93,7 @@ export function createNeonClient<Throw extends boolean = false>(
 		organizations: new Organizations<Throw>(ctx),
 		regions: new Regions<Throw>(ctx),
 		user: new User<Throw>(ctx),
+		incidents: new Incidents<Throw>(ctx),
 		client: ctx.client,
 	};
 }

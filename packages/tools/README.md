@@ -102,6 +102,14 @@ Paginated lists call `.all()` and return the item array. Do not pass a cursor; t
 const createBranch = createNeonTool("branches.createAndConnect", { apiKey });
 ```
 
+`incidents.list` (`list_incidents`) is the exception to the credential rule. It reads neonstatus.com, needs no credential, and never sends one, so it works for anonymous agents:
+
+```ts
+const incidents = createNeonTool("incidents.list", {});
+const { data } = await incidents.execute({});
+// { status: "operational", incidents: [], maintenance: [], affected_components: [], ... }
+```
+
 ## Writes and waiting
 
 Tools run with `waitForReadiness: true`. When a mutation response includes an `operations` array, the call waits until those operations finish. The default deadline is five minutes (`wait.timeoutMs`). Pass `wait: { timeoutMs: 30_000 }` on `createNeonTools` or `createNeonTool` to bound that. Set it below the host's own tool-call timeout, otherwise the host gives up first.
