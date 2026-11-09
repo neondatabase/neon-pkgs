@@ -25,6 +25,14 @@ async function toJsonSafe(value: unknown): Promise<unknown> {
 	if (Array.isArray(value)) {
 		return Promise.all(value.map(toJsonSafe));
 	}
+	// Matches JSON.stringify, so a Buffer (a Postgres bytea value) becomes { type: "Buffer", data: [...] }.
+	if (
+		typeof value === "object" &&
+		"toJSON" in value &&
+		typeof value.toJSON === "function"
+	) {
+		return toJsonSafe(value.toJSON());
+	}
 	if (typeof value === "object") {
 		const entries = await Promise.all(
 			Object.entries(value).map(async ([key, child]) => [
