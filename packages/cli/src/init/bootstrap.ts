@@ -12,6 +12,7 @@ import {
 import { dirname, join } from "node:path";
 import { gunzipSync } from "fflate";
 import YAML from "yaml";
+import { githubRequestHeaders } from "../utils/github_headers.js";
 
 /**
  * A scaffold template that lives in a subdirectory of a public GitHub repo we
@@ -150,23 +151,10 @@ export type TemplateFile =
 			target: string;
 	  };
 
-const githubToken = (): string =>
-	process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? "";
-
-// A token is never required for public templates, but we forward it when
-// present so the same code path works behind proxies that authenticate, and
-// (in future) for private template repos.
-const downloadHeaders = (): Record<string, string> => ({
-	// GitHub rejects a request with no User-Agent; the value is free-form and this
-	// one only has to name the client honestly.
-	"User-Agent": "neon",
-	...(githubToken() ? { Authorization: `Bearer ${githubToken()}` } : {}),
-});
-
 // The codeload host is overridable so the e2e tests can point the downloader at
 // a local server (the same trick `--api-host` uses to redirect the Neon API).
-const codeloadBase = (): string =>
-	process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD ?? "https://codeload.github.com";
+const codeloadBase = (env: NodeJS.ProcessEnv = process.env): string =>
+	env.NEON_BOOTSTRAP_GITHUB_CODELOAD ?? "https://codeload.github.com";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
@@ -261,7 +249,7 @@ export async function fetchTemplates(): Promise<BootstrapTemplate[]> {
 	for (const url of manifestUrls()) {
 		try {
 			const res = await fetch(url, {
-				headers: downloadHeaders(),
+				headers: githubRequestHeaders(url),
 				signal: AbortSignal.timeout(10_000),
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -434,10 +422,12 @@ export const selectTemplateFiles = (
 	return files;
 };
 
-const tarballUrl = (template: BootstrapTemplate): string => {
-	const { owner, repo, ref } = template.source;
-	return `${codeloadBase()}/${owner}/${repo}/tar.gz/${ref}`;
-};
+export const githubTarballUrl = (
+	owner: string,
+	repo: string,
+	ref: string,
+	env: NodeJS.ProcessEnv = process.env,
+): string => `${codeloadBase(env)}/${owner}/${repo}/tar.gz/${ref}`;
 
 const friendlyGithubError = (status: number, url: string): Error => {
 	if (status === 404) {
@@ -453,6 +443,37 @@ const friendlyGithubError = (status: number, url: string): Error => {
 	return new Error(`GitHub returned HTTP ${status} for ${url}.`);
 };
 
+export const downloadGithubTarball = async (
+	owner: string,
+	repo: string,
+	ref: string,
+	env: NodeJS.ProcessEnv = process.env,
+): Promise<Buffer> => {
+	const url = githubTarballUrl(owner, repo, ref, env);
+
+	let gzipped: Buffer;
+	try {
+		const res = await fetch(url, {
+			headers: githubRequestHeaders(url, env),
+			signal: AbortSignal.timeout(30_000),
+		});
+		if (!res.ok) throw friendlyGithubError(res.status, url);
+		gzipped = Buffer.from(await res.arrayBuffer());
+	} catch (err) {
+		throw err instanceof Error ? err : new Error(String(err));
+	}
+
+	try {
+		return Buffer.from(gunzipSync(new Uint8Array(gzipped)));
+	} catch (err) {
+		throw new Error(
+			`Failed to decompress the template archive from ${url}: ${
+				err instanceof Error ? err.message : String(err)
+			}`,
+		);
+	}
+};
+
 /**
  * Download a template and resolve it to the exact set of files to write. The
  * entire subtree is captured in one tarball request, so the copy is atomically
@@ -462,32 +483,8 @@ const friendlyGithubError = (status: number, url: string): Error => {
 export const downloadTemplate = async (
 	template: BootstrapTemplate,
 ): Promise<TemplateFile[]> => {
-	const url = tarballUrl(template);
-
-	let gzipped: Buffer;
-	try {
-		const res = await fetch(url, {
-			headers: downloadHeaders(),
-			signal: AbortSignal.timeout(30_000),
-		});
-		if (!res.ok) throw friendlyGithubError(res.status, url);
-		gzipped = Buffer.from(await res.arrayBuffer());
-	} catch (err) {
-		throw err instanceof Error ? err : new Error(String(err));
-	}
-
-	let tar: Buffer;
-	try {
-		tar = Buffer.from(gunzipSync(new Uint8Array(gzipped)));
-	} catch (err) {
-		throw new Error(
-			`Failed to decompress the template archive from ${url}: ${
-				err instanceof Error ? err.message : String(err)
-			}`,
-		);
-	}
-
 	const { owner, repo, ref, subdir } = template.source;
+	const tar = await downloadGithubTarball(owner, repo, ref);
 	const files = selectTemplateFiles(parseTar(tar), subdir);
 	if (files.length === 0) {
 		throw new Error(
