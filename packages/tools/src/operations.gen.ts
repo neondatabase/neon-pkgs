@@ -5788,8 +5788,8 @@ export const operationFactories = {
 				title: "Update Neon Auth logs export setting",
 				description: "Enables or disables exporting Neon Auth events for the branch to Neon Platform logs.",
 				inputSchema: z.strictObject({
-	"project_id": zod.zUpdateNeonAuthLogsExportPath.shape["project_id"],
-	"branch_id": zod.zUpdateNeonAuthLogsExportPath.shape["branch_id"],
+	"project_id": zod.zUpdateNeonAuthLogsExportPath.shape["project_id"].describe("Project id."),
+	"branch_id": zod.zUpdateNeonAuthLogsExportPath.shape["branch_id"].describe("A br-... id, not a name."),
 	"enabled": zod.zUpdateNeonAuthLogsExportBody.shape["enabled"],
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
