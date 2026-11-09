@@ -1,5 +1,11 @@
 # @neon/tools
 
+## 2.14.2
+
+### Patch Changes
+
+- 6663f13: A `Buffer` in a tool result, such as a Postgres `bytea` column from `sql.run`, is serialized the way `JSON.stringify` does (`{ type: "Buffer", data: [...] }`) instead of as an object with numeric keys.
+
 ## 2.14.1
 
 ### Patch Changes
