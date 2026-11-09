@@ -34,10 +34,11 @@ export interface RealtimeCollectionUtils extends UtilsRecord {
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
 	 * @param timeout - Optional maximum wait in milliseconds, including any wait
 	 * for synchronization to start. By default, the promise remains pending
-	 * until the transaction arrives, synchronization stops terminally, or the
-	 * collection is cleaned up.
+	 * until the transaction arrives, synchronization stops terminally, or an
+	 * active synchronization run is cleaned up.
 	 * @throws If the transaction ID or timeout is invalid, a supplied timeout
-	 * elapses, synchronization stops terminally, or the collection is cleaned up.
+	 * elapses, synchronization stops terminally, or an active synchronization
+	 * run is cleaned up.
 	 */
 	awaitTxId(txid: string, timeout?: number): Promise<boolean>;
 }

@@ -119,7 +119,8 @@ const todos = createCollection(realtimeCollectionOptions({
 response. It resolves after covered row changes enter TanStack DB's causal sync
 queue and waits indefinitely by default. Pass an optional timeout in milliseconds
 to bound the wait. Pending and subsequent waits reject if synchronization stops
-terminally; collection cleanup also rejects an outstanding wait.
+terminally; cleanup of an active synchronization run also rejects an outstanding
+wait.
 
 If the collection hasn't started syncing yet, `awaitTxId()` waits for it to
 start, within the same timeout. It doesn't start synchronization itself.
