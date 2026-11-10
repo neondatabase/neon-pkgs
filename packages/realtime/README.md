@@ -280,9 +280,32 @@ The client opens one WebSocket lazily and multiplexes subscriptions. Lifecycle
 states are `connecting`, `live`, `stale`, `error`, and `closed`. During
 initial connection, reconnection, or resubscription, existing materialized data
 remains available with status `connecting`. `stale` specifically means that the
-capability has expired and the low-level client is waiting for the application
-to call `renew()`. Recoverable connection failures retry with capped jittered
-backoff until the connection recovers or the client is closed.
+client is waiting for the application to call `renew()` with a replacement
+capability: the previous one expired, or the client needs a fresh one after
+the backend session ended (below). Recoverable connection failures retry with
+capped jittered backoff until the connection recovers or the client is closed.
+
+### Credential changes
+
+Realtime checks the Postgres login inside each envelope, so the client recovers
+from two credential events on its own:
+
+- **Backend session lost.** A password or role change ends Realtime's session
+  for the database, and the server reports `backend_session_lost` before the
+  connection closes. The client reconnects and resubscribes with the
+  envelope it holds, or with a fresh one if that has 30 seconds or less left.
+  If the resubscribe gets `authorization_failed`, the subscription becomes
+  `stale` for one fresh envelope and one retry. A second `authorization_failed`
+  is final and reaches the application as the subscription's error.
+- **`renewal_failed`.** A renewal must keep its subscription's scheme, so the
+  first renewal after the backend moves from the Realtime secret to Postgres
+  credentials fails. The client resubscribes once with the envelope that
+  renewal carried. If that fails too, the error reaches the application.
+
+React's `useLiveQuery()`, TanStack DB collections and direct subscriptions
+supply fresh envelopes through `refreshQuery`, which runs as soon as a
+subscription becomes `stale`. With the low-level client, call `renew()` when
+the state turns `stale`.
 
 ### React Native WebSocket origins
 

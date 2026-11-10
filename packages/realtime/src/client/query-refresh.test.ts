@@ -417,6 +417,104 @@ describe("QueryRefreshController", () => {
 	});
 });
 
+describe("QueryRefreshController on a stale subscription", () => {
+	function observableSubscription() {
+		let current: LiveQueryState = { status: "live", error: undefined };
+		const listeners = new Set<(state: LiveQueryState) => void>();
+		const subscription = Object.assign(
+			{} as RawLiveQuerySubscription<unknown>,
+			{
+				getState: () => current,
+				onStateChange: (listener: (state: LiveQueryState) => void) => {
+					listeners.add(listener);
+					return () => listeners.delete(listener);
+				},
+			},
+		);
+		const setState = (status: LiveQueryState["status"]) => {
+			current = { status, error: undefined } as LiveQueryState;
+			for (const listener of listeners) listener(current);
+		};
+		return { subscription, setState, listeners };
+	}
+
+	it("refreshes as soon as the subscription becomes stale", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const { subscription, setState } = observableSubscription();
+		const renewSubscription = vi.fn(async () => {});
+		const refreshQuery = vi.fn(async () => query(120));
+		const controller = new QueryRefreshController({
+			query: query(60),
+			refreshQuery,
+			renewSubscription,
+			onRefreshExhausted: vi.fn(),
+			subscription,
+		});
+		controller.start();
+
+		setState("stale");
+		expect(refreshQuery).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(refreshQuery).toHaveBeenCalledOnce();
+		expect(renewSubscription).toHaveBeenCalledWith(query(120));
+		controller.stop();
+	});
+
+	it("refreshes for a stale subscription at most once per second", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const { subscription, setState } = observableSubscription();
+		const refreshQuery = vi.fn(async () => query(Date.now() / 1_000 + 60));
+		const controller = new QueryRefreshController({
+			query: query(60),
+			refreshQuery,
+			renewSubscription: async () => {},
+			onRefreshExhausted: vi.fn(),
+			subscription,
+		});
+		controller.start();
+
+		setState("stale");
+		await vi.advanceTimersByTimeAsync(0);
+		setState("connecting");
+		setState("stale");
+		await vi.advanceTimersByTimeAsync(500);
+		expect(refreshQuery).toHaveBeenCalledOnce();
+		await vi.advanceTimersByTimeAsync(500);
+		expect(refreshQuery).toHaveBeenCalledTimes(2);
+		controller.stop();
+	});
+
+	it("ignores stale while stopped and follows a replaced subscription", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const first = observableSubscription();
+		const second = observableSubscription();
+		const refreshQuery = vi.fn(async () => query(120));
+		const controller = new QueryRefreshController({
+			query: query(60),
+			refreshQuery,
+			renewSubscription: async () => {},
+			onRefreshExhausted: vi.fn(),
+			subscription: first.subscription,
+		});
+
+		first.setState("stale");
+		await vi.advanceTimersByTimeAsync(0);
+		expect(refreshQuery).not.toHaveBeenCalled();
+
+		controller.setSubscription(second.subscription);
+		expect(first.listeners.size).toBe(0);
+		controller.start();
+		second.setState("stale");
+		await vi.advanceTimersByTimeAsync(0);
+		expect(refreshQuery).toHaveBeenCalledOnce();
+		controller.stop();
+	});
+});
+
 function statefulSubscription(state: {
 	readonly status: "connecting" | "live";
 }): RawLiveQuerySubscription<unknown> & {

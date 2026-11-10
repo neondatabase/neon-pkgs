@@ -35,9 +35,14 @@ const SOCKET_CLOSED = 3;
 const SOCKET_CLOSE_GRACE_MS = 1_000;
 const NORMAL_CLOSE = 1_000;
 const APPLICATION_CLOSE = 4_000;
+// After a backend session ends, a held envelope with less life left than this
+// is replaced before resubscribing: it would soon need renewing anyway.
+const SESSION_RECOVERY_MIN_LIFETIME_MS = 30_000;
 
 export interface ConnectionSealedQuery {
 	readonly capability: string;
+	/** Capability expiry as Unix milliseconds, when known. */
+	readonly expiresAt?: number;
 }
 
 export interface ConnectionCallbacks {
@@ -102,6 +107,14 @@ class ManagedSubscription {
 	liveId?: string;
 	renewing?: Renewal;
 	queuedRenewals: Renewal[] = [];
+	/**
+	 * Set when the backend session ends, until re-admission. A password
+	 * change ends the session, so the next `authorization_failed` gets one
+	 * retry with a fresh envelope before it reaches the app.
+	 */
+	sessionRecovery?: { freshRetryUsed: boolean };
+	/** Set after `renewal_failed` until re-admission: one resubscribe only. */
+	resubscribedAfterRenewalFailure = false;
 
 	constructor(
 		public query: ConnectionSealedQuery,
@@ -512,6 +525,8 @@ export class ConnectionCoordinator {
 		}
 		subscription.liveId = message.live_id;
 		subscription.acceptedCapability = acceptedCapability;
+		subscription.sessionRecovery = undefined;
+		subscription.resubscribedAfterRenewalFailure = false;
 		this.liveSubscriptions.set(message.live_id, subscription);
 		subscription.callbacks.admitted(message.columns);
 		this.reconciler.add({
@@ -549,7 +564,14 @@ export class ConnectionCoordinator {
 			this.retrySubscription(subscription, message);
 			return;
 		}
-		const replacementRequired = requiresReplacementQuery(message.code);
+		const recovery = subscription.sessionRecovery;
+		const retryWithFreshQuery =
+			message.code === "authorization_failed" &&
+			recovery !== undefined &&
+			!recovery.freshRetryUsed;
+		if (recovery && retryWithFreshQuery) recovery.freshRetryUsed = true;
+		const replacementRequired =
+			retryWithFreshQuery || requiresReplacementQuery(message.code);
 		const error = new ConnectionCoordinatorError(
 			message.code,
 			replacementRequired,
@@ -557,6 +579,8 @@ export class ConnectionCoordinator {
 			{ sqlState: message.sqlstate },
 		);
 		if (replacementRequired) {
+			// The held envelope may carry a password that just changed. Wait in
+			// `stale` for one from the app, unless a newer one is already here.
 			this.awaitReplacementQuery(
 				subscription,
 				subscription.requestedCapability,
@@ -608,6 +632,17 @@ export class ConnectionCoordinator {
 			throw new ProtocolError("unknown subscription error live ID");
 		if (code === "backend_overloaded" || code === "upstream_cancelled") {
 			this.retrySubscription(subscription, message);
+			return;
+		}
+		if (
+			code === "renewal_failed" &&
+			!subscription.resubscribedAfterRenewalFailure
+		) {
+			// A renewal must use its subscription's scheme, so after a switch
+			// from the secret to envelopes the renewal fails. Resubscribe once
+			// with the envelope the renewal carried.
+			subscription.resubscribedAfterRenewalFailure = true;
+			this.resubscribeWithLatestQuery(subscription, code);
 			return;
 		}
 		const replacementRequired = requiresReplacementQuery(code);
@@ -666,17 +701,60 @@ export class ConnectionCoordinator {
 			"internal_error",
 		].includes(code);
 		if (retryable) {
-			this.pendingConnectionError = new ConnectionCoordinatorError(
-				code,
-				true,
-				message,
-			);
+			const error = new ConnectionCoordinatorError(code, true, message);
+			if (code === "backend_session_lost")
+				this.beginSessionRecovery(error);
+			this.pendingConnectionError = error;
 			this.closeSocket(APPLICATION_CLOSE, message);
 		} else {
 			this.failConnection(
 				new ConnectionCoordinatorError(code, false, message),
 			);
 		}
+	}
+
+	/**
+	 * The backend session ended, as it does after a password change. Arm one
+	 * fresh-envelope retry per subscription, and replace held envelopes that
+	 * expire within 30 seconds before resubscribing.
+	 */
+	private beginSessionRecovery(error: ConnectionCoordinatorError): void {
+		const now = Date.now();
+		for (const subscription of [...this.managedSubscriptions]) {
+			if (
+				subscription.state !== "active" &&
+				subscription.state !== "awaiting_query"
+			)
+				continue;
+			subscription.sessionRecovery = { freshRetryUsed: false };
+			const expiresAt = subscription.query.expiresAt;
+			if (
+				subscription.state === "active" &&
+				expiresAt !== undefined &&
+				expiresAt - now <= SESSION_RECOVERY_MIN_LIFETIME_MS
+			) {
+				this.awaitReplacementQuery(
+					subscription,
+					subscription.query.capability,
+					error,
+				);
+			}
+		}
+	}
+
+	/** Drop the live wire subscription and subscribe again at once. */
+	private resubscribeWithLatestQuery(
+		subscription: ManagedSubscription,
+		code: string,
+	): void {
+		if (subscription.liveId) {
+			this.liveSubscriptions.delete(subscription.liveId);
+			this.reconciler.remove(subscription.liveId);
+		}
+		subscription.resetWire();
+		subscription.events.retryScheduled(code, 1, 0);
+		subscription.callbacks.connecting();
+		this.sendSubscribe(subscription);
 	}
 
 	private sendSubscribe(subscription: ManagedSubscription): void {

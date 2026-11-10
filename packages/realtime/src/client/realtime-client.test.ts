@@ -2019,6 +2019,366 @@ describe("RealtimeClient", () => {
 	});
 });
 
+describe("RealtimeClient credential recovery", () => {
+	const COLUMNS = [
+		{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+		{ name: "title", type_oid: 25, typmod: -1, codec: "pg_text" },
+	];
+
+	/** A client subscription refreshed the way the framework integrations do. */
+	function refreshedSubscription(
+		initial: SealedLiveQuery<MessageRow>,
+		refreshQuery: () => Promise<SealedLiveQuery<MessageRow>>,
+	) {
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(initial);
+		const states: string[] = [];
+		subscription.onStateChange((state) => states.push(state.status));
+		const refresh = new QueryRefreshController({
+			query: initial,
+			refreshQuery,
+			renewSubscription: (replacement) => subscription.renew(replacement),
+			onRefreshExhausted: () => undefined,
+			subscription,
+		});
+		refresh.start();
+		return { client, subscription, states, refresh };
+	}
+
+	function subscribes(socket: FakeWebSocket) {
+		return socket.sent.filter((message) => message.type === "subscribe");
+	}
+
+	function lastSubscribe(socket: FakeWebSocket) {
+		return defined(subscribes(socket).at(-1)) as {
+			readonly request_id: string;
+			readonly authorization: string;
+		};
+	}
+
+	/** Lose the backend session, then reconnect and receive `ready`. */
+	async function loseSession(socket: FakeWebSocket): Promise<FakeWebSocket> {
+		socket.receive({
+			type: "connection_error",
+			code: "backend_session_lost",
+			message: "backend session ended",
+		});
+		await vi.advanceTimersByTimeAsync(1_000);
+		const next = defined(FakeWebSocket.instances.at(-1));
+		expect(next).not.toBe(socket);
+		next.open();
+		next.receive({ type: "ready" });
+		return next;
+	}
+
+	it("after a password change, retries once with a fresh envelope, then reports authorization_failed", async () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const refreshQuery = vi.fn(async () => query("fresh, old password"));
+		const { client, subscription, states } = refreshedSubscription(
+			query("held"),
+			refreshQuery,
+		);
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+		expect(subscription.getState().status).toBe("live");
+
+		// ALTER ROLE ... PASSWORD ends the private session on the replica.
+		const reconnected = await loseSession(socket);
+
+		// The held envelope has more than 30 s left, so it is reused first.
+		const resubscribe = lastSubscribe(reconnected);
+		expect(resubscribe.authorization).toBe(query("held").capability);
+		reconnected.receive({
+			type: "subscribe_rejected",
+			request_id: resubscribe.request_id,
+			code: "authorization_failed",
+			message: "password authentication failed",
+		});
+		expect(subscription.getState().status).toBe("stale");
+
+		// One fresh envelope from the app, and one retry with it.
+		await vi.advanceTimersByTimeAsync(0);
+		expect(refreshQuery).toHaveBeenCalledTimes(1);
+		const retry = lastSubscribe(reconnected);
+		expect(retry.authorization).toBe(
+			query("fresh, old password").capability,
+		);
+		reconnected.receive({
+			type: "subscribe_rejected",
+			request_id: retry.request_id,
+			code: "authorization_failed",
+			message: "password authentication failed",
+		});
+
+		// The second failure is the app's to handle.
+		expect(subscription.getSnapshot()).toMatchObject({
+			status: "error",
+			error: { code: "authorization_failed", retryable: false },
+			data: [{ id: 1, title: "before" }],
+		});
+		await vi.advanceTimersByTimeAsync(120_000);
+		expect(refreshQuery).toHaveBeenCalledTimes(1);
+		expect(subscribes(reconnected)).toHaveLength(2);
+		expect(states).toEqual([
+			"live",
+			"connecting",
+			"stale",
+			"connecting",
+			"error",
+		]);
+		client.close();
+	});
+
+	it("recovers when the fresh envelope carries the new password", async () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const refreshQuery = vi.fn(async () => query("new password"));
+		const { client, subscription } = refreshedSubscription(
+			query("held"),
+			refreshQuery,
+		);
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+
+		const reconnected = await loseSession(socket);
+		reconnected.receive({
+			type: "subscribe_rejected",
+			request_id: lastSubscribe(reconnected).request_id,
+			code: "authorization_failed",
+			message: "password authentication failed",
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		const retry = lastSubscribe(reconnected);
+		expect(retry.authorization).toBe(query("new password").capability);
+		reconnected.receive({
+			type: "subscribed",
+			request_id: retry.request_id,
+			live_id: "42",
+			epoch: "2",
+			first_sequence: "1",
+			columns: COLUMNS,
+		});
+		baselineSync(reconnected, "after", "42", "2");
+
+		expect(subscription.getSnapshot()).toMatchObject({
+			status: "live",
+			data: [{ id: 1, title: "after" }],
+		});
+		expect(refreshQuery).toHaveBeenCalledTimes(1);
+		client.close();
+	});
+
+	it("fetches a fresh envelope first when the held one has 30 s or less left", async () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const held = { ...query("held"), expiresAt: Date.now() + 30_000 };
+		const refreshQuery = vi.fn(async () => query("fresh"));
+		const { client, subscription } = refreshedSubscription(
+			held,
+			refreshQuery,
+		);
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+
+		socket.receive({
+			type: "connection_error",
+			code: "backend_session_lost",
+			message: "backend session ended",
+		});
+		expect(subscription.getState().status).toBe("stale");
+		await vi.advanceTimersByTimeAsync(0);
+		expect(refreshQuery).toHaveBeenCalledTimes(1);
+		const reconnected = defined(FakeWebSocket.instances.at(-1));
+		expect(reconnected).not.toBe(socket);
+		reconnected.open();
+		reconnected.receive({ type: "ready" });
+
+		expect(subscribes(reconnected)).toHaveLength(1);
+		expect(lastSubscribe(reconnected).authorization).toBe(
+			query("fresh").capability,
+		);
+		client.close();
+	});
+
+	it("keeps authorization_failed terminal when no session was lost", async () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const refreshQuery = vi.fn(async () => query("fresh"));
+		const { client, subscription } = refreshedSubscription(
+			query("held"),
+			refreshQuery,
+		);
+		const socket = defined(FakeWebSocket.instances.at(-1));
+		socket.open();
+		socket.receive({ type: "ready" });
+		socket.receive({
+			type: "subscribe_rejected",
+			request_id: lastSubscribe(socket).request_id,
+			code: "authorization_failed",
+			message: "password authentication failed",
+		});
+
+		expect(subscription.getState()).toMatchObject({
+			status: "error",
+			error: { code: "authorization_failed" },
+		});
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(refreshQuery).not.toHaveBeenCalled();
+		client.close();
+	});
+
+	/** A legacy envelope whose scheduled refresh runs after 5 s. */
+	function shortLegacyQuery() {
+		return { ...query("legacy"), expiresAt: Date.now() + 15_000 };
+	}
+
+	function lastRenew(socket: FakeWebSocket) {
+		return socket.sent.filter((message) => message.type === "renew").at(-1);
+	}
+
+	it("after a scheme switch fails a renewal, resubscribes once with the new envelope", async () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const refreshQuery = vi.fn(async () => envelopeQuery("v3"));
+		const { client, subscription, states } = refreshedSubscription(
+			shortLegacyQuery(),
+			refreshQuery,
+		);
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+
+		// The scheduled refresh returns a v3 envelope for a subscription that
+		// started with the legacy secret. The proxy refuses the scheme switch.
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(refreshQuery).toHaveBeenCalledTimes(1);
+		expect(lastRenew(socket)).toEqual({
+			type: "renew",
+			live_id: "41",
+			authorization: envelopeQuery("v3").capability,
+		});
+		socket.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code: "renewal_failed",
+			message: "renewal must keep the subscription's scheme",
+		});
+
+		expect(subscription.getState().status).toBe("connecting");
+		expect(lastSubscribe(socket)).toEqual({
+			type: "subscribe",
+			request_id: "2",
+			authorization: envelopeQuery("v3").capability,
+		});
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "2",
+			first_sequence: "1",
+			columns: COLUMNS,
+		});
+		baselineSync(socket, "after", "42", "2");
+
+		expect(subscription.getSnapshot()).toMatchObject({
+			status: "live",
+			data: [{ id: 1, title: "after" }],
+		});
+		expect(states).toEqual(["live", "connecting", "live"]);
+		expect(refreshQuery).toHaveBeenCalledTimes(1);
+		expect(subscribes(socket)).toHaveLength(2);
+		client.close();
+	});
+
+	it("reports the error when the resubscribe after renewal_failed also fails", async () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const refreshQuery = vi.fn(async () => envelopeQuery("v3"));
+		const { client, subscription } = refreshedSubscription(
+			shortLegacyQuery(),
+			refreshQuery,
+		);
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+		await vi.advanceTimersByTimeAsync(5_000);
+		socket.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code: "renewal_failed",
+			message: "renewal must keep the subscription's scheme",
+		});
+		socket.receive({
+			type: "subscribe_rejected",
+			request_id: lastSubscribe(socket).request_id,
+			code: "authorization_failed",
+			message: "password authentication failed",
+		});
+
+		expect(subscription.getState()).toMatchObject({
+			status: "error",
+			error: { code: "authorization_failed", retryable: false },
+		});
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(subscribes(socket)).toHaveLength(2);
+		expect(refreshQuery).toHaveBeenCalledTimes(1);
+		client.close();
+	});
+
+	it("allows one resubscribe per renewal failure, again after re-admission", async () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const { client, subscription } = refreshedSubscription(
+			shortLegacyQuery(),
+			async () => envelopeQuery("v3"),
+		);
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+		await vi.advanceTimersByTimeAsync(5_000);
+		socket.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code: "renewal_failed",
+			message: "renewal failed",
+		});
+		socket.receive({
+			type: "subscribed",
+			request_id: lastSubscribe(socket).request_id,
+			live_id: "42",
+			epoch: "2",
+			first_sequence: "1",
+			columns: COLUMNS,
+		});
+		socket.receive({
+			type: "subscription_error",
+			live_id: "42",
+			code: "renewal_failed",
+			message: "renewal failed",
+		});
+
+		expect(subscribes(socket)).toHaveLength(3);
+		expect(subscription.getState().status).toBe("connecting");
+		client.close();
+	});
+});
+
+function envelopeQuery(
+	payload: string,
+	queryFingerprint = QUERY_FINGERPRINT,
+): SealedLiveQuery<MessageRow> {
+	const header = Buffer.from(
+		JSON.stringify({
+			alg: "HPKE-P256-SHA256-A256GCM",
+			kid: "V0jKYYUsyVy0kRrL17dVJA",
+			v: 3,
+		}),
+	).toString("base64url");
+	return {
+		capability: `${header}.${Buffer.from(`enc:${payload}`).toString("base64url")}..${Buffer.from(payload).toString("base64url")}.`,
+		queryFingerprint,
+		expiresAt: Date.now() + 60_000,
+	};
+}
+
 function useFakeWebSocket(): void {
 	vi.stubGlobal("WebSocket", FakeWebSocket);
 }
