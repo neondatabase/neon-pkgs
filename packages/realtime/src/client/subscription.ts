@@ -337,6 +337,7 @@ export class Subscription<Row>
 			false,
 			becameLive ? () => this.events.live() : undefined,
 		);
+		if (this.closed) return;
 		if (this.materialized) this.notify(this.changeListeners, this.snapshot);
 	}
 
