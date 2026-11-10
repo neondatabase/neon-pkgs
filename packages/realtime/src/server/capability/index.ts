@@ -1,3 +1,11 @@
+export {
+	createLoginSource,
+	type DatabaseUrlParts,
+	type OidcTokenSource,
+	parseDatabaseUrl,
+	validateEnvelopeCredential,
+	validateEnvelopeUser,
+} from "./credentials.js";
 export type { EnvelopeLogin } from "./envelope.js";
 export { queryFingerprint } from "./fingerprint.js";
 export {

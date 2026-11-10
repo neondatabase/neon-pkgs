@@ -179,20 +179,24 @@ async function usableKey(entry: unknown): Promise<ResolvedKey | undefined> {
 export async function importRealtimePublicKey(
 	key: RealtimePublicKey,
 ): Promise<EnvelopeKey> {
-	if (!KID_PATTERN.test(key.kid)) throw new Error("Invalid Realtime key ID");
-	const x = decodeBase64UrlStrict(key.x);
-	const y = decodeBase64UrlStrict(key.y);
-	if (x.length !== 32 || y.length !== 32) {
+	if (typeof key.kid !== "string" || !KID_PATTERN.test(key.kid)) {
+		throw new Error("Invalid Realtime key ID");
+	}
+	try {
+		const x = decodeBase64UrlStrict(key.x);
+		const y = decodeBase64UrlStrict(key.y);
+		if (x.length !== 32 || y.length !== 32) throw new Error();
+		const point = new Uint8Array(65);
+		point[0] = 0x04;
+		point.set(x, 1);
+		point.set(y, 33);
+		return {
+			kid: key.kid,
+			publicKey: await envelopeSuite().kem.deserializePublicKey(point),
+		};
+	} catch {
 		throw new Error("Invalid Realtime public key");
 	}
-	const point = new Uint8Array(65);
-	point[0] = 0x04;
-	point.set(x, 1);
-	point.set(y, 33);
-	return {
-		kid: key.kid,
-		publicKey: await envelopeSuite().kem.deserializePublicKey(point),
-	};
 }
 
 /** Honour `max-age` up to 600 s; cache nothing for `no-store` or no header. */

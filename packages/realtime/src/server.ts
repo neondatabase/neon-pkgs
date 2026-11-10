@@ -5,8 +5,18 @@
  */
 
 export { encodeTextParameter } from "./server/adapter.js";
+export type {
+	FetchRealtimeKeyOptions,
+	RealtimePublicKey,
+	SealRealtimeEnvelopeOptions,
+} from "./server/envelope.js";
+export {
+	fetchRealtimeKey,
+	sealRealtimeEnvelope,
+} from "./server/envelope.js";
 export { isTypedRawSqlParameter } from "./server/raw-parameter.js";
 export type {
+	OidcTokenSource,
 	PostgresParameterHelpers,
 	PreparedLiveQuery,
 	PreparedLiveQueryParameter,
@@ -14,8 +24,12 @@ export type {
 	RawSqlQuery,
 	RealtimeAdapter,
 	RealtimeAdapterSource,
+	RealtimeDatabaseUrlOptions,
 	RealtimeDirectServer,
 	RealtimeDirectServerOptions,
+	RealtimeEndpointOptions,
+	RealtimeFetch,
+	RealtimeSecretOptions,
 	RealtimeServer,
 	RealtimeServerOptions,
 	SealedLiveQuery,
