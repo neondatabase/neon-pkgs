@@ -36,13 +36,35 @@ export function parseDatabaseUrl(databaseUrl: string): DatabaseUrlParts {
 	}
 	// Like libpq, query parameters override the userinfo.
 	const user =
-		url.searchParams.get("user") ?? decodeComponent(url.username, "user");
+		queryParameter(url, "user") ?? decodeComponent(url.username, "user");
 	const password =
-		url.searchParams.get("password") ??
+		queryParameter(url, "password") ??
 		decodeComponent(url.password, "password");
 	const path = decodeComponent(url.pathname.replace(/^\//, ""), "database");
-	const database = url.searchParams.get("dbname") ?? (path || undefined);
+	const database = queryParameter(url, "dbname") ?? (path || undefined);
 	return { user, password, ...(database ? { database } : {}) };
+}
+
+/**
+ * A query parameter as libpq reads it: percent-decoded once, with `+` kept
+ * literally, and the last occurrence winning. `URLSearchParams` would read
+ * `+` as a space and seal a different password.
+ */
+function queryParameter(url: URL, name: string): string | undefined {
+	let value: string | undefined;
+	for (const pair of url.search.replace(/^\?/, "").split("&")) {
+		const separator = pair.indexOf("=");
+		if (separator === -1) continue;
+		let key: string;
+		try {
+			key = decodeURIComponent(pair.slice(0, separator));
+		} catch {
+			continue;
+		}
+		if (key === name)
+			value = decodeComponent(pair.slice(separator + 1), name);
+	}
+	return value;
 }
 
 /** The first release accepts only `neondb_owner`; say so before sealing. */

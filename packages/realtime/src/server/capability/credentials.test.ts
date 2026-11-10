@@ -69,6 +69,40 @@ describe("Realtime database URL", () => {
 		).toEqual({ user: "neondb_owner", password: "pw", database: "app" });
 	});
 
+	it.each([
+		["the userinfo", pgUrl("neondb_owner:p+a%2Bb", "host/neondb")],
+		[
+			"the query",
+			"postgresql://neondb_owner@host/neondb?sslmode=require&password=p+a%2Bb",
+		],
+	])("keeps a literal + and decodes %%2B once in %s, as libpq does", (_, databaseUrl) => {
+		expect(parseDatabaseUrl(databaseUrl).password).toBe("p+a+b");
+	});
+
+	it("reads user and dbname from the query with libpq's decoding", () => {
+		expect(
+			parseDatabaseUrl(
+				"postgresql://host/ignored?user=neondb%5Fowner&dbname=my+db%2B1",
+			),
+		).toEqual({ user: "neondb_owner", password: "", database: "my+db+1" });
+	});
+
+	it("takes the last occurrence of a query parameter, as libpq does", () => {
+		expect(
+			parseDatabaseUrl(
+				"postgresql://neondb_owner@host/neondb?password=first&password=last",
+			).password,
+		).toBe("last");
+	});
+
+	it("ignores query parameters it does not use", () => {
+		expect(
+			parseDatabaseUrl(
+				"postgresql://neondb_owner@host/neondb?ssl&options=%ZZ&%ZZ=1",
+			),
+		).toEqual({ user: "neondb_owner", password: "", database: "neondb" });
+	});
+
 	it("omits the database when the URL has none", () => {
 		expect(parseDatabaseUrl(pgUrl("neondb_owner:pw", "host"))).toEqual({
 			user: "neondb_owner",
@@ -80,6 +114,7 @@ describe("Realtime database URL", () => {
 		"not a url",
 		"https://neondb_owner:test-password@host/neondb",
 		pgUrl("neondb_owner:%E0%A4%A", "host/neondb"),
+		"postgresql://neondb_owner@host/neondb?password=%E0%A4%A",
 	])("rejects %s without echoing it", (databaseUrl) => {
 		let message = "";
 		try {
