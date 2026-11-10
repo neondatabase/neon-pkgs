@@ -40,8 +40,8 @@ const messages = pgTable("messages", {
 
 const db = drizzle(process.env.DATABASE_URL!);
 const realtime = createRealtime({
-  secret: process.env.NEON_REALTIME_SECRET!,
-  db: "app",
+  databaseUrl: process.env.DATABASE_URL!,
+  url: process.env.NEON_REALTIME_URL!,
   adapter: drizzleAdapter(),
 });
 

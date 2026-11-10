@@ -6,6 +6,10 @@ parameterized query into a short-lived encrypted bearer capability. The
 browser presents that capability over a multiplexed WebSocket and receives an
 authoritative result followed by atomic change batches.
 
+The capability is an envelope sealed to the branch's public key. It carries
+the query and the backend's Postgres login, which Realtime checks with a real
+Postgres login. The browser can neither read nor change it.
+
 > **Status:** Realtime is experimental. Its APIs and wire protocol may change
 > before a stable release.
 
@@ -16,11 +20,12 @@ npm install @neon/realtime
 ```
 
 > **Requirements:** Node.js >= 20.19 for backend sealing. You also need a
-> PostgreSQL database connected to a compatible Realtime endpoint, a server-only
-> Realtime secret, and the endpoint WebSocket URL.
+> PostgreSQL database connected to a compatible Realtime endpoint, its
+> connection string (`DATABASE_URL`) for the `neondb_owner` role, and the
+> endpoint WebSocket URL (`NEON_REALTIME_URL`).
 
-The package has no runtime dependencies. Import browser and backend code from
-their dedicated entry points so server secrets cannot enter a browser bundle:
+Import browser and backend code from their dedicated entry points so server
+credentials cannot enter a browser bundle:
 
 ```ts
 import { createRealtimeClient } from "@neon/realtime/client";
@@ -47,8 +52,8 @@ interface Message {
 }
 
 const realtime = createRealtime({
-  secret: process.env.NEON_REALTIME_SECRET!,
-  db: "app",
+  databaseUrl: process.env.DATABASE_URL!,
+  url: process.env.NEON_REALTIME_URL!,
 });
 
 app.post("/api/messages/live", async (request, response) => {
@@ -64,7 +69,8 @@ app.post("/api/messages/live", async (request, response) => {
 });
 ```
 
-`seal()` performs local Web Crypto work and makes no network request. The
+`seal()` performs local Web Crypto work. Its only network request fetches the
+branch's public key, which it caches (see [Credentials](#credentials)). The
 application remains responsible for authentication, input validation, access
 checks, and putting every trusted caller-specific restriction into the query.
 Anyone holding the returned capability can subscribe to that exact query until
@@ -77,9 +83,47 @@ errors can expose schema, table, and column names, so never enable this for
 untrusted clients in production. When PostgreSQL supplies a SQLSTATE, it is
 available as `error.sqlState` on the subscription error.
 
-`db` is embedded in each encrypted capability. The first capability accepted
+The database is embedded in each encrypted capability. It defaults to the one
+in `databaseUrl`; pass `db` to choose another. The first capability accepted
 on a browser client binds its WebSocket to that database; later subscriptions
 on that client must target the same database.
+
+### Credentials
+
+`databaseUrl` is a Postgres connection string, such as `DATABASE_URL`. Each
+capability is a v3 envelope, sealed with HPKE (P-256) to the branch's public
+key, that carries the URL's user and password. Realtime opens it and checks
+that login against Postgres, so password changes, `NOLOGIN` and role settings
+apply to Realtime too. No Realtime secret is involved.
+
+- **Role.** Realtime supports only `neondb_owner` for now. Another user is a
+  configuration error when `createRealtime()` runs.
+- **Vercel OIDC.** When the URL has no password, as in Vercel projects that use
+  OIDC, the credential is an OIDC token. By default the SDK reads Vercel's
+  runtime token: the request's `x-vercel-oidc-token` header, then
+  `VERCEL_OIDC_TOKEN`. Pass `oidcToken` to supply tokens yourself. An empty
+  password never means "send no credential". The SDK reuses a token until 60
+  seconds before its `exp`, so Realtime's login cache keeps working.
+
+  ```ts
+  const realtime = createRealtime({
+    databaseUrl: "postgresql://neondb_owner@ep-example.neon.tech/neondb",
+    url: process.env.NEON_REALTIME_URL!,
+    oidcToken: () => getTokenFromMyProvider(),
+  });
+  ```
+
+- **Public key.** The SDK fetches the key from
+  `/.well-known/neon-realtime-keys` on the `url` host (`wss://` becomes
+  `https://`) and caches it per process as the response's `Cache-Control`
+  allows, at most 10 minutes. The request opts out of framework fetch caches.
+  Pass `fetch` to use your own, for example for a custom CA, or on a runtime
+  that rejects `cache: "no-store"`. A branch with no key yet is an error.
+- **Legacy secret.** Without `databaseUrl`, `createRealtime({ secret, db })`
+  keeps sealing the previous token format with the shared Realtime secret, and
+  makes no network request. With both, the SDK uses `databaseUrl`. It never
+  falls back to the secret after an envelope fails, because the branch may
+  have the secret turned off.
 
 ### Raw SQL parameters
 
@@ -125,14 +169,13 @@ adapter names or versions.
 ## Subscribe directly from a trusted environment
 
 A trusted, long-lived process can let the SDK hide capability issuance and
-renewal. Add the same WebSocket URL accepted by `createRealtimeClient()`, then
-pass a concrete query directly to `subscribe()`:
+renewal. With `url`, the same WebSocket URL accepted by
+`createRealtimeClient()`, pass a concrete query directly to `subscribe()`:
 
 ```ts
 const realtime = createRealtime({
-  secret: process.env.NEON_REALTIME_SECRET!,
-  db: "app",
-  url: "wss://live.neon.tech/...",
+  databaseUrl: process.env.DATABASE_URL!,
+  url: process.env.NEON_REALTIME_URL!,
   logLevel: "warn",
 });
 
@@ -162,7 +205,7 @@ reconnecting with backoff. If the capability expires, the subscription is
 creates a new wire subscription behind the same public object. It returns to
 `live` after receiving a fresh authoritative result.
 
-This mode holds the Realtime secret and can seal arbitrary queries. Use
+This mode holds the database credentials and can seal arbitrary queries. Use
 it only in trusted runtimes, never in browser code. Direct subscriptions use
 the optional `ws` peer dependency so stalled close handshakes can be terminated.
 Install `ws` in applications that call `createRealtime()`; browser and
@@ -568,7 +611,31 @@ application's API boundary.
 
 Treat sealed queries as bearer credentials: deliver them over HTTPS and keep
 them out of URLs, logs, and persistent browser storage. Never expose
-`NEON_REALTIME_SECRET` to browser code.
+`DATABASE_URL` or `NEON_REALTIME_SECRET` to browser code.
+
+## Tooling and tests
+
+Two low-level helpers on `@neon/realtime/server` serve tooling and end-to-end
+tests. Applications use `createRealtime()` instead.
+
+- `fetchRealtimeKey(url, { fetch? })` fetches the branch's current public key,
+  `{ kid, x, y }`, without caching.
+- `sealRealtimeEnvelope({ key, db, user, credential, query, debugMode? })`
+  seals one envelope for any user and credential, without the `neondb_owner`
+  check, for example to confirm that Realtime itself rejects another role:
+
+```ts
+import { fetchRealtimeKey, rawSql, sealRealtimeEnvelope } from "@neon/realtime/server";
+
+const key = await fetchRealtimeKey(process.env.NEON_REALTIME_URL!);
+const sealedQuery = await sealRealtimeEnvelope({
+  key,
+  db: "neondb",
+  user: "app_user",
+  credential: "a-password",
+  query: rawSql("select 1"),
+});
+```
 
 ## Upgrading to 0.2
 
@@ -593,10 +660,12 @@ subscription opt-in, or mode acknowledgment.
 ## Protocol schemas
 
 The package exports the active protocol and decoded capability schemas at
-`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v3) and
-`@neon/realtime/schema/realtime-query-capability.schema.json` (currently capability
-v2). Their filenames stay stable across revisions; `$id` and `title` retain each
-contract's version.
+`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v3),
+`@neon/realtime/schema/realtime-query-capability.schema.json` (capability v2,
+the legacy secret's tokens) and
+`@neon/realtime/schema/realtime-query-capability-v3.schema.json` (capability v3,
+the HPKE envelope). Their filenames stay stable across revisions; `$id` and
+`title` retain each contract's version.
 
 Existing versioned exports continue to resolve to their original contracts.
 Protocol v1, protocol v2 and capability v1 resolve to frozen legacy snapshots;
