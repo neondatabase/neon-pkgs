@@ -38,6 +38,24 @@ export function encodeBase64Url(value: Uint8Array): string {
 		.replace(/=+$/, "");
 }
 
+/**
+ * Decode unpadded base64url, rejecting padding, other characters and
+ * non-zero unused trailing bits, so each byte string has one encoding.
+ */
+export function decodeBase64UrlStrict(value: string): Uint8Array {
+	if (!/^[A-Za-z0-9_-]*$/.test(value) || value.length % 4 === 1) {
+		throw new Error("Invalid base64url");
+	}
+	const standard = value.replace(/-/g, "+").replace(/_/g, "/");
+	const binary = atob(standard + "=".repeat((4 - (standard.length % 4)) % 4));
+	const decoded = Uint8Array.from(binary, (character) =>
+		character.charCodeAt(0),
+	);
+	if (encodeBase64Url(decoded) !== value)
+		throw new Error("Invalid base64url");
+	return decoded;
+}
+
 export function asBufferSource(value: Uint8Array): ArrayBuffer {
 	return new Uint8Array(value).buffer;
 }

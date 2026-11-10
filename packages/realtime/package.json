@@ -77,11 +77,11 @@
     "tsc": "tsc"
   },
   "dependencies": {
+    "@hpke/core": "^1.10.0",
     "base64-js": "catalog:",
     "postgres-array": "^3.0.4"
   },
   "devDependencies": {
-    "@hpke/core": "^1.10.0",
     "@types/node": "catalog:",
     "@types/ws": "^8.18.2",
     "@vitest/coverage-v8": "catalog:",
