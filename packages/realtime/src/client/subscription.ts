@@ -446,7 +446,13 @@ export class Subscription<Row>
 		listeners: Set<(...args: Arguments) => void>,
 		...args: Arguments
 	): void {
+		const target: object = listeners;
 		for (const listener of [...listeners]) {
+			if (
+				(target === this.stateListeners && args[0] !== this.state) ||
+				(target === this.changeListeners && args[0] !== this.snapshot)
+			)
+				return;
 			try {
 				listener(...args);
 			} catch (error) {
