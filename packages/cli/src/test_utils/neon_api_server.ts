@@ -7,6 +7,10 @@ export type NeonApiServer = {
 	rejectAll: (value: boolean) => void;
 	failUserLookup: (value: boolean) => void;
 	seenTokens: () => string[];
+	/** API keys minted through `POST /api_keys`, in order. */
+	mintedKeys: () => { id: number; key: string; name: string }[];
+	/** Ids revoked through `DELETE /api_keys/:id`. */
+	revokedKeyIds: () => number[];
 	stop: () => Promise<void>;
 };
 
@@ -20,6 +24,8 @@ export const startNeonApiServer = async (
 	const seen: string[] = [];
 	let rejectAll = false;
 	let failUserLookup = false;
+	const minted: { id: number; key: string; name: string }[] = [];
+	const revoked: number[] = [];
 
 	const server = createServer((req, res) => {
 		const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
@@ -28,7 +34,8 @@ export const startNeonApiServer = async (
 			"",
 		);
 
-		if (url.pathname !== "/users/me") {
+		const keyPath = /^\/api_keys(?:\/(\d+))?$/.exec(url.pathname);
+		if (url.pathname !== "/users/me" && keyPath === null) {
 			return json(res, 404, { message: "Not Found" });
 		}
 
@@ -36,6 +43,36 @@ export const startNeonApiServer = async (
 
 		if (rejectAll || token === "" || rejected.has(token)) {
 			return json(res, 401, { message: "Unauthorized" });
+		}
+
+		if (keyPath !== null) {
+			if (req.method === "POST" && keyPath[1] === undefined) {
+				let body = "";
+				req.on("data", (chunk: Buffer) => {
+					body += chunk.toString();
+				});
+				req.on("end", () => {
+					const { key_name: name } = JSON.parse(body);
+					const created = {
+						id: 300 + minted.length,
+						key: `napi_minted_${minted.length}`,
+						name,
+					};
+					minted.push(created);
+					json(res, 200, {
+						...created,
+						created_at: "2026-03-01T00:00:00Z",
+						created_by: user.id,
+					});
+				});
+				return;
+			}
+			if (req.method === "DELETE" && keyPath[1] !== undefined) {
+				const id = Number(keyPath[1]);
+				revoked.push(id);
+				return json(res, 200, { id, name: "revoked", revoked: true });
+			}
+			return json(res, 405, { message: "Method Not Allowed" });
 		}
 
 		if (failUserLookup) {
@@ -71,6 +108,8 @@ export const startNeonApiServer = async (
 			failUserLookup = value;
 		},
 		seenTokens: () => [...seen],
+		mintedKeys: () => [...minted],
+		revokedKeyIds: () => [...revoked],
 		stop: () => closeServer(server),
 	};
 };

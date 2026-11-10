@@ -68,6 +68,13 @@ export type StoredCredentials = {
 	access_token?: string;
 	refresh_token?: string;
 	expires_at?: number;
+	/**
+	 * An API key `neon mcp serve` minted with this OAuth session. The Neon MCP server rejects
+	 * OAuth access tokens it did not issue, so the session cannot authenticate there directly.
+	 * Revoked when the session is replaced or its profile removed.
+	 */
+	mcp_api_key?: string;
+	mcp_key_id?: number;
 	[key: string]: unknown;
 };
 

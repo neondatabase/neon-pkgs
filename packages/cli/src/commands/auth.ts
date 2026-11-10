@@ -79,6 +79,7 @@ import {
 	type OutgoingCredential,
 	readOutgoingCredential,
 	retirePreviousCredential,
+	retireSessionMcpKey,
 } from "../retire_credential.js";
 import type { ExtendedTokenSet } from "../types.js";
 import { extendTokenSet } from "../utils/auth.js";
@@ -331,6 +332,10 @@ export const authFlow = async ({
 			at.storage === "keyring" ? KEYRING_CREDENTIALS : at.path,
 		);
 	}
+	// A file-backed session is overwritten without being retired, so retire its MCP key here.
+	if (at.storage !== "keyring" && previousOutgoing?.kind === OAUTH) {
+		await retireSessionMcpKey(previousOutgoing.tokens, apiHost);
+	}
 	log.info(`Auth complete (profile ${profileName})`);
 	return tokenSet.access_token || "";
 };
@@ -551,6 +556,13 @@ const oauthCredentialsFromTokenSet = (
 	if (previous?.user_id !== undefined) {
 		stored.user_id = previous.user_id;
 	}
+	if (
+		typeof previous?.mcp_api_key === "string" &&
+		typeof previous.mcp_key_id === "number"
+	) {
+		stored.mcp_api_key = previous.mcp_api_key;
+		stored.mcp_key_id = previous.mcp_key_id;
+	}
 	return stored;
 };
 
@@ -565,7 +577,10 @@ const writeOAuthCredentials = (
 	log.debug("Credentials MD5 hash: %s", md5hash(JSON.stringify(credentials)));
 };
 
-const refreshLockPath = (configDir: string, at: CredentialLocation): string => {
+export const refreshLockPath = (
+	configDir: string,
+	at: CredentialLocation,
+): string => {
 	const id = createHash("sha256")
 		.update(credentialLabel(at))
 		.digest("hex")

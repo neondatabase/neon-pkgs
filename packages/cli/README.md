@@ -969,6 +969,28 @@ GitHub Copilot CLI project installs write into `.mcp.json`, or into `.github/mcp
 
 The default mints an account-wide API key (or reuses the Bearer already configured for Neon at `https://mcp.neon.tech/mcp`) and writes it into each selected agent's config. That key reaches everything the account can, in every organization. Revoke it with `neon api-keys revoke <id>`. `--oauth` writes the URL with no `Authorization` header; the agent signs in on first use. `--project` writes into the project config (`.cursor/mcp.json` and similar). `--read-only` adds `?readonly=true`. `--project-id` adds `?projectId=` and, when a key is minted, limits that key to the named project. Accepting the linked-project pin does the same. Revoke a project-scoped key with `neon api-keys revoke <id> --org-id <org>`. A reused Bearer keeps the scope it already has. `--category` adds `?category=` (repeatable or comma-separated: `projects`, `branches`, `schema`, `querying`, `neon_auth`, `data_api`, `observability`, `docs`). `--read-only` and `--category` restrict which MCP tools the server exposes; they do not change what the minted key can do.
 
+### Run the Neon MCP server over stdio (`mcp serve`)
+
+`neon mcp serve` relays MCP JSON-RPC between stdin/stdout and `https://mcp.neon.tech/mcp`, authenticated with the credential the CLI resolves: `--api-key`, `NEON_API_KEY`, or the selected profile (`--profile`, `NEON_PROFILE`, else `DEFAULT`). Point an agent at it as a stdio server instead of writing a URL and a key into its config:
+
+```json
+{
+  "mcpServers": {
+    "Neon": { "command": "neon", "args": ["mcp", "serve"] }
+  }
+}
+```
+
+```bash
+# Another profile, write tools hidden, two tool categories.
+$ neon mcp serve --profile work --read-only --category querying,schema
+
+# One project's tools only.
+$ neon mcp serve --project-id <project-id>
+```
+
+`--read-only`, `--project-id` and `--category` add the same query parameters as on `neon mcp`. An API key is sent as is. The Neon MCP server rejects OAuth access tokens it did not issue, so an OAuth profile (`neon login`) mints one account-wide API key on first use, stores it with that profile's session, and reuses it on every later start. The key is revoked when `neon login` replaces the session or `neon profile remove` removes the profile; if the server rejects it, `mcp serve` mints a replacement once. With no usable credential, `mcp serve` exits with an error and never starts a browser sign-in. Logs go to stderr; stdout carries only JSON-RPC.
+
 ## Install Neon agent skills (`skills`)
 
 `neon skills` installs Neon agent skills by running `npx skills@latest add`, so it always uses the latest skills CLI, even when an older one is installed globally. It does not call the Neon API. This command needs Node.js 22.20 or newer. The rest of the CLI supports Node.js 20.19 or newer.

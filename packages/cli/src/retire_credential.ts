@@ -122,12 +122,31 @@ export const retirePreviousCredential = async (
 		return;
 	}
 
+	await retireSessionMcpKey(existing.tokens, props.apiHost);
 	const revoked = await revokeTokenSet(existing.tokens, props);
 	log.info(
 		revoked
 			? "Signed out the session it replaced"
 			: "Could not sign out the session it replaced; it will expire on its own",
 	);
+};
+
+/** Revokes the API key `neon mcp serve` minted with an OAuth session, when it holds one. */
+export const retireSessionMcpKey = async (
+	tokens: StoredCredentials,
+	apiHost: string,
+): Promise<void> => {
+	const key = tokens.mcp_api_key;
+	const keyId = tokens.mcp_key_id;
+	if (typeof key !== "string" || typeof keyId !== "number") return;
+	const client = getApiClient({ apiKey: key, apiHost });
+	if (await withdrawKey(client, {}, keyId)) {
+		log.info(`Revoked the Neon MCP server's API key (id ${keyId})`);
+	} else {
+		log.warning(
+			`Could not revoke the Neon MCP server's API key (id ${keyId}); it may still be live. Remove it with: neon api-keys revoke ${keyId}`,
+		);
+	}
 };
 
 /** A failed revoke must not strand the caller. */

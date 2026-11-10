@@ -114,9 +114,9 @@ function mapAskEvent(raw: {
 	return undefined;
 }
 
-export async function* readAskSse(
+export async function* readSseEvents(
 	body: ReadableStream<Uint8Array>,
-): AsyncGenerator<AskStreamEvent> {
+): AsyncGenerator<{ event: string; data: string }> {
 	const decoder = new TextDecoder();
 	const reader = body.getReader();
 	let pending = "";
@@ -128,21 +128,27 @@ export async function* readAskSse(
 			});
 			const taken = takeSseBlocks(pending);
 			pending = taken.rest;
-			for (const raw of taken.events) {
-				const event = mapAskEvent(raw);
-				if (!event) {
-					continue;
-				}
-				yield event;
-				if (event.type === "error" || event.type === "done") {
-					return;
-				}
-			}
+			yield* taken.events;
 			if (done) {
 				break;
 			}
 		}
 	} finally {
 		reader.releaseLock();
+	}
+}
+
+export async function* readAskSse(
+	body: ReadableStream<Uint8Array>,
+): AsyncGenerator<AskStreamEvent> {
+	for await (const raw of readSseEvents(body)) {
+		const event = mapAskEvent(raw);
+		if (!event) {
+			continue;
+		}
+		yield event;
+		if (event.type === "error" || event.type === "done") {
+			return;
+		}
 	}
 }

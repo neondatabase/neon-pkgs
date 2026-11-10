@@ -64,6 +64,7 @@ import {
 	type OutgoingCredential,
 	readOutgoingCredential,
 	retirePreviousCredential,
+	retireSessionMcpKey,
 	revokeTokenSet,
 	withdrawKey,
 } from "../retire_credential.js";
@@ -1225,6 +1226,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 			}
 		}
 	} else if (stored !== null) {
+		await retireSessionMcpKey(stored.tokens, props.apiHost);
 		const revoked = await revokeTokenSet(stored.tokens, props);
 		log.info(
 			revoked

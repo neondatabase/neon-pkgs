@@ -47,7 +47,7 @@ export type ApiCallProps = {
 
 export const DEFAULT_API_HOST = "https://console.neon.tech/api/v2";
 const REQUEST_TIMEOUT_MS = 60_000;
-const USER_AGENT = `neonctl v${pkg.version}`;
+export const USER_AGENT = `neonctl v${pkg.version}`;
 
 /** Mirrors the api-client `ContentType` enum used by the `request()` escape hatch. */
 export enum ContentType {

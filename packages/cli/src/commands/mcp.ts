@@ -21,6 +21,7 @@ import {
 	withdrawMintedKey,
 } from "../mcp/mint.js";
 import { resolveMcpPlan } from "../mcp/plan.js";
+import { type McpServeAuthProps, mcpServeBearer } from "../mcp/serve_auth.js";
 import { mcpInstallableAgents, resolveInstallTargets } from "../mcp/targets.js";
 import type { CommonProps } from "../types.js";
 import {
@@ -59,23 +60,123 @@ const mcpProjectDroppedAgents = mcpGlobalAgents.filter(
 	(id) => !mcpProjectAgents.includes(id),
 );
 
+const categoryOption = {
+	type: "array",
+	string: true,
+	describe:
+		"MCP tool category (repeatable or comma-separated). Default: all. Values listed below",
+	coerce: (value: unknown): NeonMcpCategory[] => {
+		if (value === undefined) return [];
+		const list = Array.isArray(value) ? value : [value];
+		if (list.length === 0) {
+			throw new Error(
+				"--category needs a value. Pass one, or omit the flag entirely.",
+			);
+		}
+		const parts: string[] = [];
+		for (const item of list) {
+			if (typeof item !== "string" || item.trim() === "") {
+				throw new Error(
+					"--category needs a value. Pass one, or omit the flag entirely.",
+				);
+			}
+			for (const part of item.split(",")) {
+				const trimmed = part.trim();
+				if (trimmed === "") {
+					throw new Error(
+						"--category needs a value. Pass one, or omit the flag entirely.",
+					);
+				}
+				parts.push(trimmed);
+			}
+		}
+		return parseMcpCategories(parts);
+	},
+} as const;
+
+type McpServeProps = McpServeAuthProps & {
+	readOnly: boolean;
+	projectId?: string;
+	category: NeonMcpCategory[];
+};
+
+const serveBuilder = (argv: yargs.Argv) =>
+	argv
+		.usage("$0 mcp serve [options]")
+		.options({
+			"read-only": {
+				alias: "readonly",
+				type: "boolean",
+				default: false,
+				describe: "Restrict MCP tools to read-only (?readonly=true)",
+			},
+			"project-id": {
+				type: "string",
+				describe: "Pin MCP tools to one Neon project (?projectId=)",
+				coerce: single("project-id"),
+			},
+			category: categoryOption,
+		})
+		.example(
+			"$0 mcp serve",
+			"Relay stdio to the Neon MCP server with the current profile",
+		)
+		.example(
+			"$0 mcp serve --profile work --read-only",
+			"Use another profile and hide write tools",
+		)
+		.epilogue(
+			helpEpilogue(
+				`Relays MCP JSON-RPC between stdin/stdout and ${NEON_MCP_URL}, sending the credential the CLI resolves (--api-key, NEON_API_KEY, or --profile).`,
+				"An OAuth profile (neon login) mints one account-wide API key on first use and stores it with the session.",
+				helpCsv("Supported categories", NEON_MCP_CATEGORIES),
+				'Agent config: { "command": "neon", "args": ["mcp", "serve"] }',
+			),
+		)
+		.strict()
+		.check(noPassthrough("mcp serve"));
+
+const serve = async (props: McpServeProps) => {
+	const bearer = await mcpServeBearer(props);
+	const { runMcpBridge } = await import("../mcp/bridge.js");
+	await runMcpBridge({
+		url: neonMcpUrl({
+			readOnly: props.readOnly,
+			projectId: props.projectId,
+			categories: props.category,
+		}),
+		bearer,
+		input: process.stdin,
+		output: process.stdout,
+	});
+};
+
 export const builder = (argv: yargs.Argv) =>
 	argv
 		.usage("$0 mcp [options]")
+		.command(
+			"serve",
+			"Run the Neon MCP server over stdio, authenticated as the CLI",
+			serveBuilder,
+			(args) => serve(args as any),
+		)
 		.options({
 			oauth: {
+				global: false,
 				type: "boolean",
 				default: false,
 				describe:
 					"Write the server URL only. The agent prompts for Neon sign-in on first use. No CLI login, no API key minted. Skips the auth question",
 			},
 			project: {
+				global: false,
 				type: "boolean",
 				default: false,
 				describe:
 					"Write project-level MCP config. Skips the config-location question. A linked project-folder install may still pin a project and scope a newly minted key",
 			},
 			yes: {
+				global: false,
 				alias: "y",
 				type: "boolean",
 				default: false,
@@ -83,6 +184,7 @@ export const builder = (argv: yargs.Argv) =>
 					"Skip prompts. Defaults listed below. --agent, --project, --oauth, --read-only, --project-id and --category still apply",
 			},
 			agent: {
+				global: false,
 				alias: "a",
 				type: "array",
 				string: true,
@@ -107,6 +209,7 @@ export const builder = (argv: yargs.Argv) =>
 				},
 			},
 			"read-only": {
+				global: false,
 				alias: "readonly",
 				type: "boolean",
 				default: false,
@@ -114,44 +217,13 @@ export const builder = (argv: yargs.Argv) =>
 					"Restrict MCP tools to read-only (?readonly=true). Not prompted. Does not change the minted key",
 			},
 			"project-id": {
+				global: false,
 				type: "string",
 				describe:
 					"Pin MCP tools to one Neon project (?projectId=). A newly minted API key is limited to that project. A linked project-folder install asks the same when you pick API-key auth",
 				coerce: single("project-id"),
 			},
-			category: {
-				type: "array",
-				string: true,
-				describe:
-					"MCP tool category (repeatable or comma-separated). Default: all. Values listed below",
-				coerce: (value: unknown): NeonMcpCategory[] => {
-					if (value === undefined) return [];
-					const list = Array.isArray(value) ? value : [value];
-					if (list.length === 0) {
-						throw new Error(
-							"--category needs a value. Pass one, or omit the flag entirely.",
-						);
-					}
-					const parts: string[] = [];
-					for (const item of list) {
-						if (typeof item !== "string" || item.trim() === "") {
-							throw new Error(
-								"--category needs a value. Pass one, or omit the flag entirely.",
-							);
-						}
-						for (const part of item.split(",")) {
-							const trimmed = part.trim();
-							if (trimmed === "") {
-								throw new Error(
-									"--category needs a value. Pass one, or omit the flag entirely.",
-								);
-							}
-							parts.push(trimmed);
-						}
-					}
-					return parseMcpCategories(parts);
-				},
-			},
+			category: { ...categoryOption, global: false },
 		})
 		.example("$0 mcp", "Interactive: config location, agents, then auth")
 		.example(
