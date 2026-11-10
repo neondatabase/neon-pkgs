@@ -216,7 +216,9 @@ describe("trusted direct subscriptions", () => {
 		).authorization;
 
 		await vi.advanceTimersByTimeAsync(50_000);
-		await flushWebCrypto();
+		await flushWebCrypto(() =>
+			socket.sent.some((message) => message.type === "renew"),
+		);
 		const renewal = socket.sent.find((message) => message.type === "renew");
 		expect(renewal).toMatchObject({ type: "renew", live_id: "41" });
 		expect(defined(renewal).authorization).not.toBe(initialCapability);
@@ -385,10 +387,14 @@ function base64Url(value: Uint8Array): string {
 		.replace(/=+$/, "");
 }
 
-async function flushWebCrypto(): Promise<void> {
+async function flushWebCrypto(done?: () => boolean): Promise<void> {
 	// Capability refresh performs one digest and one encryption before sending
 	// the renewal frame; Web Crypto completes outside Vitest's fake timer queue.
 	await crypto.subtle.digest("SHA-256", new Uint8Array());
 	await crypto.subtle.digest("SHA-256", new Uint8Array());
 	await Promise.resolve();
+	// Under load from parallel test files, two round trips may not be enough.
+	for (let attempt = 0; done && !done() && attempt < 100; attempt += 1) {
+		await crypto.subtle.digest("SHA-256", new Uint8Array());
+	}
 }
