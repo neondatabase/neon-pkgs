@@ -888,6 +888,9 @@ importers:
         specifier: ^3.0.4
         version: 3.0.4
     devDependencies:
+      '@hpke/core':
+        specifier: ^1.10.0
+        version: 1.10.0
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17
@@ -2253,6 +2256,14 @@ packages:
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4
+
+  '@hpke/common@1.11.0':
+    resolution: {integrity: sha512-ZV551VgT4+pjTN1xlM1Zu9CrvLcff1sV1F2iFQJgg3gVNLy/hiOgLOjK3cz5LZYMKYkt54xe7ityu0rTYVSDGw==}
+    engines: {node: '>=16.0.0'}
+
+  '@hpke/core@1.10.0':
+    resolution: {integrity: sha512-toCyUYXvU5KdDjqtWeMRRhR09R2us4OeHGo5YkdDOpo8+QJ6sIpuuOGLDu0VbNBskf5acHgsqgF53w2mU1NNYQ==}
+    engines: {node: '>=16.0.0'}
 
   '@iarna/toml@2.2.5':
     resolution: {integrity: sha512-trnsAYxU3xnS1gPHPyU961coFyLkh4gAD/0zQ5mymY4yOZ+CYvsPqUbOFSw0aDM4y0tV7tiFxL/1XfXPNC6IPg==}
@@ -7917,6 +7928,12 @@ snapshots:
   '@hono/node-server@2.1.0(hono@4.12.25)':
     dependencies:
       hono: 4.12.25
+
+  '@hpke/common@1.11.0': {}
+
+  '@hpke/core@1.10.0':
+    dependencies:
+      '@hpke/common': 1.11.0
 
   '@iarna/toml@2.2.5': {}
 

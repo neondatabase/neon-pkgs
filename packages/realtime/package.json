@@ -58,14 +58,17 @@
     "README.md",
     "dist/",
     "package.json",
-    "schema/"
+    "schema/",
+    "!schema/*.fixtures.json"
   ],
   "scripts": {
     "build": "npm run generate:check && tsc --noEmit && tsdown",
-    "generate": "npm run generate:capability && npm run generate:protocol",
+    "generate": "npm run generate:capability && npm run generate:protocol && npm run generate:fixtures",
     "generate:capability": "node scripts/generate-capability-types.mjs",
     "generate:capability:check": "node scripts/generate-capability-types.mjs --check",
-    "generate:check": "npm run generate:capability:check && npm run generate:protocol:check",
+    "generate:check": "npm run generate:capability:check && npm run generate:protocol:check && npm run generate:fixtures:check",
+    "generate:fixtures": "node scripts/generate-envelope-fixtures.mjs",
+    "generate:fixtures:check": "node scripts/generate-envelope-fixtures.mjs --check",
     "generate:protocol": "node scripts/generate-protocol.mjs",
     "generate:protocol:check": "node scripts/generate-protocol.mjs --check",
     "prepare": "npm run build",
@@ -78,6 +81,7 @@
     "postgres-array": "^3.0.4"
   },
   "devDependencies": {
+    "@hpke/core": "^1.10.0",
     "@types/node": "catalog:",
     "@types/ws": "^8.18.2",
     "@vitest/coverage-v8": "catalog:",
