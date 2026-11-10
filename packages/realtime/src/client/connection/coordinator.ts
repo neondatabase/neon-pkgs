@@ -559,7 +559,10 @@ export class ConnectionCoordinator {
 		if (
 			message.code === "backend_overloaded" ||
 			message.code === "backend_unavailable" ||
-			message.code === "resource_exhausted"
+			message.code === "resource_exhausted" ||
+			// The proxy's advice is to retry with backoff: the replica is
+			// starting, its OIDC keys are not loaded, or logins are throttled.
+			message.code === "service_unavailable"
 		) {
 			this.retrySubscription(subscription, message);
 			return;

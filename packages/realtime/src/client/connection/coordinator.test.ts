@@ -1586,6 +1586,31 @@ describe("subscription load-shedding recovery", () => {
 		coordinator.close();
 	});
 
+	it("retries service_unavailable rejections with backoff", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const callbacks = target();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		socket.receive({
+			type: "subscribe_rejected",
+			request_id: "1",
+			code: "service_unavailable",
+			message: "service unavailable",
+		});
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(callbacks.connecting).toHaveBeenCalledOnce();
+		await vi.advanceTimersByTimeAsync(50);
+		expect(socket.sent.at(-1)).toEqual({
+			type: "subscribe",
+			request_id: "2",
+			authorization: "token",
+		});
+		coordinator.close();
+	});
+
 	it("retries resource_exhausted rejections with exponential backoff", async () => {
 		vi.useFakeTimers();
 		const coordinator = recoveryCoordinator();

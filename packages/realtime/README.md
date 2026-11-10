@@ -333,9 +333,10 @@ Some subscription errors also retry automatically:
 - `backend_overloaded` (`subscribe_rejected` or `subscription_error`): the
   service instance is shedding load or is full. The response carries
   `retry_after_ms`, the time until it admits that database again.
-- `subscribe_rejected` with `backend_unavailable` or `resource_exhausted` (a
-  service limit on this connection or process), and `subscription_error` with
-  `upstream_cancelled`.
+- `subscribe_rejected` with `backend_unavailable`, `resource_exhausted` (a
+  service limit on this connection or process) or `service_unavailable` (for
+  example, the replica is still starting or Postgres logins are throttled), and
+  `subscription_error` with `upstream_cancelled`.
 
 After `backend_overloaded`, the service may also close a connection that has no
 other subscriptions, so the client can reconnect to another instance. The
