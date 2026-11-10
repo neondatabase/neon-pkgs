@@ -26,7 +26,7 @@ export function validateSealedQuery<Row>(query: SealedLiveQuery<Row>): void {
 	if (
 		!query ||
 		typeof query.capability !== "string" ||
-		!validCompactJweHeader(query.capability) ||
+		!validCapabilityShape(query.capability) ||
 		typeof query.queryFingerprint !== "string" ||
 		!/^[0-9a-f]{64}$/.test(query.queryFingerprint) ||
 		!Number.isSafeInteger(query.expiresAt) ||
@@ -36,27 +36,44 @@ export function validateSealedQuery<Row>(query: SealedLiveQuery<Row>): void {
 	}
 }
 
-function validCompactJweHeader(capability: string): boolean {
+/**
+ * Check only the public framing: a v1/v2 `dir` JWE, or a v3 HPKE envelope.
+ * Everything past the header stays opaque to the client.
+ */
+function validCapabilityShape(capability: string): boolean {
 	try {
 		const segments = capability.split(".");
-		if (
-			segments.length !== 5 ||
-			segments[1] !== "" ||
-			segments.some((part, index) => index !== 1 && !part)
-		)
-			return false;
-		const encodedHeader = segments[0];
-		if (!encodedHeader) return false;
+		if (segments.length !== 5) return false;
+		const [encodedHeader, second, third, fourth, fifth] = segments;
+		if (!encodedHeader || !fourth) return false;
 		const header = JSON.parse(
 			decodeAscii(decodeBase64Url(encodedHeader)),
 		) as unknown;
-		return (
-			isRecord(header) &&
-			Object.keys(header).sort().join(",") === "alg,enc,v" &&
-			header.alg === "dir" &&
-			header.enc === "A256GCM" &&
-			(header.v === 1 || header.v === 2)
-		);
+		if (!isRecord(header)) return false;
+		const keys = Object.keys(header).sort().join(",");
+		if (header.alg === "dir") {
+			return (
+				second === "" &&
+				!!third &&
+				!!fifth &&
+				keys === "alg,enc,v" &&
+				header.enc === "A256GCM" &&
+				(header.v === 1 || header.v === 2)
+			);
+		}
+		if (header.alg === "HPKE-P256-SHA256-A256GCM") {
+			// enc in segment 2; segments 3 and 5 are empty.
+			return (
+				!!second &&
+				third === "" &&
+				fifth === "" &&
+				keys === "alg,kid,v" &&
+				typeof header.kid === "string" &&
+				header.kid !== "" &&
+				header.v === 3
+			);
+		}
+		return false;
 	} catch {
 		return false;
 	}
