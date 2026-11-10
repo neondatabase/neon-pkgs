@@ -487,6 +487,97 @@ describe("QueryRefreshController on a stale subscription", () => {
 		controller.stop();
 	});
 
+	it("refreshes at once when attached to an already stale subscription", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const { subscription, setState } = observableSubscription();
+		setState("stale");
+		const refreshQuery = vi.fn(async () => query(360));
+		const controller = new QueryRefreshController({
+			query: query(300),
+			refreshQuery,
+			renewSubscription: async () => {},
+			onRefreshExhausted: vi.fn(),
+		});
+		controller.start();
+
+		controller.setSubscription(subscription);
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(refreshQuery).toHaveBeenCalledOnce();
+		controller.stop();
+	});
+
+	it("refreshes at once when started on a subscription that went stale before", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const { subscription, setState } = observableSubscription();
+		const refreshQuery = vi.fn(async () => query(360));
+		const controller = new QueryRefreshController({
+			query: query(300),
+			refreshQuery,
+			renewSubscription: async () => {},
+			onRefreshExhausted: vi.fn(),
+			subscription,
+		});
+		setState("stale");
+		await vi.advanceTimersByTimeAsync(0);
+		expect(refreshQuery).not.toHaveBeenCalled();
+
+		controller.start();
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(refreshQuery).toHaveBeenCalledOnce();
+		controller.stop();
+	});
+
+	it("refreshes at once when a callback arrives while stale", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const { subscription, setState } = observableSubscription();
+		const controller = new QueryRefreshController({
+			query: query(300),
+			renewSubscription: async () => {},
+			onRefreshExhausted: vi.fn(),
+			subscription,
+		});
+		controller.start();
+		setState("stale");
+		await vi.advanceTimersByTimeAsync(0);
+
+		const refreshQuery = vi.fn(async () => query(360));
+		controller.setRefreshCallback(refreshQuery);
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(refreshQuery).toHaveBeenCalledOnce();
+		controller.stop();
+	});
+
+	it("keeps one-second pacing when reconciling a stale subscription", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const { subscription, setState } = observableSubscription();
+		const refreshQuery = vi.fn(async () => query(Date.now() / 1_000 + 300));
+		const controller = new QueryRefreshController({
+			query: query(300),
+			refreshQuery,
+			renewSubscription: async () => {},
+			onRefreshExhausted: vi.fn(),
+			subscription,
+		});
+		controller.start();
+		setState("stale");
+		await vi.advanceTimersByTimeAsync(0);
+		expect(refreshQuery).toHaveBeenCalledOnce();
+
+		controller.setRefreshCallback(refreshQuery);
+		await vi.advanceTimersByTimeAsync(999);
+		expect(refreshQuery).toHaveBeenCalledOnce();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(refreshQuery).toHaveBeenCalledTimes(2);
+		controller.stop();
+	});
+
 	it("ignores stale while stopped and follows a replaced subscription", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);

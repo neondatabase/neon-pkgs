@@ -90,6 +90,7 @@ export class QueryRefreshController<Row> {
 		if (this.active && !this.refreshInFlight && !this.refreshStopped) {
 			this.scheduleRefresh();
 		}
+		this.refreshIfStale();
 	}
 
 	/**
@@ -132,6 +133,7 @@ export class QueryRefreshController<Row> {
 		this.active = true;
 		this.refreshStopped = false;
 		this.scheduleRefresh();
+		this.refreshIfStale();
 	}
 
 	/** Stop scheduling refreshes and ignore any refresh already in flight. */
@@ -151,6 +153,18 @@ export class QueryRefreshController<Row> {
 		this.detachStateListener = subscription.onStateChange((state) => {
 			if (state.status === "stale") this.refreshForReplacement();
 		});
+		this.refreshIfStale();
+	}
+
+	/**
+	 * State listeners hear only later transitions. A subscription that was
+	 * already `stale` when watched, started or given a callback still needs
+	 * its replacement now, not at the scheduled refresh.
+	 */
+	private refreshIfStale(): void {
+		if (this.subscription?.getState().status === "stale") {
+			this.refreshForReplacement();
+		}
 	}
 
 	/**
