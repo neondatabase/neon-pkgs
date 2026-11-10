@@ -35,6 +35,11 @@ const schemas = [
 		],
 	},
 	{
+		path: "schema/realtime-query-capability-v3.schema.json",
+		id: "https://neon.tech/schemas/realtime/realtime-query-capability-v3.schema.json",
+		exports: ["schema/realtime-query-capability-v3.schema.json"],
+	},
+	{
 		path: "schema/legacy/realtime-protocol-v2.schema.json",
 		id: "https://neon.tech/schemas/realtime/realtime-protocol-v2.schema.json",
 		exports: ["schema/realtime-protocol-v2.schema.json"],
