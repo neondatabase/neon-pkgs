@@ -199,6 +199,17 @@ describe("parseTar + selectTemplateFiles", () => {
 		expect(selectTemplateFiles(entries, "nope")).toEqual([]);
 	});
 
+	test("selects the whole repo for an empty subdir", () => {
+		const paths = selectTemplateFiles(entries, "").map((f) => f.path);
+		expect(paths).toEqual(
+			expect.arrayContaining([
+				"with-hono/package.json",
+				"with-hono/src/index.ts",
+			]),
+		);
+		expect(paths.some((path) => path.startsWith("with-remix/"))).toBe(true);
+	});
+
 	test("round-trips through gzip the way the downloader decompresses it", () => {
 		const gz = gzipSync(new Uint8Array(buildTar(EXAMPLE_TAR)));
 		const files = selectTemplateFiles(

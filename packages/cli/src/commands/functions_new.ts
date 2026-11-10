@@ -19,7 +19,7 @@ import {
 	writeScaffold,
 } from "../functions/scaffold.js";
 import {
-	describeRegistrySource,
+	describeRegistrySources,
 	openRegistry,
 	type Registry,
 } from "../functions/source.js";
@@ -158,7 +158,7 @@ export const listTemplates = async (props: OutputProps): Promise<void> => {
 
 const unknownTemplate = (id: string, registry: Registry): Error =>
 	new Error(
-		`Unknown function template "${id}" in ${describeRegistrySource(registry.source)}. Available templates: ${registry.entries
+		`Unknown function template "${id}" in ${describeRegistrySources(registry.sources)}. Available templates: ${registry.entries
 			.map((entry) => entry.id)
 			.join(", ")}.`,
 	);

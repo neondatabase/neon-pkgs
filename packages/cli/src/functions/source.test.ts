@@ -9,13 +9,17 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { gzipSync } from "fflate";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_JSON_BYTES } from "./registry";
 import {
+	DEFAULT_GITHUB_RAW_URL,
 	DEFAULT_REGISTRY_URL,
 	describeRegistrySource,
 	GITHUB_REGISTRY_URL,
+	githubFileUrl,
 	openRegistry,
+	resolveGithubRawBase,
 	resolveRegistrySource,
 } from "./source";
 
@@ -155,7 +159,15 @@ describe("openRegistry from a directory", () => {
 	});
 });
 
-type Reply = string | { status: number; body?: string; location?: string };
+type Reply =
+	| string
+	| Buffer
+	| {
+			status: number;
+			body?: string;
+			location?: string;
+			gate?: Promise<void>;
+	  };
 
 const serve = async (routes: Record<string, Reply>) => {
 	const requests: string[] = [];
@@ -163,16 +175,18 @@ const serve = async (routes: Record<string, Reply>) => {
 		const path = request.url ?? "/";
 		requests.push(path);
 		const reply = routes[path] ?? { status: 404, body: "Not found\n" };
-		if (typeof reply === "string") {
+		if (typeof reply === "string" || Buffer.isBuffer(reply)) {
 			response.writeHead(200).end(reply);
 			return;
 		}
-		response
-			.writeHead(
-				reply.status,
-				reply.location ? { location: reply.location } : {},
-			)
-			.end(reply.body ?? "");
+		void (reply.gate ?? Promise.resolve()).then(() =>
+			response
+				.writeHead(
+					reply.status,
+					reply.location ? { location: reply.location } : {},
+				)
+				.end(reply.body ?? ""),
+		);
 	});
 	await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
 	const { port } = server.address() as AddressInfo;
@@ -232,11 +246,12 @@ describe("openRegistry with the default sources", () => {
 		const registry = await openRegistry(undefined, {
 			primary: primary.url("/registry.json"),
 			fallback: fallback.url("/registry.json"),
+			neonRegistry: false,
 			env,
 		});
-		expect(describeRegistrySource(registry.source)).toBe(
+		expect(registry.sources.map(describeRegistrySource)).toEqual([
 			primary.url("/registry.json"),
-		);
+		]);
 		expect(fallback.requests).toEqual([]);
 	});
 
@@ -246,11 +261,179 @@ describe("openRegistry with the default sources", () => {
 		const registry = await openRegistry(undefined, {
 			primary: primary.url("/registry.json"),
 			fallback: fallback.url("/registry.json"),
+			neonRegistry: false,
 			env,
 		});
-		expect(describeRegistrySource(registry.source)).toBe(
+		expect(registry.sources.map(describeRegistrySource)).toEqual([
 			fallback.url("/registry.json"),
-		);
+		]);
+	});
+
+	const entryFor = (id: string) => ({
+		id,
+		title: id,
+		description: "d",
+		path: `${id}/template.json`,
+		categories: ["first-party"],
+	});
+	const templateFor = (id: string, description: string) =>
+		JSON.stringify({ id, title: id, description, layout: "router" });
+
+	const NEON = { owner: "acme", repo: "registry", ref: "main" };
+	const NEON_INDEX = "/acme/registry/main/registry.json";
+	const withRegistry = (
+		neon: Awaited<ReturnType<typeof serve>>,
+		options: { primary: string; fallback?: string },
+	) =>
+		openRegistry(undefined, {
+			...options,
+			neonRegistry: NEON,
+			githubRaw: neon.url("/"),
+			env: { NEON_BOOTSTRAP_GITHUB_CODELOAD: neon.url("") },
+		});
+	const partnerEntry = {
+		...entryFor("partner"),
+		source: { github: { owner: "workos", repo: "neon-sync" } },
+	};
+
+	let warnings: string[] = [];
+	beforeEach(() => {
+		warnings = [];
+		vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+			warnings.push(String(chunk));
+			return true;
+		});
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("lists neondatabase/registry first and drops examples entries with the same id", async () => {
+		const neon = await start({
+			[NEON_INDEX]: JSON.stringify({
+				templates: [entryFor("fresh"), entryFor("shared")],
+			}),
+			"/acme/registry/main/shared/template.json": templateFor(
+				"shared",
+				"From registry.",
+			),
+			"/acme/registry/main/shared/functions/index.ts":
+				"export default 1;\n",
+		});
+		const primary = await start({
+			"/registry.json": JSON.stringify({
+				templates: [entryFor("shared"), entryFor("legacy")],
+			}),
+		});
+		const fallback = await start({});
+		const registry = await withRegistry(neon, {
+			primary: primary.url("/registry.json"),
+			fallback: fallback.url("/registry.json"),
+		});
+		expect(registry.entries.map((entry) => entry.id)).toEqual([
+			"fresh",
+			"shared",
+			"legacy",
+		]);
+		expect(registry.sources.map(describeRegistrySource)).toEqual([
+			`${DEFAULT_GITHUB_RAW_URL}${NEON_INDEX}`,
+			primary.url("/registry.json"),
+		]);
+		const shared = registry.entries[1];
+		if (!shared) throw new Error("shared entry did not parse");
+		const loaded = await registry.load(shared);
+		expect(loaded.template.description).toBe("From registry.");
+		expect(fallback.requests).toEqual([]);
+	});
+
+	it("uses only the examples registry while neondatabase/registry is missing or broken", async () => {
+		for (const reply of [
+			{ status: 404 },
+			{ status: 503 },
+			"not json",
+		] satisfies Reply[]) {
+			const neon = await start({ [NEON_INDEX]: reply });
+			const primary = await start({ "/registry.json": demoIndex });
+			const registry = await withRegistry(neon, {
+				primary: primary.url("/registry.json"),
+			});
+			expect(registry.entries.map((entry) => entry.id)).toEqual(["demo"]);
+			expect(registry.sources.map(describeRegistrySource)).toEqual([
+				primary.url("/registry.json"),
+			]);
+		}
+	});
+
+	it("warns when neondatabase/registry is broken but stays quiet while it is missing", async () => {
+		for (const [reply, warned] of [
+			[{ status: 404 }, false],
+			[{ status: 503 }, true],
+			["not json", true],
+		] satisfies Array<[Reply, boolean]>) {
+			warnings = [];
+			const neon = await start({ [NEON_INDEX]: reply });
+			const primary = await start({ "/registry.json": demoIndex });
+			await withRegistry(neon, {
+				primary: primary.url("/registry.json"),
+			});
+			expect(
+				warnings.some((line) =>
+					line.startsWith(
+						"WARNING: Skipping acme/registry@main, listing only neondatabase/examples templates: ",
+					),
+				),
+			).toBe(warned);
+		}
+	});
+
+	it("uses only neondatabase/registry when the examples registry is unavailable", async () => {
+		const neon = await start({ [NEON_INDEX]: demoIndex });
+		const primary = await start({ "/registry.json": { status: 503 } });
+		const fallback = await start({ "/registry.json": { status: 503 } });
+		const registry = await withRegistry(neon, {
+			primary: primary.url("/registry.json"),
+			fallback: fallback.url("/registry.json"),
+		});
+		expect(registry.sources.map(describeRegistrySource)).toEqual([
+			`${DEFAULT_GITHUB_RAW_URL}${NEON_INDEX}`,
+		]);
+	});
+
+	it("reports the examples error when neondatabase/registry does not exist yet", async () => {
+		const neon = await start({});
+		const primary = await start({ "/registry.json": { status: 503 } });
+		const fallback = await start({ "/registry.json": { status: 502 } });
+		await expect(
+			withRegistry(neon, {
+				primary: primary.url("/registry.json"),
+				fallback: fallback.url("/registry.json"),
+			}),
+		).rejects.toThrow(/answered 502/);
+	});
+
+	it("honours source only in neondatabase/registry", async () => {
+		const neon = await start({
+			[NEON_INDEX]: JSON.stringify({ templates: [partnerEntry] }),
+		});
+		const primary = await start({
+			"/registry.json": JSON.stringify({
+				templates: [
+					entryFor("demo"),
+					{ ...partnerEntry, id: "examples-partner" },
+					{
+						...entryFor("future"),
+						source: { gitlab: { project: "a/b" } },
+					},
+				],
+			}),
+		});
+		const registry = await withRegistry(neon, {
+			primary: primary.url("/registry.json"),
+		});
+		expect(registry.entries.map((entry) => entry.id)).toEqual([
+			"partner",
+			"demo",
+		]);
 	});
 
 	it("loads template files from the fallback, not the primary", async () => {
@@ -262,6 +445,7 @@ describe("openRegistry with the default sources", () => {
 		const registry = await openRegistry(undefined, {
 			primary: primary.url("/registry.json"),
 			fallback: fallback.url("/registry.json"),
+			neonRegistry: false,
 			env,
 		});
 		const [entry] = registry.entries;
@@ -281,12 +465,13 @@ describe("openRegistry with the default sources", () => {
 		const registry = await openRegistry(undefined, {
 			primary: primary.url("/registry.json"),
 			fallback: fallback.url("/registry.json"),
+			neonRegistry: false,
 			env,
 		});
 		const [entry] = registry.entries;
 		if (!entry) throw new Error("demo entry did not parse");
 		await expect(registry.load(entry)).rejects.toThrow(
-			/answered 404 .* is cached and may still list a template that moved/,
+			/answered 404\. .* is cached and may still list a template that moved/,
 		);
 	});
 
@@ -317,7 +502,9 @@ describe("openRegistry with the default sources", () => {
 				kind: "url",
 				url: new URL(redirecting.url("/registry.json")),
 			}),
-		).rejects.toThrow(/Could not reach/);
+		).rejects.toThrow(
+			/redirected .*, and the CLI does not follow redirects\./,
+		);
 		expect(target.requests).toEqual([]);
 	});
 
@@ -331,5 +518,652 @@ describe("openRegistry with the default sources", () => {
 				url: new URL(large.url("/registry.json")),
 			}),
 		).rejects.toThrow(/larger than the \d+-byte limit/);
+	});
+});
+
+describe("githubFileUrl", () => {
+	const raw = new URL(DEFAULT_GITHUB_RAW_URL);
+	const github = { owner: "workos", repo: "neon-sync", ref: "main" };
+
+	it("builds a raw GitHub URL under owner/repo/ref", () => {
+		expect(githubFileUrl(raw, github, "template.json").href).toBe(
+			"https://raw.githubusercontent.com/workos/neon-sync/main/template.json",
+		);
+		expect(
+			githubFileUrl(
+				raw,
+				{ ...github, dir: "packages/fn" },
+				"functions/index.ts",
+			).href,
+		).toBe(
+			"https://raw.githubusercontent.com/workos/neon-sync/main/packages/fn/functions/index.ts",
+		);
+	});
+
+	it("refuses a path that leaves the repo dir", () => {
+		expect(() =>
+			githubFileUrl(
+				raw,
+				{ ...github, dir: "packages/fn" },
+				"../secret.ts",
+			),
+		).toThrow(/outside/);
+	});
+
+	it("refuses a dot segment the URL parser would resolve", () => {
+		for (const ref of ["..", "release/../main"]) {
+			expect(() =>
+				githubFileUrl(raw, { ...github, ref }, "template.json"),
+			).toThrow(/outside/);
+		}
+	});
+
+	it("keeps a slash in the ref as a path separator", () => {
+		expect(
+			githubFileUrl(
+				raw,
+				{ ...github, ref: "release/v1" },
+				"template.json",
+			).href,
+		).toBe(
+			"https://raw.githubusercontent.com/workos/neon-sync/release/v1/template.json",
+		);
+	});
+
+	it("keeps a mirror's path prefix and query", () => {
+		expect(
+			githubFileUrl(
+				new URL("https://mirror.example.com/raw?sig=abc"),
+				github,
+				"template.json",
+			).href,
+		).toBe(
+			"https://mirror.example.com/raw/workos/neon-sync/main/template.json?sig=abc",
+		);
+	});
+});
+
+describe("resolveGithubRawBase", () => {
+	it("defaults to raw.githubusercontent.com and refuses plain HTTP except loopback", () => {
+		expect(resolveGithubRawBase({}).href).toBe(
+			`${DEFAULT_GITHUB_RAW_URL}/`,
+		);
+		expect(() =>
+			resolveGithubRawBase({
+				NEON_FUNCTION_REGISTRY_GITHUB: "http://example.com",
+			}),
+		).toThrow(/https/);
+		expect(
+			resolveGithubRawBase({
+				NEON_FUNCTION_REGISTRY_GITHUB: "http://127.0.0.1:9",
+			}).href,
+		).toBe("http://127.0.0.1:9/");
+	});
+});
+
+describe("openRegistry GitHub template sources", () => {
+	let dir: string;
+	let servers: Awaited<ReturnType<typeof serve>>[] = [];
+
+	const start = async (routes: Record<string, Reply>) => {
+		const server = await serve(routes);
+		servers.push(server);
+		return server;
+	};
+
+	beforeEach(() => {
+		dir = mkdtempSync(join(tmpdir(), "neon-registry-github-"));
+	});
+
+	afterEach(async () => {
+		rmSync(dir, { recursive: true, force: true });
+		await Promise.all(servers.map((server) => server.close()));
+		servers = [];
+	});
+
+	const writeIndex = (templates: unknown[]) =>
+		writeFileSync(
+			join(dir, "registry.json"),
+			JSON.stringify({ templates }),
+		);
+
+	const partnerEntry = {
+		id: "partner",
+		title: "Partner",
+		description: "A partner template.",
+		path: "template.json",
+		categories: ["first-party"],
+		source: { github: { owner: "workos", repo: "neon-sync" } },
+	};
+
+	it("defaults ref to HEAD and loads files from GitHub, not the local tree", async () => {
+		writeIndex([partnerEntry]);
+		writeFileSync(
+			join(dir, "template.json"),
+			JSON.stringify({
+				id: "partner",
+				title: "Local",
+				description: "Should not be read.",
+				layout: "router",
+			}),
+		);
+		const github = await start({
+			"/workos/neon-sync/HEAD/template.json": JSON.stringify({
+				id: "partner",
+				title: "Partner",
+				description: "From GitHub.",
+				layout: "router",
+			}),
+			"/workos/neon-sync/HEAD/functions/index.ts": "export default 1;\n",
+		});
+		const registry = await openRegistry(
+			{ kind: "dir", dir },
+			{ githubRaw: github.url("/") },
+		);
+		const [entry] = registry.entries;
+		if (!entry) throw new Error("partner entry did not parse");
+		expect(entry.source).toEqual({
+			github: { owner: "workos", repo: "neon-sync", ref: "HEAD" },
+		});
+		const loaded = await registry.load(entry);
+		expect(loaded.template.description).toBe("From GitHub.");
+		expect(loaded.sources.get("functions/index.ts")).toBe(
+			"export default 1;\n",
+		);
+		expect(github.requests).toEqual([
+			"/workos/neon-sync/HEAD/template.json",
+			"/workos/neon-sync/HEAD/functions/index.ts",
+		]);
+	});
+
+	it("reads from source.github.dir when set", async () => {
+		writeIndex([
+			{
+				...partnerEntry,
+				source: {
+					github: {
+						owner: "workos",
+						repo: "neon-sync",
+						ref: "v1.2.3",
+						dir: "packages/fn",
+					},
+				},
+			},
+		]);
+		const github = await start({
+			"/workos/neon-sync/v1.2.3/packages/fn/template.json":
+				JSON.stringify({
+					id: "partner",
+					title: "Partner",
+					description: "Nested.",
+					layout: "router",
+				}),
+			"/workos/neon-sync/v1.2.3/packages/fn/functions/index.ts":
+				"export default 2;\n",
+		});
+		const registry = await openRegistry(
+			{ kind: "dir", dir },
+			{ githubRaw: github.url("/") },
+		);
+		const [entry] = registry.entries;
+		if (!entry) throw new Error("partner entry did not parse");
+		const loaded = await registry.load(entry);
+		expect(loaded.sources.get("functions/index.ts")).toBe(
+			"export default 2;\n",
+		);
+	});
+
+	it("rejects a GitHub source that is not owner/repo", async () => {
+		writeIndex([
+			{
+				...partnerEntry,
+				source: {
+					github: {
+						owner: "https://github.com/workos",
+						repo: "neon-sync",
+					},
+				},
+			},
+		]);
+		await expect(openRegistry({ kind: "dir", dir })).rejects.toThrow(
+			/owner/,
+		);
+	});
+
+	it("does not treat a GitHub 404 as a stale neon.com index", async () => {
+		writeIndex([partnerEntry]);
+		const github = await start({});
+		const registry = await openRegistry(
+			{ kind: "dir", dir },
+			{ githubRaw: github.url("/") },
+		);
+		const [entry] = registry.entries;
+		if (!entry) throw new Error("partner entry did not parse");
+		await expect(registry.load(entry)).rejects.toThrow(
+			/GitHub \(workos\/neon-sync@HEAD\) answered 404\.$/,
+		);
+	});
+
+	it("tells the user to set GITHUB_TOKEN when GitHub rate limits", async () => {
+		writeIndex([partnerEntry]);
+		const github = await start({
+			"/workos/neon-sync/HEAD/template.json": { status: 429 },
+		});
+		const registry = await openRegistry(
+			{ kind: "dir", dir },
+			{ githubRaw: github.url("/") },
+		);
+		const [entry] = registry.entries;
+		if (!entry) throw new Error("partner entry did not parse");
+		await expect(registry.load(entry)).rejects.toThrow(
+			/answered 429\. GitHub is rate limiting this network/,
+		);
+	});
+
+	it("reads a branch name that contains a slash", async () => {
+		writeIndex([
+			{
+				...partnerEntry,
+				source: {
+					github: {
+						owner: "workos",
+						repo: "neon-sync",
+						ref: "release/v1",
+					},
+				},
+			},
+		]);
+		const github = await start({
+			"/workos/neon-sync/release/v1/template.json": JSON.stringify({
+				id: "partner",
+				title: "Partner",
+				description: "Branch.",
+				layout: "router",
+			}),
+			"/workos/neon-sync/release/v1/functions/index.ts":
+				"export default 3;\n",
+		});
+		const registry = await openRegistry(
+			{ kind: "dir", dir },
+			{ githubRaw: github.url("/") },
+		);
+		const [entry] = registry.entries;
+		if (!entry) throw new Error("partner entry did not parse");
+		const loaded = await registry.load(entry);
+		expect(loaded.sources.get("functions/index.ts")).toBe(
+			"export default 3;\n",
+		);
+	});
+
+	const manyFiles = (count: number, reply: (index: number) => Reply) => {
+		const routes: Record<string, Reply> = {
+			"/workos/neon-sync/HEAD/template.json": JSON.stringify({
+				id: "partner",
+				title: "Partner",
+				description: "Many.",
+				layout: "separate",
+				operations: Array.from({ length: count }, (_, i) => ({
+					id: `op${i}`,
+					title: `Op ${i}`,
+					description: "d",
+					source: `functions/op${i}.ts`,
+					slug: `op${i}`,
+					recommended: true,
+				})),
+			}),
+		};
+		for (let i = 0; i < count; i++) {
+			routes[`/workos/neon-sync/HEAD/functions/op${i}.ts`] = reply(i);
+		}
+		return routes;
+	};
+
+	const openPartner = async (routes: Record<string, Reply>) => {
+		writeIndex([partnerEntry]);
+		const github = await start(routes);
+		const registry = await openRegistry(
+			{ kind: "dir", dir },
+			{ githubRaw: github.url("/") },
+		);
+		const [entry] = registry.entries;
+		if (!entry) throw new Error("partner entry did not parse");
+		return { github, load: () => registry.load(entry) };
+	};
+
+	it("reads six files at a time and starts none after the first failure", async () => {
+		let release = () => {};
+		const gate = new Promise<void>((done) => {
+			release = done;
+		});
+		const { github, load } = await openPartner(
+			manyFiles(12, (i) =>
+				i === 0
+					? { status: 500 }
+					: { status: 200, body: `export default ${i};\n`, gate },
+			),
+		);
+		await expect(load()).rejects.toThrow(/answered 500/);
+		await vi.waitFor(() => expect(github.requests).toHaveLength(1 + 6));
+		release();
+		await new Promise((done) => setTimeout(done, 50));
+		expect(github.requests).toHaveLength(1 + 6);
+	});
+
+	it("names the template when its files exceed the total size limit", async () => {
+		const { load } = await openPartner(
+			manyFiles(9, () => "x".repeat(250 * 1024)),
+		);
+		await expect(load()).rejects.toThrow(
+			/Template "partner" source files exceed the 2097152-byte total limit\./,
+		);
+	});
+
+	it("keeps a mirror's path prefix and query when loading", async () => {
+		const { github } = await openPartner({});
+		const registry = await openRegistry(
+			{ kind: "dir", dir },
+			{ githubRaw: github.url("/mirror/raw?sig=1") },
+		);
+		const [entry] = registry.entries;
+		if (!entry) throw new Error("partner entry did not parse");
+		await expect(registry.load(entry)).rejects.toThrow(/answered 404/);
+		expect(github.requests).toEqual([
+			"/mirror/raw/workos/neon-sync/HEAD/template.json?sig=1",
+		]);
+	});
+
+	it("only fails partner templates when the GitHub mirror setting is invalid", async () => {
+		writeIndex([
+			{
+				id: "local",
+				title: "Local",
+				description: "d",
+				path: "local/template.json",
+				categories: ["first-party"],
+			},
+			partnerEntry,
+		]);
+		mkdirSync(join(dir, "local/functions"), { recursive: true });
+		writeFileSync(
+			join(dir, "local/template.json"),
+			JSON.stringify({
+				id: "local",
+				title: "Local",
+				description: "d",
+				layout: "router",
+			}),
+		);
+		writeFileSync(join(dir, "local/functions/index.ts"), "export {};\n");
+		const registry = await openRegistry(
+			{ kind: "dir", dir },
+			{ env: { NEON_FUNCTION_REGISTRY_GITHUB: "http://example.com" } },
+		);
+		const [local, partner] = registry.entries;
+		if (!local || !partner) throw new Error("entries did not parse");
+		await expect(registry.load(local)).resolves.toMatchObject({
+			template: { id: "local" },
+		});
+		await expect(registry.load(partner)).rejects.toThrow(
+			/NEON_FUNCTION_REGISTRY_GITHUB must be an https:\/\/ URL/,
+		);
+	});
+
+	it("rejects a ref of . or .. or a dot segment", async () => {
+		for (const ref of [".", "..", "release/../main", "release//v1"]) {
+			writeIndex([
+				{
+					...partnerEntry,
+					source: {
+						github: { owner: "workos", repo: "neon-sync", ref },
+					},
+				},
+			]);
+			await expect(openRegistry({ kind: "dir", dir })).rejects.toThrow(
+				/ref/,
+			);
+		}
+	});
+});
+
+type TarEntry = string | { symlink: string };
+
+const tarGz = (entries: Record<string, TarEntry>): Buffer => {
+	const blocks: Buffer[] = [];
+	for (const [name, entry] of Object.entries(entries)) {
+		const body = Buffer.from(typeof entry === "string" ? entry : "");
+		const header = Buffer.alloc(512);
+		header.write(name, 0);
+		header.write("0000644\0", 100);
+		header.write("0000000\0", 108);
+		header.write("0000000\0", 116);
+		header.write(`${body.length.toString(8).padStart(11, "0")}\0`, 124);
+		header.write("00000000000\0", 136);
+		header.write("        ", 148);
+		header.write(typeof entry === "string" ? "0" : "2", 156);
+		if (typeof entry !== "string") header.write(entry.symlink, 157);
+		header.write("ustar\0", 257);
+		header.write("00", 263);
+		let sum = 0;
+		for (const byte of header) sum += byte;
+		header.write(`${sum.toString(8).padStart(6, "0")}\0 `, 148);
+		blocks.push(
+			header,
+			body,
+			Buffer.alloc((512 - (body.length % 512)) % 512),
+		);
+	}
+	blocks.push(Buffer.alloc(1024));
+	return Buffer.from(gzipSync(new Uint8Array(Buffer.concat(blocks))));
+};
+
+describe("openRegistry reads neondatabase/registry from one tarball", () => {
+	const TARBALL = "/acme/registry/tar.gz/main";
+	const demoTemplate = JSON.stringify({
+		id: "demo",
+		title: "Demo",
+		description: "A demo.",
+		layout: "router",
+	});
+	const index = JSON.stringify({
+		templates: [
+			{
+				id: "demo",
+				title: "Demo",
+				description: "A demo.",
+				path: "demo/template.json",
+				categories: ["first-party"],
+			},
+			{
+				id: "partner",
+				title: "Partner",
+				description: "A partner template.",
+				path: "template.json",
+				categories: ["first-party"],
+				source: { github: { owner: "workos", repo: "neon-sync" } },
+			},
+		],
+	});
+	const INDEX = "/acme/registry/main/registry.json";
+	let servers: Awaited<ReturnType<typeof serve>>[] = [];
+
+	const start = async (routes: Record<string, Reply>) => {
+		const server = await serve(routes);
+		servers.push(server);
+		return server;
+	};
+
+	const open = async (
+		tarball: Reply,
+		rawRoutes: Record<string, Reply> = {},
+	) => {
+		const primary = await start({
+			"/registry.json": JSON.stringify({ templates: [] }),
+		});
+		const codeload = await start({ [TARBALL]: tarball });
+		const raw = await start({
+			[INDEX]: index,
+			"/workos/neon-sync/HEAD/template.json": JSON.stringify({
+				id: "partner",
+				title: "Partner",
+				description: "From GitHub.",
+				layout: "router",
+			}),
+			"/workos/neon-sync/HEAD/functions/index.ts": "export default 2;\n",
+			...rawRoutes,
+		});
+		const registry = await openRegistry(undefined, {
+			primary: primary.url("/registry.json"),
+			neonRegistry: { owner: "acme", repo: "registry", ref: "main" },
+			env: { NEON_BOOTSTRAP_GITHUB_CODELOAD: codeload.url("") },
+			githubRaw: raw.url("/"),
+		});
+		const entry = (id: string) => {
+			const found = registry.entries.find(
+				(candidate) => candidate.id === id,
+			);
+			if (!found) throw new Error(`${id} entry did not parse`);
+			return found;
+		};
+		return { registry, entry, primary, codeload, raw };
+	};
+
+	afterEach(async () => {
+		await Promise.all(servers.map((server) => server.close()));
+		servers = [];
+	});
+
+	it("falls back to raw GitHub file by file when the archive download fails", async () => {
+		const { registry, entry, codeload, raw } = await open(
+			{ status: 500 },
+			{
+				"/acme/registry/main/demo/template.json": demoTemplate,
+				"/acme/registry/main/demo/functions/index.ts":
+					"export default 3;\n",
+			},
+		);
+		const demo = await registry.load(entry("demo"));
+		expect(demo.sources.get("functions/index.ts")).toBe(
+			"export default 3;\n",
+		);
+		await registry.load(entry("demo"));
+		expect(codeload.requests).toEqual([TARBALL]);
+		expect(raw.requests.filter((path) => path !== INDEX)).toHaveLength(4);
+	});
+
+	it("logs why the archive could not be used", async () => {
+		const lines: string[] = [];
+		vi.stubEnv("DEBUG", "true");
+		vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+			lines.push(String(chunk));
+			return true;
+		});
+		try {
+			const { registry, entry } = await open(
+				{ status: 500 },
+				{
+					"/acme/registry/main/demo/template.json": demoTemplate,
+					"/acme/registry/main/demo/functions/index.ts":
+						"export {};\n",
+				},
+			);
+			await registry.load(entry("demo"));
+		} finally {
+			vi.restoreAllMocks();
+			vi.unstubAllEnvs();
+		}
+		expect(lines.join("")).toMatch(
+			/DEBUG: Could not download the acme\/registry@main archive, reading files one by one: .*500/,
+		);
+	});
+
+	it("reports a template the fallback cannot find", async () => {
+		const { registry, entry } = await open({ status: 500 });
+		await expect(registry.load(entry("demo"))).rejects.toThrow(
+			/GitHub \(acme\/registry@main\) answered 404\.$/,
+		);
+	});
+
+	it("reads neondatabase/examples file by file, never from an archive", async () => {
+		const codeload = await start({});
+		const primary = await start({
+			"/registry.json": JSON.stringify({
+				templates: [
+					{
+						id: "demo",
+						title: "Demo",
+						description: "A demo.",
+						path: "demo/template.json",
+						categories: ["first-party"],
+					},
+				],
+			}),
+		});
+		const fallback = await start({
+			"/demo/template.json": demoTemplate,
+			"/demo/functions/index.ts": "export default 4;\n",
+		});
+		const registry = await openRegistry(undefined, {
+			primary: primary.url("/registry.json"),
+			fallback: fallback.url("/registry.json"),
+			neonRegistry: false,
+			env: { NEON_BOOTSTRAP_GITHUB_CODELOAD: codeload.url("") },
+		});
+		const [demo] = registry.entries;
+		if (!demo) throw new Error("demo entry did not parse");
+		await registry.load(demo);
+		expect(codeload.requests).toEqual([]);
+		expect(fallback.requests).toEqual([
+			"/demo/template.json",
+			"/demo/functions/index.ts",
+		]);
+	});
+
+	it("downloads the archive once and leaves partner templates on raw GitHub", async () => {
+		const { registry, entry, primary, codeload, raw } = await open(
+			tarGz({
+				"registry-main/demo/template.json": demoTemplate,
+				"registry-main/demo/functions/index.ts": "export default 1;\n",
+				"registry-main/README.md": "# Registry\n",
+			}),
+		);
+		const demo = await registry.load(entry("demo"));
+		expect(demo.sources.get("functions/index.ts")).toBe(
+			"export default 1;\n",
+		);
+		await registry.load(entry("demo"));
+		const partner = await registry.load(entry("partner"));
+		expect(partner.sources.get("functions/index.ts")).toBe(
+			"export default 2;\n",
+		);
+		expect(primary.requests).toEqual(["/registry.json"]);
+		expect(codeload.requests).toEqual([TARBALL]);
+		expect(raw.requests).toEqual([
+			INDEX,
+			"/workos/neon-sync/HEAD/template.json",
+			"/workos/neon-sync/HEAD/functions/index.ts",
+		]);
+	});
+
+	it("reports a template the archive lacks", async () => {
+		const { registry, entry } = await open(
+			tarGz({ "registry-main/README.md": "# Registry\n" }),
+		);
+		await expect(registry.load(entry("demo"))).rejects.toThrow(
+			/not found in acme\/registry@main\.$/,
+		);
+	});
+
+	it("refuses a symlink in the archive", async () => {
+		const { registry, entry } = await open(
+			tarGz({
+				"registry-main/demo/template.json": demoTemplate,
+				"registry-main/demo/functions/index.ts": {
+					symlink: "../../secret.ts",
+				},
+			}),
+		);
+		await expect(registry.load(entry("demo"))).rejects.toThrow(
+			/not a regular file/,
+		);
 	});
 });

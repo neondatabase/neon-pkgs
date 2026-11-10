@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "../log.js";
 import { showNotice } from "../notices.js";
+import { githubRequestHeaders } from "../utils/github_headers.js";
 import { writeJsonFile } from "../utils/json_file.js";
 import { AGENT_SKILLS_SOURCE, PLATFORMS_SKILLS_SOURCE } from "./catalog.js";
 
@@ -343,26 +344,18 @@ const isTreeEntry = (value: unknown): value is TreeEntry =>
 	typeof value.type === "string" &&
 	typeof value.sha === "string";
 
-const githubHeaders = (env: NodeJS.ProcessEnv): Record<string, string> => {
-	const token = env.GITHUB_TOKEN || env.GH_TOKEN;
-	return {
-		Accept: "application/vnd.github+json",
-		"User-Agent": "neon-cli",
-		...(token ? { Authorization: `Bearer ${token}` } : {}),
-	};
-};
-
 const fetchTree = async (
 	source: string,
 	env: NodeJS.ProcessEnv,
 ): Promise<TreeEntry[]> => {
-	const response = await fetch(
-		`https://api.github.com/repos/${source}/git/trees/HEAD?recursive=1`,
-		{
-			headers: githubHeaders(env),
-			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+	const url = `https://api.github.com/repos/${source}/git/trees/HEAD?recursive=1`;
+	const response = await fetch(url, {
+		headers: {
+			Accept: "application/vnd.github+json",
+			...githubRequestHeaders(url, env),
 		},
-	);
+		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+	});
 	if (!response.ok) {
 		if (
 			(response.status === 403 || response.status === 429) &&
