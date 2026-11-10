@@ -135,32 +135,39 @@ export function createTokenReuse(
 		| { readonly token: string; readonly refreshAt: number }
 		| undefined;
 	let pending: Promise<string> | undefined;
+	const fetchToken = async (): Promise<string> => {
+		// Defer the call so a source that throws synchronously still rejects
+		// this promise after `pending` holds it, and the reset below sees it.
+		await undefined;
+		const token: unknown = await source();
+		if (typeof token !== "string") {
+			throw new Error("Realtime oidcToken must return a string");
+		}
+		try {
+			validateEnvelopeCredential(token);
+		} catch {
+			throw new Error("Realtime got an invalid OIDC token");
+		}
+		const expiresAt = jwtExpiry(token);
+		const refreshAt =
+			expiresAt === undefined
+				? 0
+				: (expiresAt - TOKEN_REFRESH_MARGIN_SECONDS) * 1_000;
+		cached = clock() < refreshAt ? { token, refreshAt } : undefined;
+		return token;
+	};
 	return () => {
 		if (cached && clock() < cached.refreshAt)
 			return Promise.resolve(cached.token);
-		pending ??= (async () => {
-			try {
-				const token: unknown = await source();
-				if (typeof token !== "string") {
-					throw new Error("Realtime oidcToken must return a string");
-				}
-				try {
-					validateEnvelopeCredential(token);
-				} catch {
-					throw new Error("Realtime got an invalid OIDC token");
-				}
-				const expiresAt = jwtExpiry(token);
-				const refreshAt =
-					expiresAt === undefined
-						? 0
-						: (expiresAt - TOKEN_REFRESH_MARGIN_SECONDS) * 1_000;
-				cached = clock() < refreshAt ? { token, refreshAt } : undefined;
-				return token;
-			} finally {
-				pending = undefined;
-			}
-		})();
-		return pending;
+		if (pending) return pending;
+		const attempt = fetchToken();
+		pending = attempt;
+		// Never keep a settled attempt, so a failure is retried on the next call.
+		const settled = () => {
+			if (pending === attempt) pending = undefined;
+		};
+		attempt.then(settled, settled);
+		return attempt;
 	};
 }
 

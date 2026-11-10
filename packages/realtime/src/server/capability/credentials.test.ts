@@ -226,10 +226,57 @@ describe("OIDC token reuse", () => {
 		);
 		const token = createTokenReuse(source, () => NOW_SECONDS * 1_000);
 		const pending = Promise.all([token(), token()]);
+		await vi.waitFor(() => expect(source).toHaveBeenCalledOnce());
 		release(jwt({ exp: NOW_SECONDS + 600 }));
 		const [first, second] = await pending;
 		expect(first).toBe(second);
 		expect(source).toHaveBeenCalledTimes(1);
+	});
+
+	it("tries again after a source that throws synchronously", async () => {
+		const failure = new Error("no token yet");
+		const token = jwt({ exp: NOW_SECONDS + 600 });
+		const source = vi
+			.fn<() => string>()
+			.mockImplementationOnce(() => {
+				throw failure;
+			})
+			.mockReturnValueOnce(token);
+		const reuse = createTokenReuse(source, () => NOW_SECONDS * 1_000);
+		await expect(reuse()).rejects.toBe(failure);
+		await expect(reuse()).resolves.toBe(token);
+		expect(source).toHaveBeenCalledTimes(2);
+	});
+
+	it("shares a synchronous failure with concurrent callers only", async () => {
+		const failure = new Error("no token yet");
+		const source = vi
+			.fn<() => string>()
+			.mockImplementationOnce(() => {
+				throw failure;
+			})
+			.mockReturnValue("opaque-token");
+		const reuse = createTokenReuse(source, () => NOW_SECONDS * 1_000);
+		const [first, second] = await Promise.allSettled([reuse(), reuse()]);
+		expect(first).toMatchObject({ status: "rejected", reason: failure });
+		expect(second).toMatchObject({ status: "rejected", reason: failure });
+		await expect(reuse()).resolves.toBe("opaque-token");
+	});
+
+	it("uses Vercel's token once it appears after a first failure", async () => {
+		vi.stubEnv("VERCEL_OIDC_TOKEN", "");
+		const login = createLoginSource(
+			parseDatabaseUrl("postgresql://neondb_owner@host/neondb"),
+			undefined,
+		);
+		await expect(login()).rejects.toThrow(
+			"databaseUrl has no password, so Realtime sends a Vercel OIDC token",
+		);
+		vi.stubEnv("VERCEL_OIDC_TOKEN", "vercel-token-now-available");
+		await expect(login()).resolves.toEqual({
+			user: "neondb_owner",
+			credential: "vercel-token-now-available",
+		});
 	});
 
 	it("passes the source's error through and tries again next time", async () => {
