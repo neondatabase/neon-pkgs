@@ -589,10 +589,216 @@ describe("Realtime TanStack DB collection", () => {
 		await expect(pending).rejects.toBe(failure);
 		await expect(collection.utils.awaitTxId("11")).rejects.toBe(failure);
 	});
+
+	it.each([
+		"after cleanup",
+		"on reload",
+	] as const)("subscribes with the newest renewed query %s", async (restart) => {
+		const client = new TestClient<MessageRow>();
+		const renewed = query("query-2");
+		const refreshQuery = vi.fn(async () => renewed);
+		const collection = createTestCollection(
+			client,
+			query("query-1", 9),
+			refreshQuery,
+		);
+		const preload = collection.preload();
+		client.latest().reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+		await preload;
+		await eventually(() =>
+			expect(client.latest().renewals).toEqual([renewed]),
+		);
+
+		let restarted: Promise<void>;
+		if (restart === "after cleanup") {
+			await collection.cleanup();
+			restarted = collection.preload();
+		} else {
+			restarted = collection.reload();
+		}
+
+		expect(client.subscriptions).toHaveLength(2);
+		expect(client.latest().query).toBe(renewed);
+		client.latest().reset([{ rowId: "a", row: { id: 1, title: "two" } }]);
+		await restarted;
+		expect(collection.get(1)).toMatchObject({ title: "two" });
+		expect(refreshQuery).toHaveBeenCalledOnce();
+	});
+
+	describe("awaitTxId before the collection starts syncing", () => {
+		it("waits for synchronization to start", async () => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+
+			const confirmed = collection.utils.awaitTxId("42", 10_000);
+			expect(client.subscriptions).toHaveLength(0);
+			const preload = collection.preload();
+			client
+				.latest()
+				.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+			await preload;
+			client.latest().batch(
+				[
+					{
+						type: "upsert",
+						rowId: "a",
+						row: { id: 1, title: "two" },
+					},
+				],
+				["42"],
+			);
+
+			await expect(confirmed).resolves.toBe(true);
+			const [awaited] = client.latest().awaitedTransactions;
+			expect(awaited?.txid).toBe("42");
+			expect(awaited?.timeout).toBeLessThanOrEqual(10_000);
+		});
+
+		it("normalizes the transaction ID before synchronization starts", async () => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+			const confirmed = collection.utils.awaitTxId("00042", 10_000);
+
+			const preload = collection.preload();
+			client
+				.latest()
+				.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+			await preload;
+			client.latest().batch([], ["42"]);
+
+			await expect(confirmed).resolves.toBe(true);
+			expect(client.latest().awaitedTransactions[0]?.txid).toBe("42");
+		});
+
+		it("uses a monotonic clock for the remaining timeout", async () => {
+			vi.spyOn(Date, "now")
+				.mockReturnValueOnce(10_000)
+				.mockReturnValue(100_000);
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+			const confirmed = collection.utils.awaitTxId("41", 10_000);
+
+			const preload = collection.preload();
+			client
+				.latest()
+				.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+			await preload;
+
+			const remaining = client.latest().awaitedTransactions[0]?.timeout;
+			expect(remaining).toBeGreaterThan(9_000);
+			expect(remaining).toBeLessThanOrEqual(10_000);
+			client.latest().batch([], ["41"]);
+			await expect(confirmed).resolves.toBe(true);
+		});
+
+		it("times out within the supplied timeout", async () => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+
+			await expect(collection.utils.awaitTxId("9", 1)).rejects.toThrow(
+				"Timed out waiting for live-query transaction 9",
+			);
+			expect(client.subscriptions).toHaveLength(0);
+		});
+
+		it.each([
+			["not-a-txid", 10, "transaction ID must be a decimal string"],
+			["18446744073709551616", 10, "transaction ID exceeds uint64"],
+			["42", -1, "transaction timeout must be a non-negative number"],
+			[
+				"42",
+				Number.NaN,
+				"transaction timeout must be a non-negative number",
+			],
+			[
+				"42",
+				Number.POSITIVE_INFINITY,
+				"transaction timeout must be a non-negative number",
+			],
+		] as const)("rejects invalid wait arguments before synchronization (%s, %s)", async (txid, timeout, message) => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+
+			await expect(
+				collection.utils.awaitTxId(txid, timeout),
+			).rejects.toThrow(message);
+			expect(client.subscriptions).toHaveLength(0);
+		});
+
+		it("rejects when synchronization fails as it starts", async () => {
+			const failure = liveError("ACCESS_DENIED");
+			const client = new TestClient<MessageRow>({
+				status: "error",
+				error: failure,
+			});
+			const collection = createTestCollection(client);
+			const pending = collection.utils.awaitTxId("12");
+
+			await expect(collection.preload()).rejects.toBe(failure);
+			await expect(pending).rejects.toBe(failure);
+		});
+
+		it("rejects pending and later waits when subscription setup throws", async () => {
+			const { client } = wireClient();
+			client.close();
+			const collection = createTestCollection(client);
+			const first = collection.utils.awaitTxId("13", 100).catch(identity);
+			const second = collection.utils
+				.awaitTxId("14", 100)
+				.catch(identity);
+
+			const failure = await collection.preload().catch(identity);
+
+			expect(failure).toMatchObject({
+				message: "Realtime client is closed",
+			});
+			expect(await first).toBe(failure);
+			expect(await second).toBe(failure);
+			await expect(collection.utils.awaitTxId("15")).rejects.toBe(
+				failure,
+			);
+		});
+
+		it("clears a setup failure when the collection is cleaned up", async () => {
+			const failure = new Error("Subscription setup failed");
+			const client = new TestClient<MessageRow>(undefined, [failure]);
+			const collection = createTestCollection(client);
+			const failedWait = collection.utils.awaitTxId("17", 100);
+
+			await expect(collection.preload()).rejects.toBe(failure);
+			await expect(failedWait).rejects.toBe(failure);
+			await collection.cleanup();
+
+			const confirmed = collection.utils.awaitTxId("18", 10_000);
+			const preload = collection.preload();
+			client
+				.latest()
+				.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+			await preload;
+			client.latest().batch([], ["18"]);
+			await expect(confirmed).resolves.toBe(true);
+		});
+
+		it("continues waiting across cleanup before synchronization starts", async () => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+			const confirmed = collection.utils.awaitTxId("16", 10_000);
+
+			await collection.cleanup();
+			const preload = collection.preload();
+			client
+				.latest()
+				.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+			await preload;
+			client.latest().batch([], ["16"]);
+
+			await expect(confirmed).resolves.toBe(true);
+		});
+	});
 });
 
 function createTestCollection(
-	client: TestClient<MessageRow>,
+	client: RealtimeClient,
 	currentQuery = query("query-1"),
 	refreshQuery?: () => Promise<SealedLiveQuery<MessageRow>>,
 ) {
@@ -607,6 +813,10 @@ function createTestCollection(
 	);
 	cleanups.push(() => collection.cleanup());
 	return collection;
+}
+
+function identity<T>(value: T): T {
+	return value;
 }
 
 /** Fake transport only: subscriptions, decoding, and reconciliation are real. */
@@ -684,6 +894,7 @@ class TestClient<Row extends object> implements RealtimeClient {
 			status: "connecting",
 			error: undefined,
 		},
+		private readonly subscribeFailures: Error[] = [],
 	) {}
 
 	subscribe<CurrentRow>(
@@ -695,17 +906,20 @@ class TestClient<Row extends object> implements RealtimeClient {
 		_options: RawLiveQueryOptions,
 	): RawLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
-		_query: SealedLiveQuery<CurrentRow>,
+		query: SealedLiveQuery<CurrentRow>,
 		options?:
 			| MaterializedLiveQueryOptions<CurrentRow>
 			| RawLiveQueryOptions,
 	):
 		| MaterializedLiveQuerySubscription<CurrentRow>
 		| RawLiveQuerySubscription<CurrentRow> {
+		const failure = this.subscribeFailures.shift();
+		if (failure) throw failure;
 		if (options?.materialize !== false) {
 			throw new Error("Test client expects a raw subscription");
 		}
 		const subscription = new TestRawSubscription<CurrentRow>(
+			query,
 			this.initialState,
 		);
 		this.subscriptions.push(
@@ -747,7 +961,10 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 	unsubscribed = false;
 	private currentState: LiveQueryState;
 
-	constructor(initialState: LiveQueryState) {
+	constructor(
+		readonly query: SealedLiveQuery<Row>,
+		initialState: LiveQueryState,
+	) {
 		this.currentState = initialState;
 	}
 

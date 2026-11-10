@@ -2,6 +2,7 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { defined } from "../defined.test-helpers.js";
 import { defineParsers } from "./postgres/parsers.js";
+import { QueryRefreshController } from "./query-refresh.js";
 import {
 	createRealtimeClient,
 	type MaterializedLiveQuerySubscription,
@@ -90,6 +91,130 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
+	it("does not restore stale when an older renewal is superseded", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const sub = client.subscribe(query("initial")),
+			socket = connectAndAdmit();
+		baselineSync(socket, "initial");
+		try {
+			socket.receive({
+				type: "subscription_error",
+				live_id: "41",
+				code: "authorization_expired",
+				message: "expired",
+			});
+			expect(sub.getState().status).toBe("stale");
+			const first = sub.renew(query("first"));
+			const older = first.catch((error) => error);
+			const second = sub.renew(query("second"));
+			void second.catch(() => {});
+			expect((await older).code).toBe("renewal_superseded");
+			expect(sub.getState().status).toBe("connecting");
+		} finally {
+			client.close();
+		}
+	});
+
+	it("closes a peer unsubscribed from a reconnect state listener", () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const first = client.subscribe(query("first"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "first");
+		const second = client.subscribe(query("second"));
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [
+				{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+				{ name: "title", type_oid: 25, typmod: -1, codec: "pg_text" },
+			],
+		});
+		baselineSync(socket, "second", "42");
+		first.onStateChange((state) => {
+			if (state.status === "connecting") second.unsubscribe();
+		});
+		try {
+			socket.finishClose();
+			expect(second.getState().status).toBe("closed");
+		} finally {
+			client.close();
+		}
+	});
+
+	it("keeps a newer automatic capability when an older manual renewal completes", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const initial = query("initial");
+		const manual = { ...query("manual"), expiresAt: 70_000 };
+		const automatic = { ...query("automatic"), expiresAt: 80_000 };
+		const subscription = client.subscribe(initial);
+		const socket = connectAndAdmit();
+		const send = socket.send.bind(socket);
+		socket.send = (data) => {
+			send(data);
+			const message = JSON.parse(data);
+			if (message.type === "ping")
+				socket.receive({ type: "pong", token: message.token });
+		};
+		const controller = new QueryRefreshController({
+			query: initial,
+			refreshQuery: async () => automatic,
+			renewSubscription: (replacement) => subscription.renew(replacement),
+			onRefreshExhausted: vi.fn(),
+		});
+		try {
+			controller.start();
+			const pending = controller.replaceSealedQuery(manual);
+			await vi.advanceTimersByTimeAsync(50_000);
+			expect(controller.currentQuery()).toBe(automatic);
+			socket.receive({ type: "renewed", live_id: "41" });
+			await pending;
+			socket.receive({ type: "renewed", live_id: "41" });
+			await vi.advanceTimersByTimeAsync(0);
+			expect(controller.currentQuery()).toBe(automatic);
+		} finally {
+			controller.stop();
+			client.close();
+		}
+	});
+
+	it("does not resubscribe when a stale-state listener unsubscribes", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		client.subscribe(query("sibling"));
+		const pending = subscription.renew(query("replacement"));
+		const rejected = pending.catch((error) => error);
+		subscription.onStateChange((state) => {
+			if (state.status === "stale") subscription.unsubscribe();
+		});
+		try {
+			socket.receive({
+				type: "subscription_error",
+				live_id: "41",
+				code: "authorization_expired",
+				message: "expired",
+			});
+			expect(subscription.getState().status).toBe("closed");
+			expect(
+				socket.sent.filter((message) => message.type === "subscribe"),
+			).toHaveLength(2);
+			expect((await rejected).message).toBe(
+				"Live-query subscription is closed",
+			);
+		} finally {
+			client.close();
+		}
+	});
+
 	it("uses a custom WebSocket factory", () => {
 		const webSocketFactory = vi.fn(
 			(url: string, protocols: string | string[]) =>
