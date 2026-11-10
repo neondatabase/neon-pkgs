@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
 	allowGithubTemplateSources,
-	githubSourceJsonSchema,
 	parseRegistryIndex,
 	type RegistryIndexDocument,
+	remoteSourceJsonSchema,
 	type SchemaValidate,
 } from "./registry";
 
@@ -33,7 +33,7 @@ describe("allowGithubTemplateSources", () => {
 	it("adds source to a schema that lacks it without changing the original", () => {
 		const published = schema({ id: { type: "string" } });
 		expect(allowGithubTemplateSources(published)).toEqual(
-			schema({ id: { type: "string" }, source: githubSourceJsonSchema }),
+			schema({ id: { type: "string" }, source: remoteSourceJsonSchema }),
 		);
 		expect(published).toEqual(schema({ id: { type: "string" } }));
 	});
@@ -75,5 +75,22 @@ describe("parseRegistryIndex source", () => {
 				permissive,
 			),
 		).toThrow(/invalid source\.github\.repo/);
+	});
+
+	it("rejects a GitHub source with a missing or non-string field", () => {
+		for (const [source, field] of [
+			[{ github: { owner: "workos" } }, /invalid source\.github\.repo/],
+			[
+				{ github: { owner: "workos", repo: "neon-sync", ref: 1 } },
+				/invalid source\.github\.ref/,
+			],
+			[{ github: "workos/neon-sync" }, /invalid source\.github\./],
+			[{}, /invalid source\./],
+			[null, /invalid source\./],
+		] as const) {
+			expect(() => parseRegistryIndex(index(source), permissive)).toThrow(
+				field,
+			);
+		}
 	});
 });

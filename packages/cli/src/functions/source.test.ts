@@ -279,13 +279,46 @@ describe("openRegistry with the default sources", () => {
 	const templateFor = (id: string, description: string) =>
 		JSON.stringify({ id, title: id, description, layout: "router" });
 
+	const NEON = { owner: "acme", repo: "registry", ref: "main" };
+	const NEON_INDEX = "/acme/registry/main/registry.json";
+	const withRegistry = (
+		neon: Awaited<ReturnType<typeof serve>>,
+		options: { primary: string; fallback?: string },
+	) =>
+		openRegistry(undefined, {
+			...options,
+			neonRegistry: NEON,
+			githubRaw: neon.url("/"),
+			env: { NEON_BOOTSTRAP_GITHUB_CODELOAD: neon.url("") },
+		});
+	const partnerEntry = {
+		...entryFor("partner"),
+		source: { github: { owner: "workos", repo: "neon-sync" } },
+	};
+
+	let warnings: string[] = [];
+	beforeEach(() => {
+		warnings = [];
+		vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+			warnings.push(String(chunk));
+			return true;
+		});
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
 	it("lists neondatabase/registry first and drops examples entries with the same id", async () => {
 		const neon = await start({
-			"/registry.json": JSON.stringify({
+			[NEON_INDEX]: JSON.stringify({
 				templates: [entryFor("fresh"), entryFor("shared")],
 			}),
-			"/shared/template.json": templateFor("shared", "From registry."),
-			"/shared/functions/index.ts": "export default 1;\n",
+			"/acme/registry/main/shared/template.json": templateFor(
+				"shared",
+				"From registry.",
+			),
+			"/acme/registry/main/shared/functions/index.ts":
+				"export default 1;\n",
 		});
 		const primary = await start({
 			"/registry.json": JSON.stringify({
@@ -293,11 +326,9 @@ describe("openRegistry with the default sources", () => {
 			}),
 		});
 		const fallback = await start({});
-		const registry = await openRegistry(undefined, {
+		const registry = await withRegistry(neon, {
 			primary: primary.url("/registry.json"),
 			fallback: fallback.url("/registry.json"),
-			neonRegistry: neon.url("/registry.json"),
-			env,
 		});
 		expect(registry.entries.map((entry) => entry.id)).toEqual([
 			"fresh",
@@ -305,7 +336,7 @@ describe("openRegistry with the default sources", () => {
 			"legacy",
 		]);
 		expect(registry.sources.map(describeRegistrySource)).toEqual([
-			neon.url("/registry.json"),
+			`${DEFAULT_GITHUB_RAW_URL}${NEON_INDEX}`,
 			primary.url("/registry.json"),
 		]);
 		const shared = registry.entries[1];
@@ -321,12 +352,10 @@ describe("openRegistry with the default sources", () => {
 			{ status: 503 },
 			"not json",
 		] satisfies Reply[]) {
-			const neon = await start({ "/registry.json": reply });
+			const neon = await start({ [NEON_INDEX]: reply });
 			const primary = await start({ "/registry.json": demoIndex });
-			const registry = await openRegistry(undefined, {
+			const registry = await withRegistry(neon, {
 				primary: primary.url("/registry.json"),
-				neonRegistry: neon.url("/registry.json"),
-				env,
 			});
 			expect(registry.entries.map((entry) => entry.id)).toEqual(["demo"]);
 			expect(registry.sources.map(describeRegistrySource)).toEqual([
@@ -335,18 +364,38 @@ describe("openRegistry with the default sources", () => {
 		}
 	});
 
+	it("warns when neondatabase/registry is broken but stays quiet while it is missing", async () => {
+		for (const [reply, warned] of [
+			[{ status: 404 }, false],
+			[{ status: 503 }, true],
+			["not json", true],
+		] satisfies Array<[Reply, boolean]>) {
+			warnings = [];
+			const neon = await start({ [NEON_INDEX]: reply });
+			const primary = await start({ "/registry.json": demoIndex });
+			await withRegistry(neon, {
+				primary: primary.url("/registry.json"),
+			});
+			expect(
+				warnings.some((line) =>
+					line.startsWith(
+						"WARNING: Skipping acme/registry@main, listing only neondatabase/examples templates: ",
+					),
+				),
+			).toBe(warned);
+		}
+	});
+
 	it("uses only neondatabase/registry when the examples registry is unavailable", async () => {
-		const neon = await start({ "/registry.json": demoIndex });
+		const neon = await start({ [NEON_INDEX]: demoIndex });
 		const primary = await start({ "/registry.json": { status: 503 } });
 		const fallback = await start({ "/registry.json": { status: 503 } });
-		const registry = await openRegistry(undefined, {
+		const registry = await withRegistry(neon, {
 			primary: primary.url("/registry.json"),
 			fallback: fallback.url("/registry.json"),
-			neonRegistry: neon.url("/registry.json"),
-			env,
 		});
 		expect(registry.sources.map(describeRegistrySource)).toEqual([
-			neon.url("/registry.json"),
+			`${DEFAULT_GITHUB_RAW_URL}${NEON_INDEX}`,
 		]);
 	});
 
@@ -355,13 +404,36 @@ describe("openRegistry with the default sources", () => {
 		const primary = await start({ "/registry.json": { status: 503 } });
 		const fallback = await start({ "/registry.json": { status: 502 } });
 		await expect(
-			openRegistry(undefined, {
+			withRegistry(neon, {
 				primary: primary.url("/registry.json"),
 				fallback: fallback.url("/registry.json"),
-				neonRegistry: neon.url("/registry.json"),
-				env,
 			}),
 		).rejects.toThrow(/answered 502/);
+	});
+
+	it("honours source only in neondatabase/registry", async () => {
+		const neon = await start({
+			[NEON_INDEX]: JSON.stringify({ templates: [partnerEntry] }),
+		});
+		const primary = await start({
+			"/registry.json": JSON.stringify({
+				templates: [
+					entryFor("demo"),
+					{ ...partnerEntry, id: "examples-partner" },
+					{
+						...entryFor("future"),
+						source: { gitlab: { project: "a/b" } },
+					},
+				],
+			}),
+		});
+		const registry = await withRegistry(neon, {
+			primary: primary.url("/registry.json"),
+		});
+		expect(registry.entries.map((entry) => entry.id)).toEqual([
+			"partner",
+			"demo",
+		]);
 	});
 
 	it("loads template files from the fallback, not the primary", async () => {
@@ -884,8 +956,8 @@ const tarGz = (entries: Record<string, TarEntry>): Buffer => {
 	return Buffer.from(gzipSync(new Uint8Array(Buffer.concat(blocks))));
 };
 
-describe("openRegistry reads neondatabase/examples from one tarball", () => {
-	const TARBALL = "/neondatabase/examples/tar.gz/main";
+describe("openRegistry reads neondatabase/registry from one tarball", () => {
+	const TARBALL = "/acme/registry/tar.gz/main";
 	const demoTemplate = JSON.stringify({
 		id: "demo",
 		title: "Demo",
@@ -911,6 +983,7 @@ describe("openRegistry reads neondatabase/examples from one tarball", () => {
 			},
 		],
 	});
+	const INDEX = "/acme/registry/main/registry.json";
 	let servers: Awaited<ReturnType<typeof serve>>[] = [];
 
 	const start = async (routes: Record<string, Reply>) => {
@@ -923,9 +996,12 @@ describe("openRegistry reads neondatabase/examples from one tarball", () => {
 		tarball: Reply,
 		rawRoutes: Record<string, Reply> = {},
 	) => {
-		const primary = await start({ "/registry.json": index });
+		const primary = await start({
+			"/registry.json": JSON.stringify({ templates: [] }),
+		});
 		const codeload = await start({ [TARBALL]: tarball });
 		const raw = await start({
+			[INDEX]: index,
 			"/workos/neon-sync/HEAD/template.json": JSON.stringify({
 				id: "partner",
 				title: "Partner",
@@ -937,7 +1013,7 @@ describe("openRegistry reads neondatabase/examples from one tarball", () => {
 		});
 		const registry = await openRegistry(undefined, {
 			primary: primary.url("/registry.json"),
-			neonRegistry: false,
+			neonRegistry: { owner: "acme", repo: "registry", ref: "main" },
 			env: { NEON_BOOTSTRAP_GITHUB_CODELOAD: codeload.url("") },
 			githubRaw: raw.url("/"),
 		});
@@ -960,9 +1036,8 @@ describe("openRegistry reads neondatabase/examples from one tarball", () => {
 		const { registry, entry, codeload, raw } = await open(
 			{ status: 500 },
 			{
-				"/neondatabase/examples/main/registry/demo/template.json":
-					demoTemplate,
-				"/neondatabase/examples/main/registry/demo/functions/index.ts":
+				"/acme/registry/main/demo/template.json": demoTemplate,
+				"/acme/registry/main/demo/functions/index.ts":
 					"export default 3;\n",
 			},
 		);
@@ -972,23 +1047,83 @@ describe("openRegistry reads neondatabase/examples from one tarball", () => {
 		);
 		await registry.load(entry("demo"));
 		expect(codeload.requests).toEqual([TARBALL]);
-		expect(raw.requests).toHaveLength(4);
+		expect(raw.requests.filter((path) => path !== INDEX)).toHaveLength(4);
 	});
 
-	it("keeps the stale-index hint when the fallback cannot find a template", async () => {
+	it("logs why the archive could not be used", async () => {
+		const lines: string[] = [];
+		vi.stubEnv("DEBUG", "true");
+		vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+			lines.push(String(chunk));
+			return true;
+		});
+		try {
+			const { registry, entry } = await open(
+				{ status: 500 },
+				{
+					"/acme/registry/main/demo/template.json": demoTemplate,
+					"/acme/registry/main/demo/functions/index.ts":
+						"export {};\n",
+				},
+			);
+			await registry.load(entry("demo"));
+		} finally {
+			vi.restoreAllMocks();
+			vi.unstubAllEnvs();
+		}
+		expect(lines.join("")).toMatch(
+			/DEBUG: Could not download the acme\/registry@main archive, reading files one by one: .*500/,
+		);
+	});
+
+	it("reports a template the fallback cannot find", async () => {
 		const { registry, entry } = await open({ status: 500 });
 		await expect(registry.load(entry("demo"))).rejects.toThrow(
-			/answered 404\. .* is cached/,
+			/GitHub \(acme\/registry@main\) answered 404\.$/,
 		);
+	});
+
+	it("reads neondatabase/examples file by file, never from an archive", async () => {
+		const codeload = await start({});
+		const primary = await start({
+			"/registry.json": JSON.stringify({
+				templates: [
+					{
+						id: "demo",
+						title: "Demo",
+						description: "A demo.",
+						path: "demo/template.json",
+						categories: ["first-party"],
+					},
+				],
+			}),
+		});
+		const fallback = await start({
+			"/demo/template.json": demoTemplate,
+			"/demo/functions/index.ts": "export default 4;\n",
+		});
+		const registry = await openRegistry(undefined, {
+			primary: primary.url("/registry.json"),
+			fallback: fallback.url("/registry.json"),
+			neonRegistry: false,
+			env: { NEON_BOOTSTRAP_GITHUB_CODELOAD: codeload.url("") },
+		});
+		const [demo] = registry.entries;
+		if (!demo) throw new Error("demo entry did not parse");
+		await registry.load(demo);
+		expect(codeload.requests).toEqual([]);
+		expect(fallback.requests).toEqual([
+			"/demo/template.json",
+			"/demo/functions/index.ts",
+		]);
 	});
 
 	it("downloads the archive once and leaves partner templates on raw GitHub", async () => {
 		const { registry, entry, primary, codeload, raw } = await open(
 			tarGz({
-				"examples-main/registry/demo/template.json": demoTemplate,
-				"examples-main/registry/demo/functions/index.ts":
-					"export default 1;\n",
-				"examples-main/with-hono/package.json": "{}",
+				"registry-main/demo/template.json": demoTemplate,
+				"registry-main/demo/functions/index.ts": "export default 1;\n",
+				"registry-main/README.md": "# Registry\n",
 			}),
 		);
 		const demo = await registry.load(entry("demo"));
@@ -1003,25 +1138,26 @@ describe("openRegistry reads neondatabase/examples from one tarball", () => {
 		expect(primary.requests).toEqual(["/registry.json"]);
 		expect(codeload.requests).toEqual([TARBALL]);
 		expect(raw.requests).toEqual([
+			INDEX,
 			"/workos/neon-sync/HEAD/template.json",
 			"/workos/neon-sync/HEAD/functions/index.ts",
 		]);
 	});
 
-	it("says the cached index may be stale when the archive lacks a template", async () => {
+	it("reports a template the archive lacks", async () => {
 		const { registry, entry } = await open(
-			tarGz({ "examples-main/with-hono/package.json": "{}" }),
+			tarGz({ "registry-main/README.md": "# Registry\n" }),
 		);
 		await expect(registry.load(entry("demo"))).rejects.toThrow(
-			/not found in neondatabase\/examples@main\. .* is cached/,
+			/not found in acme\/registry@main\.$/,
 		);
 	});
 
 	it("refuses a symlink in the archive", async () => {
 		const { registry, entry } = await open(
 			tarGz({
-				"examples-main/registry/demo/template.json": demoTemplate,
-				"examples-main/registry/demo/functions/index.ts": {
+				"registry-main/demo/template.json": demoTemplate,
+				"registry-main/demo/functions/index.ts": {
 					symlink: "../../secret.ts",
 				},
 			}),

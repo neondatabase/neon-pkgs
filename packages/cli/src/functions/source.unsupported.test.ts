@@ -1,26 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openRegistry } from "./source";
-
-vi.mock("./registry", async (importOriginal) => {
-	const original = await importOriginal<typeof import("./registry")>();
-	return {
-		...original,
-		allowGithubTemplateSources: (schema: object) => {
-			const published = structuredClone(schema) as {
-				properties: {
-					templates: {
-						items: { properties: Record<string, unknown> };
-					};
-				};
-			};
-			published.properties.templates.items.properties.source = {};
-			return original.allowGithubTemplateSources(published);
-		},
-	};
-});
 
 describe("openRegistry with a source this CLI does not know", () => {
 	let dir: string;

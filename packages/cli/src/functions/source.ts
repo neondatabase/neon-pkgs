@@ -1,6 +1,7 @@
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { posix, resolve, sep } from "node:path";
 import type { TemplateFile } from "../init/bootstrap.js";
+import { log } from "../log.js";
 import {
 	allowGithubTemplateSources,
 	type FunctionTemplate,
@@ -36,9 +37,7 @@ const rawIndexUrl = ({ owner, repo, ref, dir }: GithubTemplateSource) =>
 		.join("/");
 export const DEFAULT_REGISTRY_URL =
 	"https://neon.com/functions/registry/registry.json";
-export const NEON_REGISTRY_URL = rawIndexUrl(NEON_REGISTRY_GITHUB);
 export const GITHUB_REGISTRY_URL = rawIndexUrl(EXAMPLES_GITHUB);
-const NEON_REPOS = [NEON_REGISTRY_GITHUB, EXAMPLES_GITHUB];
 
 export const REGISTRY_DIR_ENV = "NEON_FUNCTION_REGISTRY_DIR";
 export const REGISTRY_URL_ENV = "NEON_FUNCTION_REGISTRY_URL";
@@ -304,7 +303,12 @@ const archiveReader = (
 					file,
 				]),
 			);
-		} catch {
+		} catch (error) {
+			log.debug(
+				"Could not download the %s archive, reading files one by one: %s",
+				describeGithub(github),
+				error instanceof Error ? error.message : String(error),
+			);
 			return undefined;
 		}
 	};
@@ -419,7 +423,7 @@ const loadPublishedSchemas = (): Promise<CompiledSchemas> => {
 export type RegistryDefaults = {
 	primary?: string;
 	fallback?: string;
-	neonRegistry?: string | false;
+	neonRegistry?: GithubTemplateSource | false;
 	env?: NodeJS.ProcessEnv;
 	githubRaw?: string;
 };
@@ -429,7 +433,7 @@ export const openRegistry = async (
 	{
 		primary = DEFAULT_REGISTRY_URL,
 		fallback = GITHUB_REGISTRY_URL,
-		neonRegistry = NEON_REGISTRY_URL,
+		neonRegistry = NEON_REGISTRY_GITHUB,
 		env = process.env,
 		githubRaw,
 	}: RegistryDefaults = {},
@@ -442,27 +446,35 @@ export const openRegistry = async (
 			return base;
 		},
 	};
-	if (source) return openRegistryAt(source, source, github);
+	if (source) return openRegistryAt(source, github);
 	const resolved = resolveRegistrySource(env, process.cwd(), primary);
 	if (
 		resolved.kind !== "url" ||
 		resolved.url.href !== new URL(primary).href
 	) {
-		return openRegistryAt(resolved, resolved, github);
+		return openRegistryAt(resolved, github);
 	}
 	const mirror: RegistrySource = { kind: "url", url: new URL(fallback) };
 	const openExamples = async () => {
 		try {
-			return await openRegistryAt(resolved, mirror, github);
+			return await openRegistryAt(resolved, github, {
+				files: mirror,
+				remoteSources: false,
+			});
 		} catch (error) {
 			if (!(error instanceof RegistryError)) throw error;
-			return openRegistryAt(mirror, mirror, github);
+			return openRegistryAt(mirror, github, { remoteSources: false });
 		}
 	};
 	if (neonRegistry === false) return openExamples();
-	const repo: RegistrySource = { kind: "url", url: new URL(neonRegistry) };
+	const repoIndex = new URL(rawIndexUrl(neonRegistry));
+	const openNeonRegistry = () =>
+		openRegistryAt({ kind: "url", url: repoIndex }, github, {
+			read: githubReader(neonRegistry, github.rawBase, LOCAL_COPY_HINT),
+			readFiles: archiveReader(neonRegistry, github),
+		});
 	const results = await Promise.allSettled([
-		openRegistryAt(repo, repo, github),
+		openNeonRegistry(),
 		openExamples(),
 	]);
 	for (const result of results) {
@@ -476,6 +488,13 @@ export const openRegistry = async (
 	const [neon, examples] = results;
 	if (neon.status === "rejected" && examples.status === "rejected") {
 		throw neon.reason.status === 404 ? examples.reason : neon.reason;
+	}
+	if (neon.status === "rejected" && neon.reason.status !== 404) {
+		log.warning(
+			"Skipping %s, listing only neondatabase/examples templates: %s",
+			describeGithub(neonRegistry),
+			neon.reason.message,
+		);
 	}
 	return mergeRegistries(
 		results.flatMap((result) =>
@@ -513,19 +532,6 @@ const mergeRegistries = (registries: Registry[]): Registry => {
 const readerFor = (source: RegistrySource): ReadText =>
 	source.kind === "dir" ? dirReader(source.dir) : urlReader(source.url);
 
-const filesReaderFor = (
-	files: RegistrySource,
-	github: GithubContext,
-): ReadText => {
-	const repo =
-		files.kind === "url"
-			? NEON_REPOS.find(
-					(candidate) => rawIndexUrl(candidate) === files.url.href,
-				)
-			: undefined;
-	return repo ? archiveReader(repo, github) : readerFor(files);
-};
-
 const withStaleIndexHint =
 	(read: ReadText, index: RegistrySource, files: RegistrySource): ReadText =>
 	async (path, limit) => {
@@ -542,13 +548,23 @@ const withStaleIndexHint =
 		}
 	};
 
+type RegistryReaders = {
+	files?: RegistrySource;
+	read?: ReadText;
+	readFiles?: ReadText;
+	remoteSources?: boolean;
+};
+
 const openRegistryAt = async (
 	source: RegistrySource,
-	files: RegistrySource,
 	github: GithubContext,
+	{
+		files = source,
+		read = readerFor(source),
+		readFiles = readerFor(files),
+		remoteSources = true,
+	}: RegistryReaders = {},
 ): Promise<Registry> => {
-	const read = readerFor(source);
-	const readFiles = filesReaderFor(files, github);
 	const readFile =
 		files === source
 			? readFiles
@@ -567,11 +583,24 @@ const openRegistryAt = async (
 			);
 		}
 	};
-	const entries = parse(
+	const parsed = parse(
 		indexPath,
 		await read(indexPath, MAX_JSON_BYTES),
 		(text) => parseRegistryIndex(text, schemas.registry),
 	);
+	const entries = remoteSources
+		? parsed
+		: parsed.filter((entry) => {
+				const remote = entry.source || entry.unsupportedSource;
+				if (remote) {
+					log.debug(
+						"Ignoring template %s from %s: only neondatabase/registry can set source.",
+						entry.id,
+						describeRegistrySource(source),
+					);
+				}
+				return !remote;
+			});
 
 	const load = async (entry: RegistryIndexEntry): Promise<LoadedTemplate> => {
 		if (entry.unsupportedSource) {

@@ -50,27 +50,9 @@ export const GITHUB_REPO_PATTERN = "^(?!\\.\\.?$)[A-Za-z0-9._-]{1,100}$";
 export const GITHUB_REF_PATTERN = "^[A-Za-z0-9._/+-]{1,255}$";
 export const DEFAULT_GITHUB_REF = "HEAD";
 
-export const githubSourceJsonSchema = {
+export const remoteSourceJsonSchema = {
 	type: "object",
-	additionalProperties: false,
-	required: ["github"],
-	properties: {
-		github: {
-			type: "object",
-			additionalProperties: false,
-			required: ["owner", "repo"],
-			properties: {
-				owner: { type: "string", pattern: GITHUB_OWNER_PATTERN },
-				repo: { type: "string", pattern: GITHUB_REPO_PATTERN },
-				ref: { type: "string", pattern: GITHUB_REF_PATTERN },
-				dir: {
-					type: "string",
-					minLength: 1,
-					maxLength: MAX_PATH_LENGTH,
-				},
-			},
-		},
-	},
+	minProperties: 1,
 } as const;
 
 export type GithubTemplateSource = {
@@ -104,7 +86,7 @@ export const allowGithubTemplateSources = (schema: object): object => {
 	};
 	const properties = clone.properties?.templates?.items?.properties;
 	if (properties && properties.source === undefined) {
-		properties.source = githubSourceJsonSchema;
+		properties.source = remoteSourceJsonSchema;
 	}
 	return clone;
 };
@@ -181,16 +163,21 @@ export const parseRegistryIndex = (
 		seen.add(item.id);
 		const { source, ...entry } = item;
 		if (source === undefined) return entry;
+		if (!isRecord(source) || Object.keys(source).length === 0) {
+			throw new Error(
+				`Invalid function registry: ${at} has an invalid source.`,
+			);
+		}
 		if (!isGithubSourceDocument(source)) {
 			return { ...entry, unsupportedSource: true };
 		}
-		const { github } = source;
-		const invalid = invalidGithubField(github);
+		const invalid = invalidGithubField(source.github);
 		if (invalid) {
 			throw new Error(
-				`Invalid function registry: ${at} has an invalid source.github.${invalid}.`,
+				`Invalid function registry: ${at} has an invalid source.${invalid}.`,
 			);
 		}
+		const github = source.github as GithubSourceDocument;
 		return {
 			...entry,
 			source: {
@@ -210,43 +197,27 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isGithubSourceDocument = (
-	source: unknown,
-): source is { github: GithubSourceDocument } => {
-	if (!isRecord(source) || Object.keys(source).join() !== "github") {
-		return false;
-	}
-	const { github } = source;
-	return (
-		isRecord(github) &&
-		Object.entries(github).every(
-			([key, value]) =>
-				GITHUB_SOURCE_KEYS.has(key) && typeof value === "string",
-		) &&
-		github.owner !== undefined &&
-		github.repo !== undefined
-	);
-};
+	source: Record<string, unknown>,
+): source is { github: Record<string, unknown> } =>
+	Object.keys(source).join() === "github" &&
+	(!isRecord(source.github) ||
+		Object.keys(source.github).every((key) => GITHUB_SOURCE_KEYS.has(key)));
 
-const matches = (pattern: string, value: string) =>
-	new RegExp(pattern).test(value);
+const matches = (pattern: string, value: unknown) =>
+	typeof value === "string" && new RegExp(pattern).test(value);
 
-const invalidGithubField = (
-	github: GithubSourceDocument,
-): keyof GithubSourceDocument | undefined => {
-	if (!matches(GITHUB_OWNER_PATTERN, github.owner)) return "owner";
-	if (!matches(GITHUB_REPO_PATTERN, github.repo)) return "repo";
-	if (
-		github.ref !== undefined &&
-		!(
-			matches(GITHUB_REF_PATTERN, github.ref) &&
-			isContainedRelativePath(github.ref)
-		)
-	) {
-		return "ref";
-	}
-	if (github.dir !== undefined && !isContainedRelativePath(github.dir)) {
-		return "dir";
-	}
+const optionalPath = (value: unknown, pattern?: string) =>
+	value === undefined ||
+	(typeof value === "string" &&
+		(pattern === undefined || matches(pattern, value)) &&
+		isContainedRelativePath(value));
+
+const invalidGithubField = (github: unknown): string | undefined => {
+	if (!isRecord(github)) return "github";
+	if (!matches(GITHUB_OWNER_PATTERN, github.owner)) return "github.owner";
+	if (!matches(GITHUB_REPO_PATTERN, github.repo)) return "github.repo";
+	if (!optionalPath(github.ref, GITHUB_REF_PATTERN)) return "github.ref";
+	if (!optionalPath(github.dir)) return "github.dir";
 	return undefined;
 };
 
