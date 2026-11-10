@@ -87,6 +87,9 @@ export function createLoginSource(
 	clock: () => number = Date.now,
 ): () => Promise<EnvelopeLogin> {
 	validateLoginUser(parts.user);
+	if (oidcToken !== undefined && typeof oidcToken !== "function") {
+		throw new Error("Realtime oidcToken must be a function");
+	}
 	if (parts.password !== "") {
 		if (oidcToken !== undefined) {
 			throw new Error(

@@ -150,6 +150,15 @@ describe("Realtime login", () => {
 		);
 	});
 
+	it("requires oidcToken to be a function", () => {
+		expect(() =>
+			createLoginSource(
+				parseDatabaseUrl("postgresql://neondb_owner@host/neondb"),
+				"a-token" as unknown as () => string,
+			),
+		).toThrow("Realtime oidcToken must be a function");
+	});
+
 	it("never sends an empty credential", async () => {
 		const login = createLoginSource(
 			parseDatabaseUrl("postgresql://neondb_owner@host/neondb"),
