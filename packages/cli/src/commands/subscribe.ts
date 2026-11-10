@@ -31,7 +31,8 @@ export type SubscribeProps = BranchScopeProps & {
 
 type RealtimeConnectionOptions = {
 	url: string;
-	secret: string;
+	/** Its Postgres login is sealed into each envelope; no Realtime secret. */
+	databaseUrl: string;
 	database: string;
 	debugMode: boolean;
 };
@@ -139,16 +140,18 @@ export const subscribe = async (
 		branchId,
 		apiKey: props.apiKey,
 		apiHost: props.apiHost,
-		services: ["postgres", "realtime"],
+		// Only these two: the SDK authenticates with DATABASE_URL's login, so
+		// the branch's Realtime secret is neither read nor needed.
+		envKeys: ["DATABASE_URL", "NEON_REALTIME_URL"],
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
 	});
 
 	const url = requiredEnv(vars, "NEON_REALTIME_URL");
-	const secret = requiredEnv(vars, "NEON_REALTIME_SECRET");
-	const database = await databaseName(requiredEnv(vars, "DATABASE_URL"));
+	const databaseUrl = requiredEnv(vars, "DATABASE_URL");
+	const database = await databaseName(databaseUrl);
 	const realtime = await connect({
 		url,
-		secret,
+		databaseUrl,
 		database,
 		debugMode: props.debug ?? false,
 	});
@@ -191,7 +194,7 @@ const connectRealtime = async (
 	const { createRealtime, rawSql } = await import("@neon/realtime");
 	const realtime = createRealtime({
 		url: options.url,
-		secret: options.secret,
+		databaseUrl: options.databaseUrl,
 		db: options.database,
 		debugMode: options.debugMode,
 	});
@@ -219,7 +222,7 @@ const ensureWebSocket = async (): Promise<void> => {
 
 const requiredEnv = (
 	vars: Record<string, string>,
-	key: "DATABASE_URL" | "NEON_REALTIME_URL" | "NEON_REALTIME_SECRET",
+	key: "DATABASE_URL" | "NEON_REALTIME_URL",
 ): string => {
 	const value = vars[key];
 	if (value) return value;

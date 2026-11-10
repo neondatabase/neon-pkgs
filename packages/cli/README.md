@@ -329,6 +329,10 @@ regression + TAP tests.
 neon realtime subscribe "SELECT id, title, completed FROM realtime_todos ORDER BY id"
 ```
 
+It authenticates with the branch's `DATABASE_URL`: the SDK seals the query and
+that login into an envelope for the branch's Realtime key, so the command needs
+no Realtime secret. Realtime accepts only the `neondb_owner` role for now.
+
 The default terminal output is append-only. It identifies the selected project,
 branch, and database; prints the initial result once; reports connection-state
 changes; and then prints each published change set with its transaction IDs, a compact

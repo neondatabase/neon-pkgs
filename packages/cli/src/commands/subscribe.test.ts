@@ -141,7 +141,6 @@ const realtimeEnv = {
 		DATABASE_URL:
 			"postgresql://user:password@ep-example.us-east-2.aws.neon.tech/neondb?sslmode=require",
 		NEON_REALTIME_URL: "wss://realtime.example/v1",
-		NEON_REALTIME_SECRET: "secret",
 	},
 	credential: {
 		issued: false,
@@ -241,11 +240,11 @@ describe("subscribe command", () => {
 			branchId: "branch-1",
 			apiKey: "api-key",
 			apiHost: "https://console-stage.example/api/v2",
-			services: ["postgres", "realtime"],
+			envKeys: ["DATABASE_URL", "NEON_REALTIME_URL"],
 		});
 		expect(setupResult.connectionOptions()).toEqual({
 			url: "wss://realtime.example/v1",
-			secret: "secret",
+			databaseUrl: realtimeEnv.vars.DATABASE_URL,
 			database: "neondb",
 			debugMode: false,
 		});
@@ -271,6 +270,25 @@ describe("subscribe command", () => {
 		]);
 		expect(subscription.unsubscribed).toBe(true);
 		expect(setupResult.closeCount()).toBe(1);
+	});
+
+	it("needs DATABASE_URL, whose login authenticates the subscription", async () => {
+		const setupResult = setup(new FakeSubscription());
+		setupResult.resolveEnv.mockResolvedValueOnce({
+			...realtimeEnv,
+			vars: { NEON_REALTIME_URL: "wss://realtime.example/v1" },
+		} as unknown as typeof realtimeEnv);
+		const controller = new AbortController();
+
+		await expect(
+			subscribe(
+				props(false, controller.signal, capture().out),
+				setupResult.dependencies,
+			),
+		).rejects.toThrow(
+			"Could not resolve DATABASE_URL for the selected branch.",
+		);
+		expect(setupResult.connectionOptions()).toBeUndefined();
 	});
 
 	it("renders raw rows and changes events with --changes", async () => {
