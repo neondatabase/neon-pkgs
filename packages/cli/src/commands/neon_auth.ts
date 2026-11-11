@@ -86,14 +86,16 @@ const SUPPORTED_OAUTH_PROVIDERS = [
 	NeonAuthOauthProviderId.Vercel,
 	NeonAuthOauthProviderId.Microsoft,
 	NeonAuthOauthProviderId.Apple,
+	NeonAuthOauthProviderId.Discord,
 ] as const;
 
 const PROVIDERS_WITHOUT_SHARED_APP = [
 	NeonAuthOauthProviderId.Microsoft,
 	NeonAuthOauthProviderId.Apple,
+	NeonAuthOauthProviderId.Discord,
 ] as const;
 
-const OWN_CREDENTIALS_NOTE = `${PROVIDERS_WITHOUT_SHARED_APP.join(" and ")} always need your own credentials`;
+const OWN_CREDENTIALS_NOTE = `${PROVIDERS_WITHOUT_SHARED_APP.slice(0, -1).join(", ")} and ${PROVIDERS_WITHOUT_SHARED_APP.at(-1)} always need your own credentials`;
 
 const OAUTH_CREDENTIAL_OPTIONS = {
 	"oauth-client-id": {
@@ -1409,6 +1411,10 @@ const CALLBACK_INSTRUCTIONS: Record<
 	apple: {
 		lead: "Create a Services ID in the Apple Developer portal, enable Sign in with Apple for it, and add the following return URL (Apple requires HTTPS and does not accept localhost):",
 		urlLabel: "callback/apple",
+	},
+	discord: {
+		lead: "Create an application in the Discord Developer Portal, open OAuth2, and add the following redirect URL:",
+		urlLabel: "callback/discord",
 	},
 	google: {
 		lead: "Get Google credentials by creating an OAuth client in Google Cloud Console > Credentials, and add the following authorized redirect URL:",
