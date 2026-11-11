@@ -349,21 +349,35 @@ export class BaselineSyncPublicationReconciler {
 			throw new ProtocolError("invalid baseline sync start");
 		}
 		// A higher attempt of the same round supersedes the staged attempt. A
-		// different round starts only after the previous round's end.
-		if (
-			state.baselineSync &&
-			state.baselineSync.version.round !== version.round
-		) {
+		// different round starts only after the previous round's end, and a
+		// round that has ended does not start again.
+		const staged = state.baselineSync;
+		if (staged && staged.version.round !== version.round) {
 			throw new ProtocolError(
 				"a round started before the previous round ended",
 			);
 		}
-		const resolves =
-			message.scope.kind === "selected" || message.covered !== undefined
-				? this.resolvedHoles(state, message)
-				: undefined;
-		if (!resolves && state.live) {
+		const resolving =
+			message.scope.kind === "selected" || message.covered !== undefined;
+		if (!resolving && state.live) {
 			throw new ProtocolError("invalid baseline sync start");
+		}
+		if (
+			!staged &&
+			state.latestBaselineSync?.epoch === version.epoch &&
+			state.latestBaselineSync.round === version.round
+		) {
+			throw new ProtocolError("a round started again after its end");
+		}
+		const resolves = resolving
+			? this.resolvedHoles(state, message)
+			: undefined;
+		// A retry keeps its round's plan: the same scope, covered range and
+		// snapshot. The install combines the staged rows with the buffered
+		// ticks through the covered range, so a retry that changed any of them
+		// could resolve a hole without replacing the segments it dirtied.
+		if (staged && (staged.resolves || resolves)) {
+			assertSameRoundPlan(staged, resolves, message.mvcc);
 		}
 		state.latestBaselineSync = version;
 		state.baselineSync = {
@@ -985,6 +999,45 @@ export class BaselineSyncPublicationReconciler {
 		if (!target) throw new ProtocolError("unknown live ID");
 		return target;
 	}
+}
+
+function assertSameRoundPlan(
+	staged: PendingBaselineSync,
+	resolves: PendingBaselineSync["resolves"],
+	mvcc: MvccSnapshot,
+): void {
+	const before = staged.resolves;
+	if (
+		!before ||
+		!resolves ||
+		before.scope.all !== resolves.scope.all ||
+		!sameSet(before.scope.tags, resolves.scope.tags) ||
+		!sameSet(before.scope.rowKeys, resolves.scope.rowKeys)
+	) {
+		throw new ProtocolError("a retry changed its round's scope");
+	}
+	if (
+		before.covered.first !== resolves.covered.first ||
+		before.covered.last !== resolves.covered.last
+	) {
+		throw new ProtocolError("a retry changed its round's covered range");
+	}
+	if (
+		staged.mvcc.xmin !== mvcc.xmin ||
+		staged.mvcc.xmax !== mvcc.xmax ||
+		!sameSet(new Set(staged.mvcc.xip), new Set(mvcc.xip))
+	) {
+		throw new ProtocolError("a retry changed its round's snapshot");
+	}
+}
+
+function sameSet(
+	left: ReadonlySet<string>,
+	right: ReadonlySet<string>,
+): boolean {
+	return (
+		left.size === right.size && [...left].every((item) => right.has(item))
+	);
 }
 
 function wireRow(

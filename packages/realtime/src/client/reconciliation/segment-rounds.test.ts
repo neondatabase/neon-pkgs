@@ -40,6 +40,7 @@ function mvccThrough(txid: number) {
 /** A socket's reconciler with real subscriptions on one connection. */
 class Session {
 	readonly reconciler = new BaselineSyncPublicationReconciler();
+	private readonly subscriptions = new Map<string, Subscription<Value>>();
 	private sequences = new Map<string, number>();
 	private publication = 0;
 
@@ -76,6 +77,13 @@ class Session {
 			segmentRounds,
 		});
 		this.sequences.set(liveId, 0);
+		this.subscriptions.set(liveId, subscription);
+		return subscription;
+	}
+
+	live(liveId: string): Subscription<Value> {
+		const subscription = this.subscriptions.get(liveId);
+		if (!subscription) throw new Error(`no subscription ${liveId}`);
 		return subscription;
 	}
 
@@ -566,6 +574,75 @@ describe("segment rounds", () => {
 					batches: [],
 				}),
 			).toThrow(ProtocolError);
+		});
+
+		describe("from a retry that changes its round's plan", () => {
+			// Baseline {A@T1, B@T2}; one hole dirties both segments; attempt 4 of
+			// round 2 is staged and not ended when attempt 5 starts.
+			function staged(): Session {
+				const session = new Session();
+				session.subscribe("9");
+				session.sync("9", {
+					round: 1,
+					batches: [[tagged(A, "a1", T1), tagged(B, "b1", T2)]],
+				});
+				session.tick([{ liveId: "9", hole: true }], 11);
+				session.tick([{ liveId: "9", changes: [] }], 12);
+				session.sync("9", {
+					round: 2,
+					attempt: 4,
+					scope: selected({ tag: T1 }, { tag: T2 }),
+					covered: [1, 1],
+					mvcc: mvccThrough(11),
+					batches: [[tagged(A, "a2", T1)]],
+					end: false,
+				});
+				return session;
+			}
+			const retry = (overrides: object) => ({
+				round: 2,
+				attempt: 5,
+				scope: selected({ tag: T1 }, { tag: T2 }),
+				covered: [1, 1] as const,
+				mvcc: mvccThrough(11),
+				batches: [[tagged(A, "a2", T1)]],
+				...overrides,
+			});
+
+			it("keeps an identical retry", () => {
+				const session = staged();
+				session.sync(
+					"9",
+					retry({ scope: selected({ tag: T2 }, { tag: T1 }) }),
+				);
+				expect(values(session.live("9"))).toEqual(["a2"]);
+			});
+
+			it("rejects a narrower scope", () => {
+				expect(() =>
+					staged().sync("9", retry({ scope: selected({ tag: T1 }) })),
+				).toThrow("a retry changed its round's scope");
+			});
+
+			it("rejects another covered range", () => {
+				expect(() =>
+					staged().sync("9", retry({ covered: [1, 2] as const })),
+				).toThrow("a retry changed its round's covered range");
+			});
+
+			it("rejects another snapshot", () => {
+				expect(() =>
+					staged().sync("9", retry({ mvcc: mvccThrough(12) })),
+				).toThrow("a retry changed its round's snapshot");
+			});
+
+			it("rejects an attempt of a round that has ended", () => {
+				const session = staged();
+				session.sync("9", retry({}));
+				expect(() =>
+					session.sync("9", retry({ attempt: 6, end: false })),
+				).toThrow("a round started again after its end");
+			});
 		});
 
 		it("with two holes for one target in one tick, or a hole on a v2 target", () => {
