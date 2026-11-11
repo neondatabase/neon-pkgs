@@ -310,10 +310,14 @@ describe("Realtime backend SDK with a database URL", () => {
 					),
 			],
 		])("raises an error, not using the secret, for %s", async (_, response) => {
+			// A 503 is retried once, after a second.
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 			const realtime = migrating(vi.fn(async () => response()));
-			await expect(realtime.seal({ query })).rejects.toThrow(
+			const sealing = expect(realtime.seal({ query })).rejects.toThrow(
 				"Realtime keys from",
 			);
+			await vi.advanceTimersByTimeAsync(1_000);
+			await sealing;
 		});
 
 		it("raises an error, not using the secret, when the keys fetch fails", async () => {

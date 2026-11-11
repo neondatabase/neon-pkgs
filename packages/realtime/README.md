@@ -117,8 +117,10 @@ apply to Realtime too. No Realtime secret is involved.
   `/.well-known/neon-realtime-keys` on the `url` host (`wss://` becomes
   `https://`) and caches it per process as the response's `Cache-Control`
   allows, at most 10 minutes. The request opts out of framework fetch caches.
-  Pass `fetch` to use your own, for example for a custom CA, or on a runtime
-  that rejects `cache: "no-store"`.
+  It may start the branch's Realtime VM, so each attempt has 30 seconds, and
+  a timeout or a `502`, `503` or `504` is retried once after a second.
+  Concurrent seals share one request. Pass `fetch` to use your own, for
+  example for a custom CA, or on a runtime that rejects `cache: "no-store"`.
 - **Legacy secret.** Without `databaseUrl`, `createRealtime({ secret, db })`
   keeps sealing the previous token format with the shared Realtime secret, and
   makes no network request.

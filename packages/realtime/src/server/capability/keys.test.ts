@@ -200,11 +200,11 @@ describe("Realtime key cache", () => {
 
 	it("does not cache a failure", async () => {
 		const fetchImpl = fetchReturning(
-			() => keysResponse([], "public, max-age=600", 503),
+			() => keysResponse([], "public, max-age=600", 500),
 			() => keysResponse([jwk(primary)]),
 		);
 		await expect(cachedRealtimeKey(KEYS_URL, fetchImpl)).rejects.toThrow(
-			`Could not fetch the Realtime keys from ${KEYS_URL}: HTTP 503`,
+			`Could not fetch the Realtime keys from ${KEYS_URL}: HTTP 500`,
 		);
 		expect((await keyFrom(fetchImpl)).kid).toBe(primary.kid);
 	});
@@ -219,6 +219,105 @@ describe("Realtime key cache", () => {
 		).rejects.toMatchObject({
 			message: `Could not fetch the Realtime keys from ${KEYS_URL}`,
 			cause,
+		});
+		// Only timeouts and gateway errors are retried.
+		expect(fetchImpl).toHaveBeenCalledOnce();
+	});
+
+	describe("while the branch's VM may be starting", () => {
+		const timeout = () => {
+			throw new DOMException("The operation timed out.", "TimeoutError");
+		};
+
+		beforeEach(() => {
+			// Replace the outer Date-only fake with one that also fakes the delay.
+			vi.useRealTimers();
+			vi.useFakeTimers({
+				now: 1_767_225_600_000,
+				toFake: ["Date", "setTimeout", "clearTimeout"],
+			});
+		});
+
+		it("gives each attempt 30 s", async () => {
+			const timeoutSignal = vi.spyOn(AbortSignal, "timeout");
+			const fetchImpl = fetchReturning(() =>
+				keysResponse([jwk(primary)]),
+			);
+			await keyFrom(fetchImpl);
+			expect(timeoutSignal).toHaveBeenCalledWith(30_000);
+			expect(fetchImpl).toHaveBeenCalledWith(
+				KEYS_URL,
+				expect.objectContaining({ signal: expect.any(AbortSignal) }),
+			);
+		});
+
+		it.each([
+			502, 503, 504,
+		])("retries an HTTP %i once after 1 s", async (status) => {
+			const fetchImpl = fetchReturning(
+				() => new Response("", { status }),
+				() => keysResponse([jwk(primary)]),
+			);
+			const lookup = cachedRealtimeKey(KEYS_URL, fetchImpl);
+			await vi.advanceTimersByTimeAsync(999);
+			expect(fetchImpl).toHaveBeenCalledOnce();
+			await vi.advanceTimersByTimeAsync(1);
+			expect((await lookup)?.kid).toBe(primary.kid);
+			expect(fetchImpl).toHaveBeenCalledTimes(2);
+		});
+
+		it("retries a timeout once", async () => {
+			const fetchImpl = vi
+				.fn<RealtimeFetch>()
+				.mockImplementationOnce(async () => timeout())
+				.mockImplementation(async () => keysResponse([jwk(primary)]));
+			const lookup = cachedRealtimeKey(KEYS_URL, fetchImpl);
+			await vi.advanceTimersByTimeAsync(1_000);
+			expect((await lookup)?.kid).toBe(primary.kid);
+			expect(fetchImpl).toHaveBeenCalledTimes(2);
+		});
+
+		it("gives up after the second gateway error, without caching it", async () => {
+			const fetchImpl = vi.fn(
+				async () => new Response("", { status: 503 }),
+			);
+			const lookup = expect(
+				cachedRealtimeKey(KEYS_URL, fetchImpl),
+			).rejects.toThrow(
+				`Could not fetch the Realtime keys from ${KEYS_URL}: HTTP 503`,
+			);
+			await vi.advanceTimersByTimeAsync(1_000);
+			await lookup;
+			expect(fetchImpl).toHaveBeenCalledTimes(2);
+		});
+
+		it("gives up after the second timeout", async () => {
+			const fetchImpl = vi.fn(async () => timeout());
+			const lookup = expect(
+				cachedRealtimeKey(KEYS_URL, fetchImpl),
+			).rejects.toMatchObject({
+				message: `Could not fetch the Realtime keys from ${KEYS_URL}`,
+				cause: expect.objectContaining({ name: "TimeoutError" }),
+			});
+			await vi.advanceTimersByTimeAsync(1_000);
+			await lookup;
+			expect(fetchImpl).toHaveBeenCalledTimes(2);
+		});
+
+		it("shares one fetch, retry included, between concurrent callers", async () => {
+			const fetchImpl = fetchReturning(
+				() => new Response("", { status: 503 }),
+				() => keysResponse([jwk(primary)]),
+			);
+			const lookups = Promise.all([
+				cachedRealtimeKey(KEYS_URL, fetchImpl),
+				cachedRealtimeKey(KEYS_URL, fetchImpl),
+				cachedRealtimeKey(KEYS_URL, fetchImpl),
+			]);
+			await vi.advanceTimersByTimeAsync(1_000);
+			const keys = await lookups;
+			expect(new Set(keys).size).toBe(1);
+			expect(fetchImpl).toHaveBeenCalledTimes(2);
 		});
 	});
 
@@ -273,8 +372,6 @@ describe("Realtime key cache", () => {
 
 	it.each([
 		[500, "Internal Server Error"],
-		[502, "Bad Gateway"],
-		[503, "Service Unavailable"],
 		[403, "Forbidden"],
 		[405, "Method Not Allowed"],
 	])("cannot tell, and throws, for HTTP %i", async (status) => {
@@ -305,15 +402,15 @@ describe("Realtime key cache", () => {
 	it("does not cache a no-key answer past a failure", async () => {
 		const fetchImpl = fetchReturning(
 			() => new Response("", { status: 404 }),
-			() => new Response("", { status: 503 }),
+			() => new Response("", { status: 500 }),
 		);
 		await cachedRealtimeKey(KEYS_URL, fetchImpl);
 		vi.advanceTimersByTime(60_000);
 		await expect(cachedRealtimeKey(KEYS_URL, fetchImpl)).rejects.toThrow(
-			"HTTP 503",
+			"HTTP 500",
 		);
 		await expect(cachedRealtimeKey(KEYS_URL, fetchImpl)).rejects.toThrow(
-			"HTTP 503",
+			"HTTP 500",
 		);
 	});
 

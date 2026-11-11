@@ -5,7 +5,12 @@ const KEYS_PATH = "/.well-known/neon-realtime-keys";
 const MAX_CACHE_SECONDS = 600;
 // A branch without a key gets one when Neon provisions it. Check again soon.
 const NO_KEY_CACHE_SECONDS = 60;
-const FETCH_TIMEOUT_MS = 10_000;
+// The keys endpoint lives on the branch's Realtime VM, and a fetch can start
+// one: replica start, slot bootstrap and the proxy take longer than 10 s.
+const FETCH_TIMEOUT_MS = 30_000;
+// While a VM starts, the router and worker answer 502-504. Retry once.
+const RETRY_STATUSES = new Set([502, 503, 504]);
+const RETRY_DELAY_MS = 1_000;
 const KID_PATTERN = /^[A-Za-z0-9_-]{21}[AQgw]$/;
 
 /** Fetch implementation used for the keys endpoint. */
@@ -126,6 +131,9 @@ export function noRealtimeKeyError(keysUrl: string): Error {
  * - Anything else (network error, timeout, other status, a body that is not
  *   a key list, or entries none of which is usable) throws, so the caller
  *   never takes a broken endpoint for a branch without keys.
+ *
+ * Each attempt has 30 s. A timeout or a 502, 503 or 504 is retried once,
+ * after 1 s, since the request may be starting the branch's VM.
  */
 export async function loadRealtimeKey(
 	keysUrl: string,
@@ -140,24 +148,7 @@ export async function loadRealtimeKey(
 			"Realtime needs fetch() to get the branch key. Pass the fetch option.",
 		);
 	}
-	let response: Response;
-	try {
-		response = await fetchFunction(keysUrl, {
-			method: "GET",
-			headers: { accept: "application/json" },
-			// The SDK caches the key itself, by Cache-Control. A framework's
-			// fetch cache could otherwise keep a rotated key indefinitely.
-			cache: "no-store",
-			...(typeof AbortSignal !== "undefined" &&
-			typeof AbortSignal.timeout === "function"
-				? { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
-				: {}),
-		});
-	} catch (cause) {
-		throw new Error(`Could not fetch the Realtime keys from ${keysUrl}`, {
-			cause,
-		});
-	}
+	const response = await fetchWithRetry(keysUrl, fetchFunction);
 	// A proxy from before v3 has no keys endpoint. It sends every path to its
 	// WebSocket upgrade, which refuses a plain GET with 400. Every v3 proxy
 	// answers 200 here, so 400 and 404 both mean the branch has no key.
@@ -190,6 +181,61 @@ export async function loadRealtimeKey(
 		);
 	}
 	return { key, cacheSeconds: cacheSeconds(response.headers) };
+}
+
+async function fetchWithRetry(
+	keysUrl: string,
+	fetchFunction: RealtimeFetch,
+): Promise<Response> {
+	for (let attempt = 1; ; attempt += 1) {
+		const signal =
+			typeof AbortSignal !== "undefined" &&
+			typeof AbortSignal.timeout === "function"
+				? AbortSignal.timeout(FETCH_TIMEOUT_MS)
+				: undefined;
+		const retry = attempt === 1;
+		let response: Response;
+		try {
+			response = await fetchFunction(keysUrl, {
+				method: "GET",
+				headers: { accept: "application/json" },
+				// The SDK caches the key itself, by Cache-Control. A framework's
+				// fetch cache could otherwise keep a rotated key indefinitely.
+				cache: "no-store",
+				...(signal ? { signal } : {}),
+			});
+		} catch (cause) {
+			if (retry && isTimeout(cause, signal)) {
+				await delay(RETRY_DELAY_MS);
+				continue;
+			}
+			throw new Error(
+				`Could not fetch the Realtime keys from ${keysUrl}`,
+				{
+					cause,
+				},
+			);
+		}
+		if (retry && RETRY_STATUSES.has(response.status)) {
+			await response.body?.cancel().catch(() => undefined);
+			await delay(RETRY_DELAY_MS);
+			continue;
+		}
+		return response;
+	}
+}
+
+function isTimeout(error: unknown, signal: AbortSignal | undefined): boolean {
+	return (
+		signal?.aborted === true ||
+		(typeof error === "object" &&
+			error !== null &&
+			(error as { name?: unknown }).name === "TimeoutError")
+	);
+}
+
+function delay(milliseconds: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function firstUsableKey(
