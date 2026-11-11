@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import prompts from "prompts";
+import { recordScaffoldedTemplate } from "../analytics.js";
 import { isInteractiveTerminal } from "../env.js";
 import { resolveEnvFilePath } from "../env_file.js";
 import {
@@ -406,6 +407,7 @@ export const scaffoldFromTemplate = async (
 		}
 	}
 
+	if (registry.official) recordScaffoldedTemplate(template.id);
 	return {
 		cancelled: false,
 		template: template.id,
