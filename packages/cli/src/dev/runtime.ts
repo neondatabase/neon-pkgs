@@ -173,6 +173,23 @@ const listen = (
 	});
 
 /**
+ * Build the Node request listener that serves `handler` under `neon dev`.
+ *
+ * `overrideGlobalObjects: false` keeps `globalThis.Request` and `globalThis.Response`
+ * as Node's own classes, the ones a deployed function sees. By default
+ * `@hono/node-server` replaces them with its lightweight versions once the user module
+ * has already loaded. A framework that checks `value instanceof Response` against a
+ * Response it built from the class it captured at import time then fails that check:
+ * h3 v2 does this on every error path, so under `neon dev` a thrown 400, 404 or 500
+ * came back as `200 [object Response]` while the deployed function answered correctly.
+ */
+export const createDevRequestListener = (
+	handler: FetchHandler,
+	hostname?: string,
+): ReturnType<typeof getRequestListener> =>
+	getRequestListener(handler, { hostname, overrideGlobalObjects: false });
+
+/**
  * Load the (already-bundled) user module, build the listener, and start an HTTP
  * server. Announces the bound port on stdout as `neon-dev:ready <port>` so the
  * parent can render the URL. Resolves with the bound port.
@@ -193,7 +210,7 @@ export const startRuntime = async ({
 	// request, so the helper resolves locally exactly as it does when deployed.
 	installWebSocketBridge();
 
-	const listener = getRequestListener(handler, { hostname });
+	const listener = createDevRequestListener(handler, hostname);
 	const server = createServer((incoming, outgoing) => {
 		void listener(incoming, outgoing);
 	});
