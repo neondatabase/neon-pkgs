@@ -696,6 +696,63 @@ describe("segment rounds", () => {
 			});
 		});
 
+		describe("that gives a row key another kind of segment", () => {
+			it("from a covered patch, before a one-row selector removes it", () => {
+				const session = new Session();
+				session.subscribe("9");
+				session.sync("9", { round: 1, batches: [[tagged(A, "a1")]] });
+				session.tick(
+					[
+						{
+							liveId: "9",
+							hole: true,
+							changes: [upsert(A, "a2", T2)],
+						},
+					],
+					11,
+				);
+				expect(() =>
+					session.sync("9", {
+						round: 2,
+						scope: selected({ row_key: A }),
+						covered: [1, 1],
+						batches: [[]],
+					}),
+				).toThrow("a row changed its kind of segment");
+			});
+
+			it("from a live patch, before any target installs it", () => {
+				const session = new Session();
+				const live = session.subscribe("9");
+				session.sync("9", {
+					round: 1,
+					batches: [[tagged(A, "a1", T1)]],
+				});
+				expect(() =>
+					session.tick(
+						[{ liveId: "9", changes: [upsert(A, "a2")] }],
+						11,
+					),
+				).toThrow("a row changed its kind of segment");
+				expect(values(live)).toEqual(["a1"]);
+			});
+
+			it("from a round row", () => {
+				const session = new Session();
+				session.subscribe("9");
+				session.sync("9", { round: 1, batches: [[tagged(A, "a1")]] });
+				session.tick([{ liveId: "9", hole: true }], 11);
+				expect(() =>
+					session.sync("9", {
+						round: 2,
+						scope: selected({ tag: T1 }),
+						covered: [1, 1],
+						batches: [[tagged(A, "a2", T1)]],
+					}),
+				).toThrow("a row changed its kind of segment");
+			});
+		});
+
 		it("with two holes for one target in one tick, or a hole on a v2 target", () => {
 			const session = new Session();
 			session.subscribe("9");

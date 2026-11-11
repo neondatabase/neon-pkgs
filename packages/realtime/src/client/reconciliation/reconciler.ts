@@ -553,6 +553,12 @@ export class BaselineSyncPublicationReconciler {
 		const rows = Object.freeze([...baselineSync.rows]);
 		try {
 			const install = state.target.prepare(rows, replay);
+			if (state.index) {
+				state.index.clear();
+				for (const row of rows)
+					state.index.set(row.row_key, row.segment_tag);
+				for (const batch of replay) state.index.apply(batch.changes);
+			}
 			install();
 		} catch (error) {
 			if (error instanceof ProtocolError) throw error;
@@ -565,12 +571,6 @@ export class BaselineSyncPublicationReconciler {
 		}
 		state.baselineSync = undefined;
 		state.backlog = state.backlog.slice(shown);
-		if (state.index) {
-			state.index.clear();
-			for (const row of rows)
-				state.index.set(row.row_key, row.segment_tag);
-			for (const batch of replay) state.index.apply(batch.changes);
-		}
 		state.target.baselineSyncCompleted(message.batch_count);
 		state.target.publishReset(rows, baselineSync.mvcc);
 		for (const batch of replay) state.target.publishBatch(batch);
@@ -670,6 +670,8 @@ export class BaselineSyncPublicationReconciler {
 		// 2. A returned row must not be shown under a tag outside the scope. A
 		// patch that moved a row out of the scope landed in step 1, so step 3
 		// does not remove it.
+		for (const row of round.rows)
+			index.checkKind(row.row_key, row.segment_tag);
 		if (!scope.all) {
 			for (const row of round.rows) {
 				const tag = index.tagOf(row.row_key);
@@ -936,6 +938,7 @@ export class BaselineSyncPublicationReconciler {
 			// A hole, and every tick after an unresolved one, stays buffered.
 			const applies =
 				state.live && !staged.hole && state.backlog.length === 0;
+			if (applies) state.index?.checkChanges(batch.changes);
 			try {
 				const install = applies
 					? state.target.prepare(undefined, [batch])
