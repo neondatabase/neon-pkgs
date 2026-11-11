@@ -5,6 +5,14 @@ import type { SealedLiveQuery } from "./sealed-query.js";
 /** Minimal WebSocket contract used by the Realtime client. */
 export interface WebSocketLike {
 	readonly readyState: number;
+	/**
+	 * The subprotocol the server selected, as on the standard WebSocket. The
+	 * client offers `neon.realtime.v3` and `neon.realtime.v2` and decodes the
+	 * connection with the one reported here once the server is ready. A
+	 * connection whose transport reports no offered subprotocol fails with a
+	 * protocol error.
+	 */
+	readonly protocol?: string;
 	addEventListener(type: "open", listener: () => void): void;
 	addEventListener(
 		type: "message",
@@ -286,6 +294,17 @@ export type LiveQueryState =
 export type LiveQuerySnapshot<Row> = LiveQueryState & {
 	/** Current rows, or `undefined` before the first result when not preloaded. */
 	readonly data: readonly Row[] | undefined;
+	/**
+	 * `true` while a refresh of part of the result is pending. The server can
+	 * recompute some rows instead of patching them; until it does, `data`
+	 * stays at the last complete result, and changes committed since then
+	 * become visible together when the refresh lands. `status` is unaffected.
+	 *
+	 * Every snapshot the SDK produces sets this field. It is optional so that
+	 * snapshots built elsewhere, such as an initial placeholder, stay valid;
+	 * treat an absent value as `false`.
+	 */
+	readonly updating?: boolean;
 };
 
 /** Metadata for one atomically published batch of PostgreSQL transactions. */

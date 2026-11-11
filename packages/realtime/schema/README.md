@@ -56,10 +56,10 @@ the `covered` range of the holes it resolves. Rows and upserts of multi-row
 segments carry an opaque `segment_tag`. Applications never see tags or
 selectors.
 
-Deploy the proxy changes that require client metadata over `neon.realtime.v2`
-and accept capability v2 before releasing this SDK. Protocol v1 and capability
-v1 remain available during the transition. This SDK requests v2 and emits
-capability v2.
+This SDK offers `neon.realtime.v3` and `neon.realtime.v2` and decodes the one
+the proxy selects; a proxy that predates v3 selects v2 and delivers full
+replacement only. Protocol v1 and capability v1 remain available for
+previously released clients. This SDK emits capability v2.
 
 V2 added `move` with required `row_key` and
 `after_row_key`; the latter is a row key or null for head. Validate normalized

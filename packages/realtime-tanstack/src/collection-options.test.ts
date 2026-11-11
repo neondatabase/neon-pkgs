@@ -795,7 +795,252 @@ describe("Realtime TanStack DB collection", () => {
 			await expect(confirmed).resolves.toBe(true);
 		});
 	});
+
+	describe("segment rounds over protocol v3", () => {
+		const T1 = "1".repeat(64);
+		const T2 = "2".repeat(64);
+
+		async function segmentCollection(id: string) {
+			const wire = segmentWire();
+			const collection = createCollection(
+				realtimeCollectionOptions({
+					id,
+					client: wire.client,
+					query: query(id),
+					getKey: (message) => message.id,
+				}),
+			);
+			cleanups.push(async () => {
+				await collection.cleanup();
+				wire.client.close();
+			});
+			const preload = collection.preload();
+			wire.admit();
+			return { wire, collection, preload };
+		}
+
+		it("applies a round that moves a row between segments, and confirms its transactions then", async () => {
+			const { wire, collection, preload } =
+				await segmentCollection("moving-row");
+			wire.sync(1, [
+				segmentRow("a", 1, "one", T1),
+				segmentRow("b", 2, "two", T1),
+				segmentRow("c", 3, "three", T2),
+			]);
+			await preload;
+
+			// Row 1 moves from T1 to T2; the tick commits a hole for both. A
+			// later exact patch to row 3 waits behind the hole.
+			wire.tick("51", { hole: true });
+			wire.tick("52", {
+				changes: [
+					{ op: "upsert", ...segmentRow("c", 3, "three v2", T2) },
+				],
+			});
+			const moved = collection.utils.awaitTxId("51", 10_000);
+			const patched = collection.utils.awaitTxId("52", 10_000);
+			let confirmed = false;
+			void Promise.all([moved, patched]).then(() => {
+				confirmed = true;
+			});
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(confirmed).toBe(false);
+			expect(collection.get(1)).toMatchObject({ title: "one" });
+			expect(collection.get(3)).toMatchObject({ title: "three" });
+
+			wire.sync(
+				2,
+				[
+					segmentRow("b", 2, "two", T1),
+					segmentRow("a", 1, "one moved", T2),
+					segmentRow("c", 3, "three", T2),
+				],
+				{
+					scope: {
+						kind: "selected",
+						selectors: [{ tag: T1 }, { tag: T2 }],
+					},
+					covered: [1, 1],
+				},
+			);
+			await expect(moved).resolves.toBe(true);
+			await expect(patched).resolves.toBe(true);
+			await eventually(() => {
+				expect(collection.get(1)).toMatchObject({ title: "one moved" });
+				expect(collection.get(2)).toMatchObject({ title: "two" });
+				expect(collection.get(3)).toMatchObject({ title: "three v2" });
+			});
+			expect(collection.size).toBe(3);
+			expect(collection.status).toBe("ready");
+		});
+
+		it("renumbers the rows of one segment without a duplicate key", async () => {
+			const { wire, collection, preload } =
+				await segmentCollection("numbered-rows");
+			// The segment's row keys are its row numbers, so the same row key holds
+			// a different row after the segment changes.
+			wire.sync(1, [
+				segmentRow("1", 10, "first", T1),
+				segmentRow("2", 11, "second", T1),
+				segmentRow("3", 12, "third", T1),
+				segmentRow("d", 20, "other", T2),
+			]);
+			await preload;
+
+			wire.tick("61", { hole: true });
+			wire.sync(
+				2,
+				[
+					segmentRow("1", 11, "second", T1),
+					segmentRow("2", 12, "third", T1),
+				],
+				{
+					scope: { kind: "selected", selectors: [{ tag: T1 }] },
+					covered: [1, 1],
+				},
+			);
+			await expect(
+				collection.utils.awaitTxId("61", 10_000),
+			).resolves.toBe(true);
+			await eventually(() => {
+				expect(collection.has(10)).toBe(false);
+				expect(collection.get(11)).toMatchObject({ title: "second" });
+				expect(collection.get(12)).toMatchObject({ title: "third" });
+				expect(collection.get(20)).toMatchObject({ title: "other" });
+			});
+			expect(collection.size).toBe(3);
+			expect(collection.status).toBe("ready");
+		});
+	});
 });
+
+/** A row of `[id, title]`; `char` names its row key, `tag` its segment. */
+function segmentRow(char: string, id: number, title: string, tag?: string) {
+	return {
+		row_key: char.repeat(64),
+		values: [String(id), title],
+		...(tag === undefined ? {} : { segment_tag: tag }),
+	};
+}
+
+/** A protocol v3 wire for one live query whose rows are `[id, title]`. */
+function segmentWire() {
+	const wire = wireClient("neon.realtime.v3");
+	let sequence = 0;
+	let publications = 0;
+	return {
+		client: wire.client,
+		admit: () => {
+			wire.receive({ type: "ready" });
+			wire.receive({
+				type: "subscribed",
+				request_id: "1",
+				live_id: "1",
+				epoch: "1",
+				first_sequence: "1",
+				columns: [
+					{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+					{
+						name: "title",
+						type_oid: 25,
+						typmod: -1,
+						codec: "pg_text",
+					},
+				],
+			});
+		},
+		sync: (
+			round: number,
+			rows: readonly object[],
+			resolves?: {
+				readonly scope: object;
+				readonly covered: readonly [number, number];
+			},
+		) => {
+			const version = {
+				live_id: "1",
+				epoch: "1",
+				baseline_sync_attempt: String(round),
+				round: String(round),
+			};
+			wire.receive({
+				type: "baseline_sync_start",
+				...version,
+				scope: resolves?.scope ?? { kind: "all" },
+				mvcc: { xmin: "1", xmax: "1", xip: [] },
+				...(resolves
+					? {
+							covered: {
+								first_sequence: String(resolves.covered[0]),
+								last_sequence: String(resolves.covered[1]),
+							},
+						}
+					: {}),
+			});
+			wire.receive({
+				type: "baseline_sync_batch",
+				...version,
+				index: 0,
+				rows,
+			});
+			wire.receive({
+				type: "baseline_sync_end",
+				...version,
+				batch_count: 1,
+			});
+		},
+		tick: (
+			txid: string,
+			body: {
+				readonly changes?: readonly object[];
+				readonly hole?: boolean;
+			},
+		) => {
+			sequence += 1;
+			const publicationId = `tick-${++publications}`;
+			const target = {
+				live_id: "1",
+				epoch: "1",
+				sequence: String(sequence),
+			};
+			const bodies = [
+				...(body.changes || !body.hole
+					? [
+							{
+								type: "keyed_results",
+								txids: [txid],
+								targets: [target],
+								changes: body.changes ?? [],
+							},
+						]
+					: []),
+				...(body.hole
+					? [
+							{
+								type: "segments_pending",
+								txids: [txid],
+								targets: [target],
+							},
+						]
+					: []),
+			];
+			wire.receive({ type: "open", publication_id: publicationId });
+			bodies.forEach((current, index) => {
+				wire.receive({
+					...current,
+					publication_id: publicationId,
+					index,
+				});
+			});
+			wire.receive({
+				type: "commit",
+				publication_id: publicationId,
+				body_count: bodies.length,
+				frontier: { lsn: "0/10" },
+			});
+		},
+	};
+}
 
 function createTestCollection(
 	client: RealtimeClient,
@@ -820,13 +1065,14 @@ function identity<T>(value: T): T {
 }
 
 /** Fake transport only: subscriptions, decoding, and reconciliation are real. */
-function wireClient() {
+function wireClient(protocol = "neon.realtime.v2") {
 	const listeners = new Map<
 		string,
 		(event: { readonly data: unknown }) => void
 	>();
 	class FakeWebSocket {
 		readyState = 1;
+		readonly protocol = protocol;
 		addEventListener(
 			type: string,
 			listener: (event: { readonly data: unknown }) => void,

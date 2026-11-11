@@ -1,4 +1,8 @@
-import { type ParsedMvccSnapshot, parseMvccSnapshot } from "../mvcc.js";
+import {
+	mergeMvccSnapshots,
+	type ParsedMvccSnapshot,
+	parseMvccSnapshot,
+} from "../mvcc.js";
 import { ProtocolError } from "../protocol/codec.js";
 import type {
 	MvccSnapshot,
@@ -8,6 +12,7 @@ import type {
 } from "../protocol/messages.js";
 
 import { validateChangeOrder } from "./ordered-changes.js";
+import { SegmentIndex } from "./segment-index.js";
 
 export interface ReconciledBatch {
 	readonly changes: readonly WireChange[];
@@ -28,6 +33,17 @@ export interface ReconciliationTarget {
 	publishReset(rows: readonly WireRow[], mvcc: MvccSnapshot): void;
 	/** Notify listeners after all state for this publication is installed. */
 	publishBatch(batch: ReconciledBatch): void;
+	/**
+	 * Notify listeners of an installed round as one update, then apply the
+	 * round's snapshot. `updating` tells whether a hole remains unresolved.
+	 */
+	publishRound(
+		batch: ReconciledBatch,
+		mvcc: MvccSnapshot,
+		updating: boolean,
+	): void;
+	/** Observe a hole becoming pending, or every hole being discarded. */
+	updatingChanged(updating: boolean): void;
 	/** Confirm installed progress without notifying row listeners. */
 	applyProgress(mvcc: ParsedMvccSnapshot): void;
 	/** Publish the one fully caught-up materialized view and enter `live`. */
@@ -47,6 +63,11 @@ export interface AddReconciliationTarget {
 	readonly columnCount: number;
 	readonly target: ReconciliationTarget;
 	readonly lifecycle?: ReconciliationLifecycle;
+	/**
+	 * Whether the session can deliver holes and segment rounds, so the target
+	 * keeps a segment index. Protocol v2 cannot.
+	 */
+	readonly segmentRounds?: boolean;
 }
 
 /** Observe reconciliation milestones without wrapping the delivery target. */
@@ -65,27 +86,69 @@ const SILENT_RECONCILIATION_EVENTS: ReconciliationEventSink = Object.freeze({
 
 interface BaselineSyncVersion {
 	readonly epoch: bigint;
+	readonly round: bigint;
 	readonly attempt: bigint;
+}
+
+/** What a round that resolves holes replaces. */
+interface RoundScope {
+	readonly all: boolean;
+	readonly tags: ReadonlySet<string>;
+	readonly rowKeys: ReadonlySet<string>;
+}
+
+interface CoveredRange {
+	readonly first: bigint;
+	readonly last: bigint;
 }
 
 interface PendingBaselineSync {
 	readonly version: BaselineSyncVersion;
 	readonly mvcc: MvccSnapshot;
+	/** Present for a round that resolves holes; absent when it starts an epoch. */
+	readonly resolves?: {
+		readonly scope: RoundScope;
+		readonly covered: CoveredRange;
+	};
 	nextBatch: number;
 	rows: WireRow[];
 	rowKeys: Set<string>;
+	/** The final batch count, once `baseline_sync_end` has arrived. */
+	batchCount?: number;
+}
+
+/** A committed tick the visible result does not show yet. */
+interface BufferedTick {
+	readonly batch: ReconciledBatch;
+	readonly sequence: bigint;
+	/** The tick committed a hole: some of its rows arrive in a round. */
+	readonly hole: boolean;
+}
+
+/** A progress proof held behind a hole, with the last tick received before it. */
+interface HeldProgress {
+	readonly arrived: bigint;
+	mvcc: ParsedMvccSnapshot;
 }
 
 interface TargetState {
 	readonly target: ReconciliationTarget;
 	readonly lifecycle?: ReconciliationLifecycle;
 	readonly columnCount: number;
+	readonly index?: SegmentIndex;
 	active: boolean;
 	epoch: bigint;
 	nextSequence: bigint;
 	latestBaselineSync?: BaselineSyncVersion;
 	baselineSync?: PendingBaselineSync;
-	backlog: ReconciledBatch[];
+	/**
+	 * Before the first baseline, every committed tick. Once live, the ticks
+	 * from the first unresolved hole on, so the first one, if any, is a hole.
+	 */
+	backlog: BufferedTick[];
+	/** The number of holes in the backlog. */
+	holes: number;
+	heldProgress: HeldProgress[];
 	live: boolean;
 }
 
@@ -93,6 +156,7 @@ interface StagedTarget {
 	readonly changes: WireChange[];
 	readonly txids: readonly string[];
 	readonly nextSequence: bigint;
+	hole: boolean;
 }
 
 interface StagedReset {
@@ -116,6 +180,7 @@ type ReconciliationMessage = Extract<
 			| "baseline_sync_end"
 			| "open"
 			| "keyed_results"
+			| "segments_pending"
 			| "reset_required"
 			| "commit"
 			| "progress";
@@ -127,6 +192,12 @@ type ReconciliationMessage = Extract<
  *
  * This class owns ordering and visibility only. Connection admission, row
  * decoding, materialization, and application callbacks stay outside it.
+ *
+ * Each live query shows one snapshot. A tick with no unresolved hole at or
+ * before it applies at once. From the first unresolved hole on, ticks are
+ * buffered until a round that covers the hole lands; its install replays the
+ * covered ticks, replaces the round's scope with the round's rows, replays
+ * the later ticks up to the next hole, and publishes the result as one update.
  */
 export class BaselineSyncPublicationReconciler {
 	private readonly targets = new Map<string, TargetState>();
@@ -144,10 +215,13 @@ export class BaselineSyncPublicationReconciler {
 			target: input.target,
 			lifecycle: input.lifecycle,
 			columnCount: input.columnCount,
+			index: input.segmentRounds ? new SegmentIndex() : undefined,
 			active: true,
 			epoch: BigInt(input.epoch),
 			nextSequence: BigInt(input.firstSequence),
 			backlog: [],
+			holes: 0,
+			heldProgress: [],
 			live: false,
 		});
 	}
@@ -209,6 +283,9 @@ export class BaselineSyncPublicationReconciler {
 			case "keyed_results":
 				this.keyedResults(message);
 				return;
+			case "segments_pending":
+				this.segmentsPending(message);
+				return;
 			case "reset_required":
 				this.stageReset(message);
 				return;
@@ -229,7 +306,21 @@ export class BaselineSyncPublicationReconciler {
 		// replays an ordered proof after each baseline finishes, even when idle.
 		// Never cache a connection proof for a later admission or reset epoch.
 		for (const state of this.targets.values()) {
-			if (state.active && state.live) state.target.applyProgress(mvcc);
+			if (!state.active || !state.live) continue;
+			if (state.backlog.length === 0) {
+				state.target.applyProgress(mvcc);
+				continue;
+			}
+			// A live query with a hole holds the proof until it shows the ticks
+			// received before it. Proofs held at one tick merge, so at most one is
+			// kept per buffered tick.
+			const arrived = state.nextSequence - 1n;
+			const last = state.heldProgress.at(-1);
+			if (last?.arrived === arrived) {
+				last.mvcc = mergeMvccSnapshots(last.mvcc, mvcc);
+			} else {
+				state.heldProgress.push({ arrived, mvcc });
+			}
 		}
 	}
 
@@ -241,13 +332,9 @@ export class BaselineSyncPublicationReconciler {
 	): void {
 		const state = this.target(message.live_id);
 		if (!state.active) return;
-		// Every baseline sync here replaces the whole result and starts its
-		// epoch. A round that resolves holes needs their reconciliation.
-		if (message.scope.kind !== "all" || message.covered !== undefined) {
-			throw new ProtocolError("unsupported baseline sync scope");
-		}
 		const version = baselineSyncVersion(
 			message.epoch,
+			message.round,
 			message.baseline_sync_attempt,
 		);
 		if (
@@ -257,20 +344,82 @@ export class BaselineSyncPublicationReconciler {
 			return;
 		if (
 			version.epoch !== state.epoch ||
-			sameVersion(version, state.latestBaselineSync) ||
-			state.live
+			sameVersion(version, state.latestBaselineSync)
 		) {
+			throw new ProtocolError("invalid baseline sync start");
+		}
+		// A higher attempt of the same round supersedes the staged attempt. A
+		// different round starts only after the previous round's end.
+		if (
+			state.baselineSync &&
+			state.baselineSync.version.round !== version.round
+		) {
+			throw new ProtocolError(
+				"a round started before the previous round ended",
+			);
+		}
+		const resolves =
+			message.scope.kind === "selected" || message.covered !== undefined
+				? this.resolvedHoles(state, message)
+				: undefined;
+		if (!resolves && state.live) {
 			throw new ProtocolError("invalid baseline sync start");
 		}
 		state.latestBaselineSync = version;
 		state.baselineSync = {
 			version,
 			mvcc: message.mvcc,
+			resolves,
 			nextBatch: 0,
 			rows: [],
 			rowKeys: new Set(),
 		};
 		state.target.baselineSyncStarted();
+	}
+
+	/** Validate a round that resolves holes against the live query's state. */
+	private resolvedHoles(
+		state: TargetState,
+		message: Extract<
+			ReconciliationMessage,
+			{ type: "baseline_sync_start" }
+		>,
+	): NonNullable<PendingBaselineSync["resolves"]> {
+		if (!state.live || !state.index) {
+			throw new ProtocolError(
+				"a round arrived without an installed result",
+			);
+		}
+		if (message.covered === undefined) {
+			throw new ProtocolError("a selected round has no covered range");
+		}
+		const covered = {
+			first: BigInt(message.covered.first_sequence),
+			last: BigInt(message.covered.last_sequence),
+		};
+		const hole = state.backlog[0];
+		if (
+			covered.first > covered.last ||
+			!hole?.hole ||
+			covered.first !== hole.sequence
+		) {
+			throw new ProtocolError(
+				"a covered range must start at the first unresolved hole",
+			);
+		}
+		if (message.scope.kind === "all") {
+			return {
+				scope: { all: true, tags: new Set(), rowKeys: new Set() },
+				covered,
+			};
+		}
+		const tags = new Set<string>();
+		const rowKeys = new Set<string>();
+		for (const selector of message.scope.selectors) {
+			if ("tag" in selector) tags.add(selector.tag);
+			else rowKeys.add(selector.row_key);
+		}
+		return { scope: { all: false, tags, rowKeys }, covered };
 	}
 
 	private baselineSyncBatch(
@@ -283,6 +432,7 @@ export class BaselineSyncPublicationReconciler {
 		if (!state.active) return;
 		const version = baselineSyncVersion(
 			message.epoch,
+			message.round,
 			message.baseline_sync_attempt,
 		);
 		if (
@@ -295,10 +445,12 @@ export class BaselineSyncPublicationReconciler {
 			version.epoch !== state.epoch ||
 			!baselineSync ||
 			!sameVersion(version, baselineSync.version) ||
+			baselineSync.batchCount !== undefined ||
 			message.index !== baselineSync.nextBatch
 		) {
 			throw new ProtocolError("invalid baseline sync batch");
 		}
+		const scope = baselineSync.resolves?.scope;
 		for (const row of message.rows) {
 			if (row.values.length !== state.columnCount) {
 				throw new ProtocolError(
@@ -309,6 +461,18 @@ export class BaselineSyncPublicationReconciler {
 				throw new ProtocolError(
 					"baseline sync contains a duplicate row key",
 				);
+			}
+			// A selected round's row belongs by its own tag or its own row key.
+			if (
+				scope &&
+				!scope.all &&
+				!(
+					(row.segment_tag !== undefined &&
+						scope.tags.has(row.segment_tag)) ||
+					scope.rowKeys.has(row.row_key)
+				)
+			) {
+				throw new ProtocolError("a round row is outside its scope");
 			}
 			baselineSync.rowKeys.add(row.row_key);
 			baselineSync.rows.push(row);
@@ -323,6 +487,7 @@ export class BaselineSyncPublicationReconciler {
 		if (!state.active) return;
 		const version = baselineSyncVersion(
 			message.epoch,
+			message.round,
 			message.baseline_sync_attempt,
 		);
 		if (
@@ -335,15 +500,26 @@ export class BaselineSyncPublicationReconciler {
 			version.epoch !== state.epoch ||
 			!baselineSync ||
 			!sameVersion(version, baselineSync.version) ||
+			baselineSync.batchCount !== undefined ||
 			message.batch_count !== baselineSync.nextBatch
 		) {
 			throw new ProtocolError("invalid baseline sync end");
 		}
+		baselineSync.batchCount = message.batch_count;
+		if (baselineSync.resolves) {
+			this.installRound(state);
+			return;
+		}
 		// The exact-frontier baseline-sync contract guarantees that every
 		// subsequently delivered publication is newer than the baseline. Replay
-		// the complete contiguous backlog; interpreting transaction IDs against
-		// the informational MVCC fields can incorrectly discard valid changes.
-		const replay = state.backlog;
+		// the contiguous backlog up to the first hole; interpreting transaction
+		// IDs against the informational MVCC fields can incorrectly discard
+		// valid changes.
+		const shown =
+			state.holes === 0
+				? state.backlog.length
+				: state.backlog.findIndex((tick) => tick.hole);
+		const replay = state.backlog.slice(0, shown).map((tick) => tick.batch);
 		const rows = Object.freeze([...baselineSync.rows]);
 		try {
 			const install = state.target.prepare(rows, replay);
@@ -358,13 +534,186 @@ export class BaselineSyncPublicationReconciler {
 			return;
 		}
 		state.baselineSync = undefined;
-		this.releaseBacklog(state);
+		state.backlog = state.backlog.slice(shown);
+		if (state.index) {
+			state.index.clear();
+			for (const row of rows)
+				state.index.set(row.row_key, row.segment_tag);
+			for (const batch of replay) state.index.apply(batch.changes);
+		}
 		state.target.baselineSyncCompleted(message.batch_count);
 		state.target.publishReset(rows, baselineSync.mvcc);
 		for (const batch of replay) state.target.publishBatch(batch);
 		state.live = true;
 		state.lifecycle?.baselineCompleted();
 		state.target.caughtUp();
+	}
+
+	/**
+	 * Install a round that resolves holes once its final batch and every
+	 * covered tick have arrived.
+	 *
+	 * Work is proportional to the buffered ticks it replays, the rows it
+	 * removes and the rows it inserts; a round with scope `all` removes every
+	 * visible row.
+	 */
+	private installRound(state: TargetState): void {
+		const round = state.baselineSync;
+		const resolves = round?.resolves;
+		const index = state.index;
+		if (!round || !resolves || round.batchCount === undefined || !index)
+			return;
+		const { scope, covered } = resolves;
+		if (state.nextSequence <= covered.last) return;
+		const first = state.backlog[0];
+		if (!first?.hole || first.sequence !== covered.first) {
+			throw new ProtocolError(
+				"a covered range must start at the first unresolved hole",
+			);
+		}
+
+		// Every key the install touches, with its final row or null, and whether
+		// the result showed the key before this install.
+		const delta = new Map<string, WireRow | null>();
+		const visibleBefore = new Map<string, boolean>();
+		const touch = (rowKey: string) => {
+			if (!visibleBefore.has(rowKey))
+				visibleBefore.set(rowKey, index.has(rowKey));
+		};
+		const txids: string[] = [];
+		let replayed = 0;
+		let resolvedHoles = 0;
+		const replay = (tick: BufferedTick) => {
+			for (const change of tick.batch.changes) {
+				if (change.op === "move") {
+					throw new ProtocolError(
+						"a round cannot replay an ordered move",
+					);
+				}
+				touch(change.row_key);
+				delta.set(
+					change.row_key,
+					change.op === "remove"
+						? null
+						: wireRow(
+								change.row_key,
+								change.values,
+								change.segment_tag,
+							),
+				);
+			}
+			index.apply(tick.batch.changes);
+			txids.push(...tick.batch.txids);
+			if (tick.hole) resolvedHoles += 1;
+			replayed += 1;
+		};
+		const remove = (rowKey: string) => {
+			touch(rowKey);
+			delta.set(rowKey, null);
+			index.delete(rowKey);
+		};
+
+		// 1. Every buffered tick through the covered range's end, in order.
+		for (
+			let sequence = covered.first;
+			sequence <= covered.last;
+			sequence += 1n
+		) {
+			const tick = state.backlog[replayed];
+			if (tick?.sequence !== sequence) {
+				throw new ProtocolError("a covered tick was not received");
+			}
+			replay(tick);
+		}
+		// 2. A returned row must not be shown under a tag outside the scope. A
+		// patch that moved a row out of the scope landed in step 1, so step 3
+		// does not remove it.
+		if (!scope.all) {
+			for (const row of round.rows) {
+				const tag = index.tagOf(row.row_key);
+				if (tag !== undefined && !scope.tags.has(tag)) {
+					throw new ProtocolError(
+						"a round row is shown under a tag outside its scope",
+					);
+				}
+			}
+		}
+		// 3. Remove the scope's rows.
+		if (scope.all) {
+			for (const rowKey of index.keys()) remove(rowKey);
+		} else {
+			for (const tag of scope.tags)
+				for (const rowKey of index.keysOf(tag)) remove(rowKey);
+			for (const rowKey of scope.rowKeys)
+				if (index.has(rowKey)) remove(rowKey);
+		}
+		// 4. Insert the round's rows.
+		for (const row of round.rows) {
+			touch(row.row_key);
+			delta.set(row.row_key, row);
+			index.set(row.row_key, row.segment_tag);
+		}
+		// 5. The later buffered ticks, up to the next unresolved hole.
+		for (
+			let tick = state.backlog[replayed];
+			tick && !tick.hole;
+			tick = state.backlog[replayed]
+		) {
+			replay(tick);
+		}
+
+		// 6. One update: every row the install takes out of the result or
+		// replaces first, then every row it shows. A consumer that derives its
+		// own keys from rows, such as a collection keyed by an ID column, then
+		// never sees two row keys holding one of its keys, even when a segment
+		// renumbers its rows. Removing a key the result never showed is a no-op.
+		const removes: WireChange[] = [];
+		const upserts: WireChange[] = [];
+		for (const [rowKey, row] of delta) {
+			if (visibleBefore.get(rowKey))
+				removes.push(Object.freeze({ op: "remove", row_key: rowKey }));
+			if (row !== null) {
+				upserts.push(
+					Object.freeze({
+						op: "upsert",
+						row_key: rowKey,
+						values: row.values,
+						...(row.segment_tag === undefined
+							? {}
+							: { segment_tag: row.segment_tag }),
+					}),
+				);
+			}
+		}
+		const batch = Object.freeze({
+			changes: Object.freeze([...removes, ...upserts]),
+			txids: Object.freeze(txids),
+		});
+		let install: () => void;
+		try {
+			install = state.target.prepare(undefined, [batch]);
+		} catch (error) {
+			if (error instanceof ProtocolError) throw error;
+			state.baselineSync = undefined;
+			this.releaseBacklog(state);
+			state.active = false;
+			state.live = false;
+			state.target.decodeFailed(error);
+			return;
+		}
+		state.backlog = state.backlog.slice(replayed);
+		state.holes -= resolvedHoles;
+		state.baselineSync = undefined;
+		install();
+		const shown = (state.backlog[0]?.sequence ?? state.nextSequence) - 1n;
+		const released = state.heldProgress.filter(
+			({ arrived }) => arrived <= shown,
+		);
+		state.heldProgress = state.heldProgress.slice(released.length);
+		state.target.baselineSyncCompleted(round.batchCount);
+		state.target.publishRound(batch, round.mvcc, state.holes > 0);
+		for (const progress of released)
+			state.target.applyProgress(progress.mvcc);
 	}
 
 	private publicationOpen(publicationId: string): void {
@@ -393,18 +742,12 @@ export class BaselineSyncPublicationReconciler {
 			}
 			bodyTargets.add(target.live_id);
 			if (!state.active) continue;
-			const sequence = BigInt(target.sequence);
-			const existing = publication.batches.get(target.live_id);
-			if (
-				publication.resets.has(target.live_id) ||
-				state.epoch !== BigInt(target.epoch) ||
-				state.nextSequence !== sequence ||
-				(existing &&
-					(existing.nextSequence !== sequence + 1n ||
-						!sameStrings(existing.txids, message.txids)))
-			) {
-				throw new ProtocolError("invalid publication target");
-			}
+			const existing = this.stagedTarget(
+				publication,
+				state,
+				target,
+				message.txids,
+			);
 			for (const change of message.changes) {
 				if (
 					change.op === "upsert" &&
@@ -421,10 +764,81 @@ export class BaselineSyncPublicationReconciler {
 				publication.batches.set(target.live_id, {
 					changes: [...message.changes],
 					txids: message.txids,
-					nextSequence: sequence + 1n,
+					nextSequence: BigInt(target.sequence) + 1n,
+					hole: false,
 				});
 			}
 		}
+	}
+
+	private segmentsPending(
+		message: Extract<ReconciliationMessage, { type: "segments_pending" }>,
+	): void {
+		const publication = this.publicationBody(
+			message.publication_id,
+			message.index,
+		);
+		const bodyTargets = new Set<string>();
+		for (const target of message.targets) {
+			const state = this.target(target.live_id);
+			if (bodyTargets.has(target.live_id)) {
+				throw new ProtocolError("invalid hole target");
+			}
+			bodyTargets.add(target.live_id);
+			if (!state.active) continue;
+			if (!state.index) {
+				throw new ProtocolError("a hole needs protocol v3");
+			}
+			const existing = this.stagedTarget(
+				publication,
+				state,
+				target,
+				message.txids,
+			);
+			if (existing?.hole) {
+				throw new ProtocolError("a target has two holes in one tick");
+			}
+			if (existing) {
+				existing.hole = true;
+			} else {
+				publication.batches.set(target.live_id, {
+					changes: [],
+					txids: message.txids,
+					nextSequence: BigInt(target.sequence) + 1n,
+					hole: true,
+				});
+			}
+		}
+	}
+
+	/**
+	 * Check one body's target against the tick staged for it so far. Every
+	 * body for one live ID in one publication names the same next sequence
+	 * and the same transaction IDs.
+	 */
+	private stagedTarget(
+		publication: PendingPublication,
+		state: TargetState,
+		target: {
+			readonly live_id: string;
+			readonly epoch: string;
+			readonly sequence: string;
+		},
+		txids: readonly string[],
+	): StagedTarget | undefined {
+		const sequence = BigInt(target.sequence);
+		const existing = publication.batches.get(target.live_id);
+		if (
+			publication.resets.has(target.live_id) ||
+			state.epoch !== BigInt(target.epoch) ||
+			state.nextSequence !== sequence ||
+			(existing &&
+				(existing.nextSequence !== sequence + 1n ||
+					!sameStrings(existing.txids, txids)))
+		) {
+			throw new ProtocolError("invalid publication target");
+		}
+		return existing;
 	}
 
 	private stageReset(
@@ -478,8 +892,11 @@ export class BaselineSyncPublicationReconciler {
 				changes: Object.freeze([...staged.changes]),
 				txids: Object.freeze([...staged.txids]),
 			});
+			// A hole, and every tick after an unresolved one, stays buffered.
+			const applies =
+				state.live && !staged.hole && state.backlog.length === 0;
 			try {
-				const install = state.live
+				const install = applies
 					? state.target.prepare(undefined, [batch])
 					: undefined;
 				// Application parsers may close the client and clear this publication.
@@ -492,17 +909,25 @@ export class BaselineSyncPublicationReconciler {
 			}
 		}
 		this.publication = undefined;
+		const holePending: TargetState[] = [];
 		for (const { state, staged, batch, install, failure } of committed) {
+			const sequence = state.nextSequence;
 			state.nextSequence = staged.nextSequence;
 			if (failure) {
 				state.active = false;
 				state.live = false;
-			} else if (install) install();
-			else state.backlog.push(batch);
+			} else if (install) {
+				install();
+				state.index?.apply(batch.changes);
+			} else {
+				state.backlog.push({ batch, sequence, hole: staged.hole });
+				if (staged.hole && ++state.holes === 1) holePending.push(state);
+			}
 		}
 		const resetStates: TargetState[] = [];
 		for (const [liveId, reset] of publication.resets) {
 			const state = this.target(liveId);
+			const discardedHoles = state.holes > 0;
 			state.epoch = reset.epoch;
 			state.nextSequence = reset.firstSequence;
 			state.latestBaselineSync = undefined;
@@ -510,6 +935,7 @@ export class BaselineSyncPublicationReconciler {
 			this.releaseBacklog(state);
 			state.live = false;
 			resetStates.push(state);
+			if (discardedHoles) holePending.push(state);
 		}
 		this.events.publicationCommitted(bodyCount);
 		for (const state of resetStates) {
@@ -521,6 +947,14 @@ export class BaselineSyncPublicationReconciler {
 		}
 		for (const { state, batch, install } of committed) {
 			if (install) state.target.publishBatch(batch);
+		}
+		for (const state of holePending) {
+			if (state.active) state.target.updatingChanged(state.holes > 0);
+		}
+		// A round whose covered ticks were still arriving can install now.
+		for (const { state, failure } of committed) {
+			if (!failure && state.active && state.live)
+				this.installRound(state);
 		}
 	}
 
@@ -542,6 +976,8 @@ export class BaselineSyncPublicationReconciler {
 
 	private releaseBacklog(state: TargetState): void {
 		state.backlog = [];
+		state.holes = 0;
+		state.heldProgress = [];
 	}
 
 	private target(liveId: string): TargetState {
@@ -551,11 +987,26 @@ export class BaselineSyncPublicationReconciler {
 	}
 }
 
+function wireRow(
+	rowKey: string,
+	values: WireRow["values"],
+	segmentTag: string | undefined,
+): WireRow {
+	return segmentTag === undefined
+		? { row_key: rowKey, values }
+		: { row_key: rowKey, values, segment_tag: segmentTag };
+}
+
 function baselineSyncVersion(
 	epoch: string,
+	round: string,
 	attempt: string,
 ): BaselineSyncVersion {
-	return { epoch: BigInt(epoch), attempt: BigInt(attempt) };
+	return {
+		epoch: BigInt(epoch),
+		round: BigInt(round),
+		attempt: BigInt(attempt),
+	};
 }
 
 function sameVersion(
@@ -565,20 +1016,22 @@ function sameVersion(
 	return (
 		right !== undefined &&
 		left.epoch === right.epoch &&
+		left.round === right.round &&
 		left.attempt === right.attempt
 	);
 }
 
+/** Rounds advance within an epoch, and attempts within a round. */
 function isOlder(
 	candidate: BaselineSyncVersion,
 	current: BaselineSyncVersion | undefined,
 ): boolean {
-	return (
-		current !== undefined &&
-		(candidate.epoch < current.epoch ||
-			(candidate.epoch === current.epoch &&
-				candidate.attempt < current.attempt))
-	);
+	if (current === undefined) return false;
+	if (candidate.epoch !== current.epoch)
+		return candidate.epoch < current.epoch;
+	if (candidate.round !== current.round)
+		return candidate.round < current.round;
+	return candidate.attempt < current.attempt;
 }
 
 function sameStrings(

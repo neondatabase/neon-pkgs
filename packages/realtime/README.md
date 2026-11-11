@@ -498,6 +498,23 @@ the core retains unordered keyed semantics for those batches. Application
 callback side effects are outside SDK rollback; callbacks across independent
 adapters are not a transaction.
 
+### Partial refreshes
+
+Over protocol v3 the server can recompute part of a result instead of patching
+it. While such a refresh is pending, a materialized snapshot has
+`updating: true` and keeps showing the last complete result, with `status`
+unchanged. Changes committed in the meantime wait with it: they become visible
+together when the refresh lands, as one update, and `awaitTxId()` resolves for
+them only then. A snapshot that is not refreshing has `updating: false`.
+
+Raw subscriptions receive a landed refresh as one `changes` update, never as a
+`rows` replacement: first a `remove` for every row the refresh replaces or
+removes, then an `upsert` for every row it shows. A consumer that keys rows by
+their contents can therefore apply the batch in order without seeing two row
+IDs claim one key. The batch's `txids` list every transaction it makes visible.
+Rows of an unordered result have no defined position, so a materialized array
+lists replaced rows wherever its map puts them.
+
 For SSR, pass server-executed rows as `initialData` when subscribing. They are
 available immediately with status `connecting` until the first authoritative
 result. Realtime does not transform those rows: the application is responsible
@@ -556,10 +573,12 @@ Custom raw consumers should follow the complete-batch staging and validation
 requirements above. TanStack collections retain unordered keyed semantics;
 their local queries must establish any desired order.
 
-The SDK requests only `neon.realtime.v2`, including on reconnect. Deploy a
-server that requires the one-time `client_info` message before releasing this
-SDK. Protocol v1 remains available for previously released clients. There is no
-client-side protocol fallback, subscription opt-in, or mode acknowledgment.
+The SDK offers `neon.realtime.v3` and `neon.realtime.v2`, including on
+reconnect, and decodes the connection with the subprotocol the server selects.
+A custom `webSocketFactory` must return a transport that reports the selected
+subprotocol through the standard `protocol` property, as browser, React Native
+and `ws` WebSockets do. Protocol v1 remains available for previously released
+clients. There is no subscription opt-in or mode acknowledgment.
 
 ## Protocol schemas
 

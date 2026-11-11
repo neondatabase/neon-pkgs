@@ -55,6 +55,17 @@ export function target(events: string[] = [], prefix = ""): MockTarget {
 				),
 			),
 		),
+		publishRound: vi.fn(
+			(batch: ReconciledBatch, _mvcc, updating: boolean) =>
+				events.push(
+					label(
+						`publishRound:${batch.txids}:${changeOps(batch.changes)}${updating ? ":updating" : ""}`,
+					),
+				),
+		),
+		updatingChanged: vi.fn((updating: boolean) =>
+			events.push(label(`updating:${updating}`)),
+		),
 		caughtUp: vi.fn(() => events.push(label("caughtUp"))),
 		baselineSyncCompleted: vi.fn(),
 		applyProgress: vi.fn(() => events.push(label("progress"))),
@@ -242,4 +253,11 @@ export function keys(rows: readonly WireRow[]): string {
 
 export function changeKeys(changes: readonly WireChange[]): string {
 	return changes.map((change) => change.row_key[0]).join(",");
+}
+
+/** Each change as its operation's initial and its row key's initial. */
+export function changeOps(changes: readonly WireChange[]): string {
+	return changes
+		.map((change) => `${change.op[0]}${change.row_key[0]}`)
+		.join(",");
 }

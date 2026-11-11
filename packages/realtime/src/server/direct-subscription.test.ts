@@ -25,6 +25,8 @@ class FakeWebSocket {
 	readonly sent: Record<string, unknown>[] = [];
 	readonly url: string;
 	readonly protocols: string | string[];
+	/** The subprotocol this fake server selects; v2 unless a test changes it. */
+	protocol: string | undefined = "neon.realtime.v2";
 	private readonly listeners = new Map<string, Set<FakeWebSocketListener>>();
 
 	constructor(url: string, protocols: string | string[]) {
@@ -124,12 +126,16 @@ describe("trusted direct subscriptions", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "connecting",
 			error: undefined,
+			updating: false,
 			data: undefined,
 		});
 		const socket = connectAndAdmit();
 		baselineSync(socket, "hello");
 		expect(socket.url).toBe("ws://live.test/v1");
-		expect(socket.protocols).toBe("neon.realtime.v2");
+		expect(socket.protocols).toEqual([
+			"neon.realtime.v3",
+			"neon.realtime.v2",
+		]);
 		expect(subscription.getSnapshot()).toMatchObject({
 			status: "live",
 			data: [{ id: 1, body: "hello" }],
@@ -255,6 +261,7 @@ describe("trusted direct subscriptions", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "connecting",
 			error: undefined,
+			updating: false,
 			data: [{ id: 1, body: "before" }],
 		});
 		await vi.advanceTimersByTimeAsync(1_000);
@@ -278,6 +285,7 @@ describe("trusted direct subscriptions", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [{ id: 1, body: "after" }],
 		});
 		subscription.unsubscribe();
