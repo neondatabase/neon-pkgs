@@ -342,7 +342,7 @@ export type Registry = {
 	sources: RegistrySource[];
 	entries: RegistryIndexEntry[];
 	load: (entry: RegistryIndexEntry) => Promise<LoadedTemplate>;
-	/** False when NEON_FUNCTION_REGISTRY_DIR, NEON_FUNCTION_REGISTRY_URL, or an explicit source replaced the default registries. */
+	/** False when NEON_FUNCTION_REGISTRY_DIR, NEON_FUNCTION_REGISTRY_URL, NEON_FUNCTION_REGISTRY_GITHUB, or an explicit source replaced a default registry. */
 	official: boolean;
 };
 
@@ -468,8 +468,8 @@ export const openRegistry = async (
 			return openRegistryAt(mirror, github, { remoteSources: false });
 		}
 	};
-	if (neonRegistry === false)
-		return { ...(await openExamples()), official: true };
+	const official = !(githubRaw || env[GITHUB_RAW_ENV]);
+	if (neonRegistry === false) return { ...(await openExamples()), official };
 	const repoIndex = new URL(rawIndexUrl(neonRegistry));
 	const openNeonRegistry = () =>
 		openRegistryAt({ kind: "url", url: repoIndex }, github, {
@@ -503,10 +503,14 @@ export const openRegistry = async (
 		results.flatMap((result) =>
 			result.status === "fulfilled" ? [result.value] : [],
 		),
+		official,
 	);
 };
 
-const mergeRegistries = (registries: Registry[]): Registry => {
+const mergeRegistries = (
+	registries: Registry[],
+	official: boolean,
+): Registry => {
 	const owners = new Map<string, Registry>();
 	const entries: RegistryIndexEntry[] = [];
 	for (const registry of registries) {
@@ -520,7 +524,7 @@ const mergeRegistries = (registries: Registry[]): Registry => {
 	return {
 		sources,
 		entries,
-		official: true,
+		official,
 		load: async (entry) => {
 			const owner = owners.get(entry.id);
 			if (!owner) {

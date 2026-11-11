@@ -255,6 +255,39 @@ describe("openRegistry with the default sources", () => {
 		expect(fallback.requests).toEqual([]);
 	});
 
+	it("is official only while no source is overridden", async () => {
+		const primary = await start({ "/registry.json": empty });
+		const custom = await start({ "/registry.json": empty });
+		const open = (overrides: NodeJS.ProcessEnv) =>
+			openRegistry(undefined, {
+				primary: primary.url("/registry.json"),
+				fallback: primary.url("/registry.json"),
+				neonRegistry: false,
+				env: overrides,
+			});
+
+		expect((await open({})).official).toBe(true);
+		expect(
+			(
+				await open({
+					NEON_FUNCTION_REGISTRY_URL: custom.url("/registry.json"),
+				})
+			).official,
+		).toBe(false);
+		expect(
+			(await open({ NEON_FUNCTION_REGISTRY_GITHUB: custom.url("/") }))
+				.official,
+		).toBe(false);
+		expect(
+			(
+				await openRegistry({
+					kind: "url",
+					url: new URL(primary.url("/registry.json")),
+				})
+			).official,
+		).toBe(false);
+	});
+
 	it("falls back when the primary source fails", async () => {
 		const primary = await start({ "/registry.json": { status: 503 } });
 		const fallback = await start({ "/registry.json": empty });
