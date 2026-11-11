@@ -139,7 +139,7 @@ const realtime = createRealtime({
 | The branch's keys endpoint answers | The SDK seals |
 | --- | --- |
 | A current key | An envelope with the Postgres login |
-| `404` (a Realtime server from before envelopes) or an empty key list | A legacy token with `secret`; without a secret, it throws "This branch has no Realtime key yet" |
+| `400` or `404` (a Realtime server from before envelopes answers `400`), or an empty key list | A legacy token with `secret`; without a secret, it throws "This branch has no Realtime key yet" |
 | A network error, a timeout, `5xx` or an unreadable answer | Nothing: `seal()` throws, and the secret is not used |
 
 The SDK rechecks a branch without a key at most a minute later, so it starts

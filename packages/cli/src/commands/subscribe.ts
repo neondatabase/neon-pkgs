@@ -228,18 +228,25 @@ const resolveRealtimeVars = async (
 	return vars;
 };
 
+/**
+ * The SDK options for a subscription. With both credentials, the SDK seals an
+ * envelope when the branch publishes a key and uses the secret when it
+ * publishes none, as a Realtime server from before envelopes does.
+ */
+export const realtimeServerOptions = (options: RealtimeConnectionOptions) => ({
+	url: options.url,
+	databaseUrl: options.databaseUrl,
+	secret: options.secret,
+	db: options.database,
+	debugMode: options.debugMode,
+});
+
 const connectRealtime = async (
 	options: RealtimeConnectionOptions,
 ): Promise<DirectSubscriber> => {
 	await ensureWebSocket();
 	const { createRealtime, rawSql } = await import("@neon/realtime");
-	const realtime = createRealtime({
-		url: options.url,
-		databaseUrl: options.databaseUrl,
-		secret: options.secret,
-		db: options.database,
-		debugMode: options.debugMode,
-	});
+	const realtime = createRealtime(realtimeServerOptions(options));
 	return {
 		subscribeMaterialized: (query) =>
 			realtime.subscribe(rawSql<QueryRow>(query)),

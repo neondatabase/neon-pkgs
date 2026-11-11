@@ -60,6 +60,17 @@ function fetchReturning(
 	return fetchMock as RealtimeFetch & typeof fetchMock;
 }
 
+/**
+ * What a proxy from before v3 sends for a plain GET on any path: its WebSocket
+ * upgrade handler refuses it.
+ */
+function oldProxyResponse(): Response {
+	return new Response("Connection header did not include 'upgrade'", {
+		status: 400,
+		headers: { "content-type": "text/plain; charset=utf-8" },
+	});
+}
+
 async function keyFrom(fetchImpl: RealtimeFetch) {
 	const key = await cachedRealtimeKey(KEYS_URL, fetchImpl);
 	if (!key) throw new Error("expected a key");
@@ -213,9 +224,10 @@ describe("Realtime key cache", () => {
 
 	it.each([
 		[
-			"404, as from a proxy that predates v3",
-			() => new Response("", { status: 404 }),
+			"a proxy that predates v3 (its upgrade handler's 400)",
+			oldProxyResponse,
 		],
+		["404", () => new Response("", { status: 404 })],
 		["an empty list", () => keysResponse([], "no-store")],
 	])("reports no key for %s, and caches that for 60 s", async (_, response) => {
 		const fetchImpl = fetchReturning(response, () =>

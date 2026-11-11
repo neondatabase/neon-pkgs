@@ -30,7 +30,7 @@ interface ResolvedKey extends EnvelopeKey {
 
 /**
  * The branch's key, or `undefined` when the branch definitely publishes none:
- * the endpoint answers 404, as a proxy from before v3 does, or lists no keys.
+ * the endpoint answers 400 (a proxy from before v3) or 404, or lists no keys.
  */
 export type RealtimeKeyLookup = ResolvedKey | undefined;
 
@@ -121,7 +121,8 @@ export function noRealtimeKeyError(keysUrl: string): Error {
  * Fetch the endpoint once, without the cache.
  *
  * - A key: `key` is set, cached per Cache-Control.
- * - No key (404, or an empty list): `key` is undefined, cached for 60 s.
+ * - No key (400 or 404, or an empty list): `key` is undefined, cached for
+ *   60 s.
  * - Anything else (network error, timeout, other status, a body that is not
  *   a key list, or entries none of which is usable) throws, so the caller
  *   never takes a broken endpoint for a branch without keys.
@@ -157,8 +158,10 @@ export async function loadRealtimeKey(
 			cause,
 		});
 	}
-	// A proxy from before v3 has no keys endpoint.
-	if (response.status === 404) {
+	// A proxy from before v3 has no keys endpoint. It sends every path to its
+	// WebSocket upgrade, which refuses a plain GET with 400. Every v3 proxy
+	// answers 200 here, so 400 and 404 both mean the branch has no key.
+	if (response.status === 400 || response.status === 404) {
 		return { key: undefined, cacheSeconds: NO_KEY_CACHE_SECONDS };
 	}
 	if (response.status !== 200) {

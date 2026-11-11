@@ -80,6 +80,14 @@ function jwt(exp: number): string {
 	return `${encode({ alg: "RS256" })}.${encode({ exp })}.c2ln`;
 }
 
+/** A proxy from before v3 refuses a plain GET on any path with this. */
+function oldProxyResponse(): Response {
+	return new Response("Connection header did not include 'upgrade'", {
+		status: 400,
+		headers: { "content-type": "text/plain; charset=utf-8" },
+	});
+}
+
 function headerOf(capability: string) {
 	return JSON.parse(
 		Buffer.from(capability.split(".")[0] ?? "", "base64url").toString(),
@@ -222,8 +230,11 @@ describe("Realtime backend SDK with a database URL", () => {
 			expect(claims.auth.user).toBe("neondb_owner");
 		});
 
-		it("uses the secret against an old server whose keys endpoint is 404", async () => {
-			const fetch = vi.fn(async () => new Response("", { status: 404 }));
+		it.each([
+			["an old proxy's 400", oldProxyResponse],
+			["404", () => new Response("", { status: 404 })],
+		])("uses the secret when the keys endpoint answers %s", async (_, response) => {
+			const fetch = vi.fn(async () => response());
 			const realtime = migrating(fetch);
 
 			const sealed = await realtime.seal({ query });
@@ -266,7 +277,7 @@ describe("Realtime backend SDK with a database URL", () => {
 								},
 							},
 						)
-					: new Response("", { status: 404 }),
+					: oldProxyResponse(),
 			);
 			const realtime = migrating(fetch);
 
@@ -329,11 +340,11 @@ describe("Realtime backend SDK with a database URL", () => {
 		);
 	});
 
-	it("without a secret, also says so for an old server's 404", async () => {
+	it("without a secret, also says so for an old proxy's 400", async () => {
 		const realtime = createRealtime({
 			databaseUrl: DATABASE_URL,
 			url: REALTIME_URL,
-			fetch: vi.fn(async () => new Response("", { status: 404 })),
+			fetch: vi.fn(async () => oldProxyResponse()),
 		});
 		await expect(realtime.seal({ query })).rejects.toThrow(
 			"This branch has no Realtime key yet",
