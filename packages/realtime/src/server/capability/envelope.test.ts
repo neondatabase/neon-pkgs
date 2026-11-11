@@ -152,7 +152,6 @@ describe("Realtime envelope v3 sealing", () => {
 		const fixture = fixtureByName("password");
 		const key = await importRealtimePublicKey(primary);
 		const issue = createEnvelopeIssuer({
-			key: async () => key,
 			login: async () => ({
 				user: "neondb_owner",
 				credential: "fixture-password-correct-horse",
@@ -168,6 +167,7 @@ describe("Realtime envelope v3 sealing", () => {
 				parameters: [{ typeOid: 23, value: "7" }],
 			},
 			"raw_sql",
+			key,
 		);
 
 		expect(sealed).toEqual({

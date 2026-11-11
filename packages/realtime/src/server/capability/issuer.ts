@@ -76,8 +76,6 @@ export function createCapabilityIssuer(
 }
 
 interface EnvelopeIssuerOptions {
-	/** Resolves the branch key to seal to. */
-	readonly key: () => Promise<EnvelopeKey>;
 	/** Resolves the Postgres login sealed into `auth`. */
 	readonly login: () => Promise<EnvelopeLogin>;
 	readonly database: string;
@@ -87,18 +85,24 @@ interface EnvelopeIssuerOptions {
 	readonly ephemeralKeyMaterial?: () => Uint8Array;
 }
 
-/** Create a v3 issuer that seals queries and a login to the branch key. */
+/** Seals one prepared query and the login to a branch key. */
+export type EnvelopeIssuer = (
+	query: PreparedLiveQuery,
+	querySource: QuerySource,
+	key: EnvelopeKey,
+) => Promise<IssuedSealedLiveQuery>;
+
+/** Create a v3 issuer that seals queries and a login to a branch key. */
 export function createEnvelopeIssuer(
 	options: EnvelopeIssuerOptions,
-): CapabilityIssuer {
+): EnvelopeIssuer {
 	const clock = options.clock ?? Date.now;
-	return async (query, querySource = "custom") => {
-		const [fingerprint, key, login] = await Promise.all([
+	return async (query, querySource, key) => {
+		const [fingerprint, login] = await Promise.all([
 			queryFingerprint(query),
-			options.key(),
 			options.login(),
 		]);
-		// The lifetime starts once any key fetch or token request has finished.
+		// The lifetime starts once any token request has finished.
 		const claims: EnvelopeClaims = {
 			v: 3,
 			...queryClaims(

@@ -12,13 +12,16 @@ export {
 	type CapabilityIssuer,
 	createCapabilityIssuer,
 	createEnvelopeIssuer,
+	type EnvelopeIssuer,
 	type IssuedSealedLiveQuery,
 } from "./issuer.js";
 export {
 	cachedRealtimeKey,
 	importRealtimePublicKey,
 	loadRealtimeKey,
+	noRealtimeKeyError,
 	type RealtimeFetch,
+	type RealtimeKeyLookup,
 	type RealtimePublicKey,
 	realtimeKeysUrl,
 } from "./keys.js";

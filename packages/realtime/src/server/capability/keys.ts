@@ -3,6 +3,8 @@ import { ENVELOPE_ALG, type EnvelopeKey, envelopeSuite } from "./envelope.js";
 
 const KEYS_PATH = "/.well-known/neon-realtime-keys";
 const MAX_CACHE_SECONDS = 600;
+// A branch without a key gets one when Neon provisions it. Check again soon.
+const NO_KEY_CACHE_SECONDS = 60;
 const FETCH_TIMEOUT_MS = 10_000;
 const KID_PATTERN = /^[A-Za-z0-9_-]{21}[AQgw]$/;
 
@@ -26,14 +28,20 @@ interface ResolvedKey extends EnvelopeKey {
 	readonly jwk: RealtimePublicKey;
 }
 
+/**
+ * The branch's key, or `undefined` when the branch definitely publishes none:
+ * the endpoint answers 404, as a proxy from before v3 does, or lists no keys.
+ */
+export type RealtimeKeyLookup = ResolvedKey | undefined;
+
 interface CacheEntry {
-	key?: ResolvedKey;
+	value?: RealtimeKeyLookup;
 	expiresAt: number;
-	pending?: Promise<ResolvedKey>;
+	pending?: Promise<RealtimeKeyLookup>;
 }
 
 // Shared per keys URL, so apps that create the SDK per request still fetch the
-// key at most once per Cache-Control period.
+// key at most once per cache period.
 const cache = new Map<string, CacheEntry>();
 
 /** @internal Tests only. */
@@ -65,27 +73,36 @@ export function realtimeKeysUrl(realtimeUrl: string): string {
 	return url.href;
 }
 
-/** Return the branch key, cached as the endpoint's Cache-Control allows. */
+/**
+ * Return the branch key, cached as the endpoint's Cache-Control allows, or
+ * `undefined` when the branch publishes no key, cached for 60 s. Throws when
+ * the answer can't be trusted either way.
+ */
 export async function cachedRealtimeKey(
 	keysUrl: string,
 	fetchImpl?: RealtimeFetch,
 	clock: () => number = Date.now,
-): Promise<ResolvedKey> {
+): Promise<RealtimeKeyLookup> {
 	let entry = cache.get(keysUrl);
-	if (entry?.key && clock() < entry.expiresAt) return entry.key;
+	if (entry && entry.expiresAt > 0 && clock() < entry.expiresAt) {
+		return entry.value;
+	}
 	if (entry?.pending) return entry.pending;
 	entry ??= { expiresAt: 0 };
 	cache.set(keysUrl, entry);
 	const current = entry;
 	const pending = loadRealtimeKey(keysUrl, fetchImpl).then(
-		({ key, maxAgeSeconds }) => {
+		({ key, cacheSeconds }) => {
 			current.pending = undefined;
-			current.key = maxAgeSeconds > 0 ? key : undefined;
-			current.expiresAt = clock() + maxAgeSeconds * 1_000;
+			current.value = key;
+			current.expiresAt =
+				cacheSeconds > 0 ? clock() + cacheSeconds * 1_000 : 0;
 			return key;
 		},
 		(error: unknown) => {
 			current.pending = undefined;
+			current.value = undefined;
+			current.expiresAt = 0;
 			throw error;
 		},
 	);
@@ -93,11 +110,29 @@ export async function cachedRealtimeKey(
 	return pending;
 }
 
-/** Fetch the endpoint once, without the cache. */
+/** The error when a branch publishes no key and no secret is configured. */
+export function noRealtimeKeyError(keysUrl: string): Error {
+	return new Error(
+		`This branch has no Realtime key yet: ${keysUrl} publishes none`,
+	);
+}
+
+/**
+ * Fetch the endpoint once, without the cache.
+ *
+ * - A key: `key` is set, cached per Cache-Control.
+ * - No key (404, or an empty list): `key` is undefined, cached for 60 s.
+ * - Anything else (network error, timeout, other status, a body that is not
+ *   a key list, or entries none of which is usable) throws, so the caller
+ *   never takes a broken endpoint for a branch without keys.
+ */
 export async function loadRealtimeKey(
 	keysUrl: string,
 	fetchImpl: RealtimeFetch | undefined,
-): Promise<{ readonly key: ResolvedKey; readonly maxAgeSeconds: number }> {
+): Promise<{
+	readonly key: RealtimeKeyLookup;
+	readonly cacheSeconds: number;
+}> {
 	const fetchFunction = fetchImpl ?? globalThis.fetch;
 	if (typeof fetchFunction !== "function") {
 		throw new Error(
@@ -122,7 +157,11 @@ export async function loadRealtimeKey(
 			cause,
 		});
 	}
-	if (!response.ok) {
+	// A proxy from before v3 has no keys endpoint.
+	if (response.status === 404) {
+		return { key: undefined, cacheSeconds: NO_KEY_CACHE_SECONDS };
+	}
+	if (response.status !== 200) {
 		throw new Error(
 			`Could not fetch the Realtime keys from ${keysUrl}: HTTP ${response.status}`,
 		);
@@ -135,19 +174,25 @@ export async function loadRealtimeKey(
 			cause,
 		});
 	}
-	const key = await firstUsableKey(body);
+	if (!isRecord(body) || !Array.isArray(body.keys)) {
+		throw new Error(`The Realtime keys from ${keysUrl} are not a key list`);
+	}
+	if (body.keys.length === 0) {
+		return { key: undefined, cacheSeconds: NO_KEY_CACHE_SECONDS };
+	}
+	const key = await firstUsableKey(body.keys);
 	if (!key) {
-		// Never fall back to the legacy secret: the app configured credentials.
 		throw new Error(
-			`This branch has no Realtime key yet: ${keysUrl} lists no usable key`,
+			`The Realtime keys from ${keysUrl} list no key this SDK can use`,
 		);
 	}
-	return { key, maxAgeSeconds: cacheSeconds(response.headers) };
+	return { key, cacheSeconds: cacheSeconds(response.headers) };
 }
 
-async function firstUsableKey(body: unknown): Promise<ResolvedKey | undefined> {
-	if (!isRecord(body) || !Array.isArray(body.keys)) return undefined;
-	for (const entry of body.keys) {
+async function firstUsableKey(
+	entries: readonly unknown[],
+): Promise<ResolvedKey | undefined> {
+	for (const entry of entries) {
 		const key = await usableKey(entry);
 		if (key) return key;
 	}

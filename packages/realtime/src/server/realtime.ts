@@ -19,6 +19,7 @@ import {
 	createCapabilityIssuer,
 	createEnvelopeIssuer,
 	createLoginSource,
+	noRealtimeKeyError,
 	type OidcTokenSource,
 	parseDatabaseUrl,
 	parseRealtimeSecret,
@@ -214,7 +215,13 @@ export interface RealtimeDatabaseUrlOptions {
 	readonly oidcToken?: OidcTokenSource;
 	/** PostgreSQL database. Defaults to the one in `databaseUrl`. */
 	readonly db?: string;
-	readonly secret?: undefined;
+	/**
+	 * Legacy shared secret, for migration. When the branch publishes no key,
+	 * because its Realtime server predates envelopes or its key is not
+	 * provisioned yet, the SDK seals legacy tokens with it. It is never used
+	 * after an envelope fails.
+	 */
+	readonly secret?: string;
 }
 
 /** Seal legacy tokens with the shared Realtime secret. */
@@ -229,7 +236,8 @@ export interface RealtimeSecretOptions {
 
 /**
  * Configuration with a Realtime endpoint: enables direct subscriptions and,
- * with `databaseUrl`, sealing with Postgres credentials.
+ * with `databaseUrl`, sealing with Postgres credentials, alone or together
+ * with the legacy secret during migration.
  */
 export type RealtimeDirectServerOptions<Query> =
 	RealtimeEndpointOptions<Query> &
@@ -244,10 +252,13 @@ type AnyRealtimeOptions<Query> = RealtimeServerOptions<Query> &
 /**
  * Create a server-only Realtime SDK.
  *
- * With `databaseUrl`, every capability is a v3 envelope sealed to the
- * branch's public key, carrying the Postgres login; the SDK fetches that key
- * from `url` and caches it. With only the legacy `secret`, `seal()` encrypts
- * locally and makes no network requests. A WebSocket `url` also enables
+ * With `databaseUrl`, the SDK looks up the branch's public key at `url` and
+ * caches the answer. If the branch publishes a key, each capability is a v3
+ * envelope sealed to it, carrying the Postgres login. If it publishes none
+ * (an older Realtime server, or a key not provisioned yet), the SDK uses
+ * `secret` when one is configured and raises an error otherwise. With only
+ * the legacy `secret`, `seal()` encrypts locally and makes no network
+ * requests. A WebSocket `url` also enables
  * trusted direct subscriptions that mint and refresh their own capabilities.
  * Keep credentials out of browser bundles.
  *
@@ -328,44 +339,58 @@ export function createRealtime<Query = RawSqlQuery<unknown>>(
 }
 
 /**
- * Seal v3 whenever a credential is configured; use the legacy secret only
- * without one. A v3 failure never falls back to the secret.
+ * With a credential, seal v3 when the branch publishes a key, and use the
+ * secret only when it definitely publishes none. Without a credential, use
+ * the secret. A failed or unreadable key lookup never falls back.
  */
 function createIssuer<Query>(
 	options: AnyRealtimeOptions<Query>,
 ): CapabilityIssuer {
 	const errorDetails = options.debugMode === true ? "full" : "safe";
-	if (options.databaseUrl !== undefined) {
-		const login = parseDatabaseUrl(options.databaseUrl);
-		const loginSource = createLoginSource(login, options.oidcToken);
-		const database = options.db ?? login.database;
-		validateDatabaseName(database);
-		if (typeof options.url !== "string" || options.url === "") {
-			throw new Error(
-				"Realtime requires url with databaseUrl, to fetch the branch key",
-			);
+	if (options.databaseUrl === undefined) {
+		if (options.oidcToken !== undefined) {
+			throw new Error("Realtime uses oidcToken only with databaseUrl");
 		}
-		const keysUrl = realtimeKeysUrl(options.url);
-		const fetchImpl = options.fetch;
-		return createEnvelopeIssuer({
-			key: () => cachedRealtimeKey(keysUrl, fetchImpl),
-			login: loginSource,
-			database,
+		if (options.secret === undefined) {
+			throw new Error("Realtime requires databaseUrl or secret");
+		}
+		validateDatabaseName(options.db);
+		return createCapabilityIssuer(
+			parseRealtimeSecret(options.secret),
+			options.db,
 			errorDetails,
-		});
+		);
 	}
-	if (options.oidcToken !== undefined) {
-		throw new Error("Realtime uses oidcToken only with databaseUrl");
+	const login = parseDatabaseUrl(options.databaseUrl);
+	const loginSource = createLoginSource(login, options.oidcToken);
+	const database = options.db ?? login.database;
+	validateDatabaseName(database);
+	if (typeof options.url !== "string" || options.url === "") {
+		throw new Error(
+			"Realtime requires url with databaseUrl, to fetch the branch key",
+		);
 	}
-	if (options.secret === undefined) {
-		throw new Error("Realtime requires databaseUrl or secret");
-	}
-	validateDatabaseName(options.db);
-	return createCapabilityIssuer(
-		parseRealtimeSecret(options.secret),
-		options.db,
+	const legacy =
+		options.secret === undefined
+			? undefined
+			: createCapabilityIssuer(
+					parseRealtimeSecret(options.secret),
+					database,
+					errorDetails,
+				);
+	const sealEnvelope = createEnvelopeIssuer({
+		login: loginSource,
+		database,
 		errorDetails,
-	);
+	});
+	const keysUrl = realtimeKeysUrl(options.url);
+	const fetchImpl = options.fetch;
+	return async (query, querySource = "custom") => {
+		const key = await cachedRealtimeKey(keysUrl, fetchImpl);
+		if (key) return sealEnvelope(query, querySource, key);
+		if (legacy) return legacy(query, querySource);
+		throw noRealtimeKeyError(keysUrl);
+	};
 }
 
 function normalizeAdapterSource(source: unknown): RealtimeAdapterSource {

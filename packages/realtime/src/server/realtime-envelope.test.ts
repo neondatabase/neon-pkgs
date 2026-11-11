@@ -1,6 +1,14 @@
 import { readFileSync } from "node:fs";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	expectTypeOf,
+	it,
+	vi,
+} from "vitest";
 import {
 	type FixtureKey,
 	openEnvelope,
@@ -72,9 +80,43 @@ function jwt(exp: number): string {
 	return `${encode({ alg: "RS256" })}.${encode({ exp })}.c2ln`;
 }
 
+function headerOf(capability: string) {
+	return JSON.parse(
+		Buffer.from(capability.split(".")[0] ?? "", "base64url").toString(),
+	) as Record<string, unknown>;
+}
+
+/** Decrypt a legacy dir/A256GCM token sealed with SECRET. */
+async function legacyClaims(capability: string) {
+	const [header = "", , iv = "", ciphertext = "", tag = ""] =
+		capability.split(".");
+	const key = await crypto.subtle.importKey(
+		"raw",
+		Buffer.from(SECRET.slice("nrt_live_1".length), "base64url"),
+		"AES-GCM",
+		false,
+		["decrypt"],
+	);
+	const plaintext = await crypto.subtle.decrypt(
+		{
+			name: "AES-GCM",
+			iv: Buffer.from(iv, "base64url"),
+			additionalData: Buffer.from(header),
+			tagLength: 128,
+		},
+		key,
+		Buffer.concat([
+			Buffer.from(ciphertext, "base64url"),
+			Buffer.from(tag, "base64url"),
+		]),
+	);
+	return JSON.parse(Buffer.from(plaintext).toString());
+}
+
 beforeEach(() => clearRealtimeKeyCache());
 
 afterEach(() => {
+	vi.useRealTimers();
 	vi.unstubAllGlobals();
 	vi.unstubAllEnvs();
 	delete (globalThis as Record<symbol, unknown>)[VERCEL_REQUEST_CONTEXT];
@@ -162,40 +204,140 @@ describe("Realtime backend SDK with a database URL", () => {
 		expect(fetch).toHaveBeenCalledTimes(1);
 	});
 
-	it("seals v3 whenever a credential is configured, even with a secret", async () => {
-		const options = {
-			databaseUrl: DATABASE_URL,
-			secret: SECRET,
-			url: REALTIME_URL,
-			fetch: keysFetch(),
-		};
-		// JavaScript callers can pass both; the type does not allow it.
-		const realtime = createRealtime(
-			options as unknown as Parameters<typeof createRealtime>[0] & {
-				url: string;
-			},
-		);
-		const sealed = await realtime.seal({ query });
-		const { claims } = await claimsOf(sealed.capability);
-		expect(claims.v).toBe(3);
+	describe("migration: databaseUrl and the legacy secret together", () => {
+		function migrating(fetch: ReturnType<typeof vi.fn>) {
+			return createRealtime({
+				databaseUrl: DATABASE_URL,
+				secret: SECRET,
+				url: REALTIME_URL,
+				fetch,
+			});
+		}
+
+		it("seals v3 when the branch publishes a key", async () => {
+			const realtime = migrating(keysFetch());
+			const sealed = await realtime.seal({ query });
+			expect(headerOf(sealed.capability)).toMatchObject({ v: 3 });
+			const { claims } = await claimsOf(sealed.capability);
+			expect(claims.auth.user).toBe("neondb_owner");
+		});
+
+		it("uses the secret against an old server whose keys endpoint is 404", async () => {
+			const fetch = vi.fn(async () => new Response("", { status: 404 }));
+			const realtime = migrating(fetch);
+
+			const sealed = await realtime.seal({ query });
+
+			expect(headerOf(sealed.capability)).toEqual({
+				alg: "dir",
+				enc: "A256GCM",
+				v: 2,
+			});
+			expect(await legacyClaims(sealed.capability)).toMatchObject({
+				v: 2,
+				database: "neondb",
+				sql: "select id from messages where channel_id = $1",
+				query_fingerprint: sealed.queryFingerprint,
+			});
+			// The no-key answer is cached, so later seals do not fetch.
+			await realtime.seal({ query });
+			expect(fetch).toHaveBeenCalledTimes(1);
+		});
+
+		it("uses the secret while the branch lists no key", async () => {
+			const realtime = migrating(keysFetch([]));
+			const sealed = await realtime.seal({ query });
+			expect(headerOf(sealed.capability)).toMatchObject({
+				alg: "dir",
+				v: 2,
+			});
+		});
+
+		it("switches to v3 once a key is published and the no-key answer expires", async () => {
+			vi.useFakeTimers({ toFake: ["Date"] });
+			let published = false;
+			const fetch = vi.fn(async () =>
+				published
+					? new Response(
+							JSON.stringify({ keys: [publicJwk(primary)] }),
+							{
+								headers: {
+									"cache-control": "public, max-age=600",
+								},
+							},
+						)
+					: new Response("", { status: 404 }),
+			);
+			const realtime = migrating(fetch);
+
+			expect(
+				headerOf((await realtime.seal({ query })).capability).v,
+			).toBe(2);
+			published = true;
+			vi.advanceTimersByTime(59_000);
+			expect(
+				headerOf((await realtime.seal({ query })).capability).v,
+			).toBe(2);
+			vi.advanceTimersByTime(1_000);
+			expect(
+				headerOf((await realtime.seal({ query })).capability).v,
+			).toBe(3);
+			expect(fetch).toHaveBeenCalledTimes(2);
+		});
+
+		it.each([
+			["HTTP 503", () => new Response("", { status: 503 })],
+			["HTTP 500", () => new Response("", { status: 500 })],
+			["a body that is not JSON", () => new Response("<html>")],
+			[
+				"a key list with no usable key",
+				() =>
+					new Response(
+						JSON.stringify({
+							keys: [{ ...publicJwk(primary), use: "sig" }],
+						}),
+					),
+			],
+		])("raises an error, not using the secret, for %s", async (_, response) => {
+			const realtime = migrating(vi.fn(async () => response()));
+			await expect(realtime.seal({ query })).rejects.toThrow(
+				"Realtime keys from",
+			);
+		});
+
+		it("raises an error, not using the secret, when the keys fetch fails", async () => {
+			const realtime = migrating(
+				vi.fn(async () => {
+					throw new TypeError("fetch failed");
+				}),
+			);
+			await expect(realtime.seal({ query })).rejects.toThrow(
+				`Could not fetch the Realtime keys from ${KEYS_URL}`,
+			);
+		});
 	});
 
-	it("never falls back to the secret when the branch has no key", async () => {
+	it("without a secret, says the branch has no key yet", async () => {
 		const fetch = keysFetch([]);
 		const realtime = createRealtime({
 			databaseUrl: DATABASE_URL,
-			secret: SECRET,
 			url: REALTIME_URL,
 			fetch,
-		} as unknown as Parameters<typeof createRealtime>[0] & { url: string });
+		});
+		await expect(realtime.seal({ query })).rejects.toThrow(
+			`This branch has no Realtime key yet: ${KEYS_URL} publishes none`,
+		);
+	});
 
+	it("without a secret, also says so for an old server's 404", async () => {
+		const realtime = createRealtime({
+			databaseUrl: DATABASE_URL,
+			url: REALTIME_URL,
+			fetch: vi.fn(async () => new Response("", { status: 404 })),
+		});
 		await expect(realtime.seal({ query })).rejects.toThrow(
 			"This branch has no Realtime key yet",
 		);
-		await expect(realtime.seal({ query })).rejects.toThrow(
-			"This branch has no Realtime key yet",
-		);
-		expect(fetch).toHaveBeenCalledTimes(2);
 	});
 
 	it("keeps sealing legacy tokens when only the secret is configured", async () => {
@@ -326,19 +468,22 @@ describe("Realtime backend SDK with a database URL", () => {
 			expect(message).not.toContain("test-password");
 		});
 
-		it("rejects databaseUrl without url at compile time", () => {
+		it("accepts databaseUrl with a secret, but not without url, at compile time", () => {
+			expectTypeOf(createRealtime)
+				.parameter(0)
+				.extract<{ databaseUrl: string }>()
+				.toHaveProperty("secret");
 			expect(() =>
 				// @ts-expect-error url is required with databaseUrl.
 				createRealtime({ databaseUrl: DATABASE_URL }),
 			).toThrow();
 			expect(() =>
-				// @ts-expect-error databaseUrl and secret are exclusive.
 				createRealtime({
 					databaseUrl: DATABASE_URL,
 					secret: SECRET,
-					url: "x",
+					url: "not a url",
 				}),
-			).toThrow();
+			).toThrow("Invalid Realtime URL");
 		});
 	});
 });

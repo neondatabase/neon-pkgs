@@ -118,12 +118,36 @@ apply to Realtime too. No Realtime secret is involved.
   `https://`) and caches it per process as the response's `Cache-Control`
   allows, at most 10 minutes. The request opts out of framework fetch caches.
   Pass `fetch` to use your own, for example for a custom CA, or on a runtime
-  that rejects `cache: "no-store"`. A branch with no key yet is an error.
+  that rejects `cache: "no-store"`.
 - **Legacy secret.** Without `databaseUrl`, `createRealtime({ secret, db })`
   keeps sealing the previous token format with the shared Realtime secret, and
-  makes no network request. With both, the SDK uses `databaseUrl`. It never
-  falls back to the secret after an envelope fails, because the branch may
-  have the secret turned off.
+  makes no network request.
+
+### Migrating from the Realtime secret
+
+Configure both while your branches move to Postgres credentials, and the SDK
+picks the scheme for each branch:
+
+```ts
+const realtime = createRealtime({
+  databaseUrl: process.env.DATABASE_URL!,
+  secret: process.env.NEON_REALTIME_SECRET,
+  url: process.env.NEON_REALTIME_URL!,
+});
+```
+
+| The branch's keys endpoint answers | The SDK seals |
+| --- | --- |
+| A current key | An envelope with the Postgres login |
+| `404` (a Realtime server from before envelopes) or an empty key list | A legacy token with `secret`; without a secret, it throws "This branch has no Realtime key yet" |
+| A network error, a timeout, `5xx` or an unreadable answer | Nothing: `seal()` throws, and the secret is not used |
+
+The SDK rechecks a branch without a key at most a minute later, so it starts
+sealing envelopes soon after the branch's key is published. It never retries a
+failed or rejected envelope with the secret, so a branch whose secret is
+turned off is not exposed to it. Once every branch publishes a key, drop
+`secret`. Servers keep accepting tokens from older SDKs, and the browser
+client accepts both kinds.
 
 ### Raw SQL parameters
 

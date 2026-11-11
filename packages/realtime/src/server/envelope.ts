@@ -3,6 +3,7 @@ import {
 	createEnvelopeIssuer,
 	importRealtimePublicKey,
 	loadRealtimeKey,
+	noRealtimeKeyError,
 	type RealtimeFetch,
 	type RealtimePublicKey,
 	realtimeKeysUrl,
@@ -26,13 +27,15 @@ export interface FetchRealtimeKeyOptions {
  * `createRealtime()` caches the key as the endpoint's `Cache-Control` allows.
  *
  * @param url - Realtime WebSocket (or HTTPS) URL of the branch.
- * @throws If the request fails or the endpoint lists no usable key.
+ * @throws If the branch publishes no key, or the request or its answer fails.
  */
 export async function fetchRealtimeKey(
 	url: string,
 	options: FetchRealtimeKeyOptions = {},
 ): Promise<RealtimePublicKey> {
-	const { key } = await loadRealtimeKey(realtimeKeysUrl(url), options.fetch);
+	const keysUrl = realtimeKeysUrl(url);
+	const { key } = await loadRealtimeKey(keysUrl, options.fetch);
+	if (!key) throw noRealtimeKeyError(keysUrl);
 	return Object.freeze({ ...key.jwk });
 }
 
@@ -80,12 +83,11 @@ export async function sealRealtimeEnvelope<Row>(
 		credential: options.credential,
 	});
 	const issue = createEnvelopeIssuer({
-		key: async () => key,
 		login: async () => login,
 		database: options.db,
 		errorDetails: options.debugMode === true ? "full" : "safe",
 	});
 	return Object.freeze(
-		await issue(prepareRawSqlQuery(options.query), "raw_sql"),
+		await issue(prepareRawSqlQuery(options.query), "raw_sql", key),
 	) as SealedLiveQuery<Row>;
 }
