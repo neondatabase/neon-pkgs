@@ -2020,6 +2020,13 @@ describe("RealtimeClient", () => {
 });
 
 describe("RealtimeClient credential recovery", () => {
+	// An old proxy sees legacy tokens; a new one sees either kind. Recovery does
+	// not look inside them.
+	const TOKEN_KINDS = [
+		["legacy v2 tokens", legacyV2Query],
+		["v3 envelopes", envelopeQuery],
+	] as const;
+
 	const COLUMNS = [
 		{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
 		{ name: "title", type_oid: 25, typmod: -1, codec: "pg_text" },
@@ -2071,12 +2078,14 @@ describe("RealtimeClient credential recovery", () => {
 		return next;
 	}
 
-	it("after a password change, retries once with a fresh envelope, then reports authorization_failed", async () => {
+	it.each(
+		TOKEN_KINDS,
+	)("after a password change, retries once with a fresh envelope, then reports authorization_failed (%s)", async (_, token) => {
 		vi.useFakeTimers();
 		useFakeWebSocket();
-		const refreshQuery = vi.fn(async () => query("fresh, old password"));
+		const refreshQuery = vi.fn(async () => token("fresh, old password"));
 		const { client, subscription, states } = refreshedSubscription(
-			query("held"),
+			token("held"),
 			refreshQuery,
 		);
 		const socket = connectAndAdmit();
@@ -2088,7 +2097,7 @@ describe("RealtimeClient credential recovery", () => {
 
 		// The held envelope has more than 30 s left, so it is reused first.
 		const resubscribe = lastSubscribe(reconnected);
-		expect(resubscribe.authorization).toBe(query("held").capability);
+		expect(resubscribe.authorization).toBe(token("held").capability);
 		reconnected.receive({
 			type: "subscribe_rejected",
 			request_id: resubscribe.request_id,
@@ -2102,7 +2111,7 @@ describe("RealtimeClient credential recovery", () => {
 		expect(refreshQuery).toHaveBeenCalledTimes(1);
 		const retry = lastSubscribe(reconnected);
 		expect(retry.authorization).toBe(
-			query("fresh, old password").capability,
+			token("fresh, old password").capability,
 		);
 		reconnected.receive({
 			type: "subscribe_rejected",
@@ -2130,12 +2139,14 @@ describe("RealtimeClient credential recovery", () => {
 		client.close();
 	});
 
-	it("recovers when the fresh envelope carries the new password", async () => {
+	it.each(
+		TOKEN_KINDS,
+	)("recovers when the fresh envelope carries the new password (%s)", async (_, token) => {
 		vi.useFakeTimers();
 		useFakeWebSocket();
-		const refreshQuery = vi.fn(async () => query("new password"));
+		const refreshQuery = vi.fn(async () => token("new password"));
 		const { client, subscription } = refreshedSubscription(
-			query("held"),
+			token("held"),
 			refreshQuery,
 		);
 		const socket = connectAndAdmit();
@@ -2150,7 +2161,7 @@ describe("RealtimeClient credential recovery", () => {
 		});
 		await vi.advanceTimersByTimeAsync(0);
 		const retry = lastSubscribe(reconnected);
-		expect(retry.authorization).toBe(query("new password").capability);
+		expect(retry.authorization).toBe(token("new password").capability);
 		reconnected.receive({
 			type: "subscribed",
 			request_id: retry.request_id,
@@ -2290,6 +2301,45 @@ describe("RealtimeClient credential recovery", () => {
 		client.close();
 	});
 
+	it("after a switch back to the secret, resubscribes once with the legacy token", async () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const refreshQuery = vi.fn(async () => legacyV2Query("legacy"));
+		const { client, subscription } = refreshedSubscription(
+			{ ...envelopeQuery("v3"), expiresAt: Date.now() + 15_000 },
+			refreshQuery,
+		);
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(lastRenew(socket)).toMatchObject({
+			authorization: legacyV2Query("legacy").capability,
+		});
+		socket.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code: "renewal_failed",
+			message: "renewal must keep the subscription's scheme",
+		});
+		expect(lastSubscribe(socket).authorization).toBe(
+			legacyV2Query("legacy").capability,
+		);
+		socket.receive({
+			type: "subscribed",
+			request_id: lastSubscribe(socket).request_id,
+			live_id: "42",
+			epoch: "2",
+			first_sequence: "1",
+			columns: COLUMNS,
+		});
+		baselineSync(socket, "after", "42", "2");
+
+		expect(subscription.getState().status).toBe("live");
+		expect(refreshQuery).toHaveBeenCalledTimes(1);
+		client.close();
+	});
+
 	it("reports the error when the resubscribe after renewal_failed also fails", async () => {
 		vi.useFakeTimers();
 		useFakeWebSocket();
@@ -2360,6 +2410,20 @@ describe("RealtimeClient credential recovery", () => {
 		client.close();
 	});
 });
+
+function legacyV2Query(
+	payload: string,
+	queryFingerprint = QUERY_FINGERPRINT,
+): SealedLiveQuery<MessageRow> {
+	const header = Buffer.from(
+		JSON.stringify({ alg: "dir", enc: "A256GCM", v: 2 }),
+	).toString("base64url");
+	return {
+		capability: `${header}..iv.${Buffer.from(payload).toString("base64url")}.tag`,
+		queryFingerprint,
+		expiresAt: Date.now() + 60_000,
+	};
+}
 
 function envelopeQuery(
 	payload: string,
