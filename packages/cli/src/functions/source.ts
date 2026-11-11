@@ -342,6 +342,8 @@ export type Registry = {
 	sources: RegistrySource[];
 	entries: RegistryIndexEntry[];
 	load: (entry: RegistryIndexEntry) => Promise<LoadedTemplate>;
+	/** False when NEON_FUNCTION_REGISTRY_DIR, NEON_FUNCTION_REGISTRY_URL, or an explicit source replaced the default registries. */
+	official: boolean;
 };
 
 export const templateSourcePaths = (template: FunctionTemplate): string[] =>
@@ -466,7 +468,8 @@ export const openRegistry = async (
 			return openRegistryAt(mirror, github, { remoteSources: false });
 		}
 	};
-	if (neonRegistry === false) return openExamples();
+	if (neonRegistry === false)
+		return { ...(await openExamples()), official: true };
 	const repoIndex = new URL(rawIndexUrl(neonRegistry));
 	const openNeonRegistry = () =>
 		openRegistryAt({ kind: "url", url: repoIndex }, github, {
@@ -517,6 +520,7 @@ const mergeRegistries = (registries: Registry[]): Registry => {
 	return {
 		sources,
 		entries,
+		official: true,
 		load: async (entry) => {
 			const owner = owners.get(entry.id);
 			if (!owner) {
@@ -641,7 +645,7 @@ const openRegistryAt = async (
 		return { template, sources: new Map(sources) };
 	};
 
-	return { sources: [source], entries, load };
+	return { sources: [source], entries, load, official: false };
 };
 
 const MAX_PARALLEL_READS = 6;
