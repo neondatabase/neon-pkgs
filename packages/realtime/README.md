@@ -515,6 +515,16 @@ IDs claim one key. The batch's `txids` list every transaction it makes visible.
 Rows of an unordered result have no defined position, so a materialized array
 lists replaced rows wherever its map puts them.
 
+Costs, for a result of N rows in G non-empty multi-row segments: each live
+query on protocol v3 keeps a segment index of Θ(N + G) space, raw
+subscriptions included, so a refresh can find a segment's rows without
+scanning the result. Installing a refresh on a raw subscription takes time
+proportional to the buffered changes it replays and the rows it removes and
+inserts, plus one pass over the buffered ticks and held progress proofs. A
+materialized subscription also builds its new snapshot array, Θ(N), as it
+does for every update, and a TanStack collection copies its key maps, Θ(N),
+as it does for every batch.
+
 For SSR, pass server-executed rows as `initialData` when subscribing. They are
 available immediately with status `connecting` until the first authoritative
 result. Realtime does not transform those rows: the application is responsible
