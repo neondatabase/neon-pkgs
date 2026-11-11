@@ -140,7 +140,13 @@ interface TargetState {
 	epoch: bigint;
 	nextSequence: bigint;
 	latestBaselineSync?: BaselineSyncVersion;
+	/** The attempt being received, if any. */
 	baselineSync?: PendingBaselineSync;
+	/**
+	 * Ended rounds that resolve holes, oldest first, waiting until every tick
+	 * of their covered range has arrived. At most one per unresolved hole.
+	 */
+	waiting: PendingBaselineSync[];
 	/**
 	 * Before the first baseline, every committed tick. Once live, the ticks
 	 * from the first unresolved hole on, so the first one, if any, is a hole.
@@ -222,6 +228,7 @@ export class BaselineSyncPublicationReconciler {
 			backlog: [],
 			holes: 0,
 			heldProgress: [],
+			waiting: [],
 			live: false,
 		});
 	}
@@ -411,11 +418,16 @@ export class BaselineSyncPublicationReconciler {
 			first: BigInt(message.covered.first_sequence),
 			last: BigInt(message.covered.last_sequence),
 		};
+		// Behind a round that still waits for its covered ticks, the first
+		// unresolved hole is known only once that round installs, and the
+		// install checks it. Until then the range must follow the waiting one.
 		const hole = state.backlog[0];
+		const waiting = state.waiting.at(-1)?.resolves?.covered;
 		if (
 			covered.first > covered.last ||
-			!hole?.hole ||
-			covered.first !== hole.sequence
+			(waiting
+				? covered.first <= waiting.last
+				: !hole?.hole || covered.first !== hole.sequence)
 		) {
 			throw new ProtocolError(
 				"a covered range must start at the first unresolved hole",
@@ -521,7 +533,11 @@ export class BaselineSyncPublicationReconciler {
 		}
 		baselineSync.batchCount = message.batch_count;
 		if (baselineSync.resolves) {
-			this.installRound(state);
+			// The round has ended; the next round may start. It installs once
+			// every tick of its covered range has arrived, after earlier rounds.
+			state.baselineSync = undefined;
+			state.waiting.push(baselineSync);
+			this.installWaiting(state);
 			return;
 		}
 		// The exact-frontier baseline-sync contract guarantees that every
@@ -571,14 +587,26 @@ export class BaselineSyncPublicationReconciler {
 	 * removes and the rows it inserts; a round with scope `all` removes every
 	 * visible row.
 	 */
-	private installRound(state: TargetState): void {
-		const round = state.baselineSync;
-		const resolves = round?.resolves;
+	private installWaiting(state: TargetState): void {
+		for (
+			let round = state.waiting[0];
+			round?.resolves &&
+			state.active &&
+			state.nextSequence > round.resolves.covered.last;
+			round = state.waiting[0]
+		) {
+			state.waiting.shift();
+			this.installRound(state, round);
+		}
+	}
+
+	private installRound(state: TargetState, round: PendingBaselineSync): void {
+		const resolves = round.resolves;
 		const index = state.index;
-		if (!round || !resolves || round.batchCount === undefined || !index)
-			return;
+		if (!resolves || round.batchCount === undefined || !index) {
+			throw new ProtocolError("a round cannot install without its plan");
+		}
 		const { scope, covered } = resolves;
-		if (state.nextSequence <= covered.last) return;
 		const first = state.backlog[0];
 		if (!first?.hole || first.sequence !== covered.first) {
 			throw new ProtocolError(
@@ -717,7 +745,6 @@ export class BaselineSyncPublicationReconciler {
 		}
 		state.backlog = state.backlog.slice(replayed);
 		state.holes -= resolvedHoles;
-		state.baselineSync = undefined;
 		install();
 		const shown = (state.backlog[0]?.sequence ?? state.nextSequence) - 1n;
 		const released = state.heldProgress.filter(
@@ -968,7 +995,7 @@ export class BaselineSyncPublicationReconciler {
 		// A round whose covered ticks were still arriving can install now.
 		for (const { state, failure } of committed) {
 			if (!failure && state.active && state.live)
-				this.installRound(state);
+				this.installWaiting(state);
 		}
 	}
 
@@ -992,6 +1019,7 @@ export class BaselineSyncPublicationReconciler {
 		state.backlog = [];
 		state.holes = 0;
 		state.heldProgress = [];
+		state.waiting = [];
 	}
 
 	private target(liveId: string): TargetState {

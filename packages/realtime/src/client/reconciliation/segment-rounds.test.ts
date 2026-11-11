@@ -461,6 +461,57 @@ describe("segment rounds", () => {
 		expect(live.getSnapshot().updating).toBe(false);
 	});
 
+	it("lets the next round start while an ended round waits for its covered ticks", () => {
+		const session = new Session();
+		const live = session.subscribe("9");
+		session.sync("9", {
+			round: 1,
+			batches: [[tagged(A, "a1", T1), tagged(B, "b1", T2)]],
+		});
+		session.tick([{ liveId: "9", hole: true }], 11);
+		// Round 2 ends before tick 2 arrives, and round 3 starts behind it.
+		session.sync("9", {
+			round: 2,
+			scope: selected({ tag: T1 }),
+			covered: [1, 2],
+			batches: [[tagged(A, "a2", T1)]],
+		});
+		session.sync("9", {
+			round: 3,
+			scope: selected({ tag: T2 }),
+			covered: [3, 3],
+			batches: [[tagged(B, "b3", T2)]],
+		});
+		expect(values(live)).toEqual(["a1", "b1"]);
+		expect(live.getSnapshot().updating).toBe(true);
+		session.tick([{ liveId: "9", changes: [upsert(C, "c2")] }], 12);
+		expect(values(live)).toEqual(["a2", "b1", "c2"]);
+		session.tick([{ liveId: "9", hole: true }], 13);
+		expect(values(live)).toEqual(["a2", "b3", "c2"]);
+		expect(live.getSnapshot().updating).toBe(false);
+	});
+
+	it("rejects a round behind a waiting one that covers its ticks again", () => {
+		const session = new Session();
+		session.subscribe("9");
+		session.sync("9", { round: 1, batches: [[tagged(A, "a1", T1)]] });
+		session.tick([{ liveId: "9", hole: true }], 11);
+		session.sync("9", {
+			round: 2,
+			scope: selected({ tag: T1 }),
+			covered: [1, 2],
+			batches: [[]],
+		});
+		expect(() =>
+			session.sync("9", {
+				round: 3,
+				scope: selected({ tag: T1 }),
+				covered: [2, 3],
+				batches: [[]],
+			}),
+		).toThrow("a covered range must start at the first unresolved hole");
+	});
+
 	it("discards holes and the staged round at a reset", () => {
 		const session = new Session();
 		const live = session.subscribe("9");
