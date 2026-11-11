@@ -13,6 +13,44 @@ afterEach(() => {
 });
 
 describe("QueryRefreshController", () => {
+	it("spreads simultaneous refresh failures across the retry window", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		vi.spyOn(Math, "random").mockReturnValueOnce(0).mockReturnValue(0.99);
+		const callbacks = [
+			vi.fn(async () => {
+				throw new Error("outage");
+			}),
+			vi.fn(async () => {
+				throw new Error("outage");
+			}),
+		];
+		const controllers = callbacks.map(
+			(refreshQuery) =>
+				new QueryRefreshController({
+					query: query(5),
+					refreshQuery,
+					renewSubscription: async () => {},
+					onRefreshExhausted: vi.fn(),
+				}),
+		);
+		try {
+			for (const controller of controllers) controller.start();
+			await vi.advanceTimersByTimeAsync(0);
+			await vi.advanceTimersByTimeAsync(600);
+			expect(
+				callbacks.map((callback) => callback.mock.calls.length),
+			).toEqual([2, 1]);
+			await vi.advanceTimersByTimeAsync(400);
+			expect(
+				callbacks.map((callback) => callback.mock.calls.length),
+			).toEqual([2, 2]);
+		} finally {
+			for (const controller of controllers) controller.stop();
+		}
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
 	it("backs off failed refreshes with jitter and resets after recovery", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);
