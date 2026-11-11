@@ -9,7 +9,7 @@ import {
 	decodeServerFrame,
 	encodeClientMessage,
 	ProtocolError,
-	REALTIME_SUBPROTOCOL,
+	REALTIME_SUBPROTOCOL_V2,
 } from "../protocol/index.js";
 import type { ServerMessage, WireColumn } from "../protocol/messages.js";
 import {
@@ -335,7 +335,7 @@ export class ConnectionCoordinator {
 		try {
 			socket = this.webSocketFactory(
 				this.options.url,
-				REALTIME_SUBPROTOCOL,
+				REALTIME_SUBPROTOCOL_V2,
 			);
 		} catch (error) {
 			this.noteConnectionLost(error);
@@ -366,7 +366,7 @@ export class ConnectionCoordinator {
 
 	private receive(text: string): void {
 		try {
-			const frame = decodeServerFrame(text);
+			const frame = decodeServerFrame(text, REALTIME_SUBPROTOCOL_V2);
 			this.heartbeat?.received();
 			this.route(frame.message, frame.mvcc);
 		} catch (error) {
@@ -444,6 +444,10 @@ export class ConnectionCoordinator {
 			case "progress":
 				this.reconciler.accept(message, mvcc);
 				return;
+			case "segments_pending":
+				throw new ProtocolError(
+					"segments_pending requires protocol v3",
+				);
 		}
 	}
 

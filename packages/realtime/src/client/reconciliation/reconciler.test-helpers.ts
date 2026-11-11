@@ -140,6 +140,8 @@ export function baselineSyncStart(
 		live_id: "9",
 		epoch,
 		baseline_sync_attempt: attempt,
+		round: "1",
+		scope: { kind: "all" },
 		mvcc: { xmin: "1", xmax: "2", xip: [] },
 	};
 }
@@ -155,6 +157,7 @@ export function baselineSyncBatch(
 		live_id: "9",
 		epoch,
 		baseline_sync_attempt: attempt,
+		round: "1",
 		index,
 		rows: [...rows],
 	};
@@ -170,6 +173,7 @@ export function baselineSyncEnd(
 		live_id: "9",
 		epoch,
 		baseline_sync_attempt: attempt,
+		round: "1",
 		batch_count: batchCount,
 	};
 }

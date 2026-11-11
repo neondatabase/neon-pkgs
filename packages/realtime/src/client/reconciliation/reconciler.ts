@@ -241,6 +241,11 @@ export class BaselineSyncPublicationReconciler {
 	): void {
 		const state = this.target(message.live_id);
 		if (!state.active) return;
+		// Every baseline sync here replaces the whole result and starts its
+		// epoch. A round that resolves holes needs their reconciliation.
+		if (message.scope.kind !== "all" || message.covered !== undefined) {
+			throw new ProtocolError("unsupported baseline sync scope");
+		}
 		const version = baselineSyncVersion(
 			message.epoch,
 			message.baseline_sync_attempt,

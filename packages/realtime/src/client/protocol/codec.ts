@@ -1,5 +1,10 @@
 import { type ParsedMvccSnapshot, parseMvccSnapshot } from "../mvcc.js";
-import type { ClientMessage, ServerMessage } from "./messages.js";
+import {
+	type ClientMessage,
+	REALTIME_SUBPROTOCOL_V2,
+	type RealtimeSubprotocol,
+	type ServerMessage,
+} from "./messages.js";
 import {
 	validateClientMessage as generatedClientMessageValidator,
 	validateServerMessage as generatedServerMessageValidator,
@@ -49,12 +54,21 @@ export function encodeClientMessage(message: ClientMessage): string {
 }
 
 /** Parse and strictly validate one server WebSocket text frame. */
-export function decodeServerMessage(text: string): ServerMessage {
-	return decodeServerFrame(text).message;
+export function decodeServerMessage(
+	text: string,
+	subprotocol: RealtimeSubprotocol,
+): ServerMessage {
+	return decodeServerFrame(text, subprotocol).message;
 }
 
-/** Decode a server frame and parse any connection-wide progress evidence. */
-export function decodeServerFrame(text: string): DecodedServerFrame {
+/**
+ * Decode a server frame of the negotiated subprotocol and parse any
+ * connection-wide progress evidence. A v2 frame is returned in the v3 shape.
+ */
+export function decodeServerFrame(
+	text: string,
+	subprotocol: RealtimeSubprotocol,
+): DecodedServerFrame {
 	// JSON.parse silently keeps the last duplicate member, so inspect the source
 	// before parsing and before the generated structural validator sees it.
 	try {
@@ -71,8 +85,11 @@ export function decodeServerFrame(text: string): DecodedServerFrame {
 		throw new ProtocolError("not valid JSON");
 	}
 
+	const v2 = subprotocol === REALTIME_SUBPROTOCOL_V2;
+	if (v2) value = liftV2Frame(value);
 	assertSchema(validateServerMessage, value);
 	const message = value as ServerMessage;
+	if (v2) rejectSegmentTags(message);
 	validateServerUtf8Limits(message as WireRecord);
 	let mvcc: ParsedMvccSnapshot | undefined;
 	if (message.type === "baseline_sync_start" || message.type === "progress") {
@@ -88,6 +105,67 @@ export function decodeServerFrame(text: string): DecodedServerFrame {
 		message: freezeWireValue(message),
 		mvcc,
 	});
+}
+
+/**
+ * Every v2 baseline sync is the one round that starts its epoch, so it names
+ * one round per epoch. Any valid round ID would do; this is the smallest.
+ */
+const V2_ROUND = "1";
+
+/**
+ * Express a v2 frame in the v3 shape before v3 validation.
+ *
+ * Protocol v3 is v2 plus `segments_pending`, a round and scope on baseline
+ * syncs, and optional segment tags on rows. A v2 frame carries none of
+ * them, and a v2 baseline sync is a round with scope `all` and no covered
+ * range. Rejecting the v3 additions here and in {@link rejectSegmentTags},
+ * then adding that round and scope, makes v3 validation accept exactly the
+ * frames the v2 schema accepts.
+ */
+function liftV2Frame(value: unknown): unknown {
+	if (value === null || typeof value !== "object" || Array.isArray(value))
+		return value;
+	const frame = value as WireRecord;
+	switch (frame.type) {
+		case "segments_pending":
+			throw new ProtocolError("segments_pending requires protocol v3");
+		case "baseline_sync_start":
+		case "baseline_sync_batch":
+		case "baseline_sync_end": {
+			for (const field of ["round", "scope", "covered"]) {
+				if (Object.hasOwn(frame, field)) {
+					throw new ProtocolError(
+						`message has unexpected field ${field}`,
+					);
+				}
+			}
+			return frame.type === "baseline_sync_start"
+				? { ...frame, round: V2_ROUND, scope: { kind: "all" } }
+				: { ...frame, round: V2_ROUND };
+		}
+		default:
+			return frame;
+	}
+}
+
+/** Reject the v3 segment tag on a validated v2 row or upsert. */
+function rejectSegmentTags(message: ServerMessage): void {
+	const tagged =
+		message.type === "baseline_sync_batch"
+			? message.rows.findIndex((row) => row.segment_tag !== undefined)
+			: message.type === "keyed_results"
+				? message.changes.findIndex(
+						(change) =>
+							change.op === "upsert" &&
+							change.segment_tag !== undefined,
+					)
+				: -1;
+	if (tagged === -1) return;
+	const field = message.type === "baseline_sync_batch" ? "rows" : "changes";
+	throw new ProtocolError(
+		`${field}[${tagged}] has unexpected field segment_tag`,
+	);
 }
 
 function freezeWireValue<Value>(value: Value): Value {
@@ -205,6 +283,7 @@ function validateServerUtf8Limits(message: WireRecord): void {
 	switch (wireString(message, "type")) {
 		case "open":
 		case "keyed_results":
+		case "segments_pending":
 		case "reset_required":
 		case "commit":
 			assertMaxUtf8Bytes(

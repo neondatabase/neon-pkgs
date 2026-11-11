@@ -564,14 +564,14 @@ client-side protocol fallback, subscription opt-in, or mode acknowledgment.
 ## Protocol schemas
 
 The package exports the active protocol and decoded capability schemas at
-`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v2) and
+`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v3) and
 `@neon/realtime/schema/realtime-query-capability.schema.json` (currently capability
 v2). Their filenames stay stable across revisions; `$id` and `title` retain each
 contract's version.
 
 Existing versioned exports continue to resolve to their original contracts.
-Protocol v1 and capability v1 resolve to frozen legacy snapshots, separate from
-the active generator and tests. The versioned protocol v2 and capability v2
+Protocol v1, protocol v2 and capability v1 resolve to frozen legacy snapshots,
+separate from the active generator. The versioned protocol v3 and capability v2
 exports alias the active contracts.
 See the [schema maintenance notes](schema/README.md) for generation, legacy
 removal and downstream synchronization.

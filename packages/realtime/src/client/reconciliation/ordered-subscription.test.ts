@@ -4,7 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import { SILENT_CLIENT_EVENTS } from "../diagnostics.js";
 import { createParserRegistry } from "../postgres/parsers.js";
 import { decodeServerMessage, ProtocolError } from "../protocol/codec.js";
-import type { WireChange } from "../protocol/messages.js";
+import {
+	REALTIME_SUBPROTOCOL_V3,
+	type WireChange,
+} from "../protocol/messages.js";
 import { Subscription } from "../subscription.js";
 import { BaselineSyncPublicationReconciler } from "./reconciler.js";
 import {
@@ -197,9 +200,10 @@ describe("ordered production subscriptions", () => {
 			];
 			for (const message of messages) {
 				reconciler.accept(
-					decodeServerMessage(JSON.stringify(message)) as Parameters<
-						typeof reconciler.accept
-					>[0],
+					decodeServerMessage(
+						JSON.stringify(message),
+						REALTIME_SUBPROTOCOL_V3,
+					) as Parameters<typeof reconciler.accept>[0],
 				);
 				expect(target.getSnapshot()).toBe(before);
 			}
