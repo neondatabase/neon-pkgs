@@ -1,4 +1,5 @@
 import { Writable } from "node:stream";
+import { ErrorCode, PlatformError } from "@neon/config";
 import type {
 	LiveQueryChange,
 	LiveQuerySnapshot,
@@ -141,6 +142,7 @@ const realtimeEnv = {
 		DATABASE_URL:
 			"postgresql://user:password@ep-example.us-east-2.aws.neon.tech/neondb?sslmode=require",
 		NEON_REALTIME_URL: "wss://realtime.example/v1",
+		NEON_REALTIME_SECRET: "legacy-secret",
 	},
 	credential: {
 		issued: false,
@@ -240,11 +242,17 @@ describe("subscribe command", () => {
 			branchId: "branch-1",
 			apiKey: "api-key",
 			apiHost: "https://console-stage.example/api/v2",
-			envKeys: ["DATABASE_URL", "NEON_REALTIME_URL"],
+			envKeys: [
+				"DATABASE_URL",
+				"NEON_REALTIME_URL",
+				"NEON_REALTIME_SECRET",
+			],
 		});
+		expect(setupResult.resolveEnv).toHaveBeenCalledOnce();
 		expect(setupResult.connectionOptions()).toEqual({
 			url: "wss://realtime.example/v1",
 			databaseUrl: realtimeEnv.vars.DATABASE_URL,
+			secret: "legacy-secret",
 			database: "neondb",
 			debugMode: false,
 		});
@@ -270,6 +278,64 @@ describe("subscribe command", () => {
 		]);
 		expect(subscription.unsubscribed).toBe(true);
 		expect(setupResult.closeCount()).toBe(1);
+	});
+
+	it("subscribes with DATABASE_URL alone when the branch's secret is off", async () => {
+		const subscription = new FakeSubscription();
+		const setupResult = setup(subscription);
+		const { vars } = realtimeEnv;
+		setupResult.resolveEnv
+			.mockRejectedValueOnce(
+				new PlatformError(
+					ErrorCode.NotFound,
+					"getProjectBranchRealtimeSecret failed: resource not found on Neon.",
+				),
+			)
+			.mockResolvedValueOnce({
+				...realtimeEnv,
+				vars: {
+					DATABASE_URL: vars.DATABASE_URL,
+					NEON_REALTIME_URL: vars.NEON_REALTIME_URL,
+				},
+			} as unknown as typeof realtimeEnv);
+		const controller = new AbortController();
+		const run = subscribe(
+			props(false, controller.signal, capture().out),
+			setupResult.dependencies,
+		);
+		await setupResult.ready;
+		controller.abort();
+		await run;
+
+		expect(setupResult.resolveEnv).toHaveBeenCalledTimes(2);
+		expect(setupResult.resolveEnv).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				envKeys: ["DATABASE_URL", "NEON_REALTIME_URL"],
+			}),
+		);
+		expect(setupResult.connectionOptions()).toEqual({
+			url: "wss://realtime.example/v1",
+			databaseUrl: vars.DATABASE_URL,
+			database: "neondb",
+			debugMode: false,
+		});
+	});
+
+	it("does not hide other errors while resolving the secret", async () => {
+		const setupResult = setup(new FakeSubscription());
+		setupResult.resolveEnv.mockRejectedValueOnce(
+			new PlatformError(ErrorCode.Unauthorized, "API key rejected"),
+		);
+		const controller = new AbortController();
+
+		await expect(
+			subscribe(
+				props(false, controller.signal, capture().out),
+				setupResult.dependencies,
+			),
+		).rejects.toThrow("API key rejected");
+		expect(setupResult.resolveEnv).toHaveBeenCalledOnce();
+		expect(setupResult.connectionOptions()).toBeUndefined();
 	});
 
 	it("needs DATABASE_URL, whose login authenticates the subscription", async () => {

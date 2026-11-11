@@ -1,4 +1,4 @@
-import type { NeonApi } from "@neon/config";
+import { ErrorCode, isPlatformError, type NeonApi } from "@neon/config";
 import type {
 	LiveQueryChange,
 	LiveQueryState,
@@ -31,8 +31,13 @@ export type SubscribeProps = BranchScopeProps & {
 
 type RealtimeConnectionOptions = {
 	url: string;
-	/** Its Postgres login is sealed into each envelope; no Realtime secret. */
+	/** Its Postgres login is sealed into each envelope. */
 	databaseUrl: string;
+	/**
+	 * The legacy secret, when the branch still has one. The SDK uses it only
+	 * if the branch publishes no Realtime key, as an older server does.
+	 */
+	secret?: string;
 	database: string;
 	debugMode: boolean;
 };
@@ -133,25 +138,24 @@ export const subscribe = async (
 	const connect = dependencies.connect ?? connectRealtime;
 	const now = dependencies.now ?? (() => new Date());
 	const branchId = await resolveBranchId(props);
-	const { vars } = await resolveEnv({
+	const vars = await resolveRealtimeVars(resolveEnv, {
 		cwd: props.cwd ?? process.cwd(),
 		contextFile: props.contextFile,
 		projectId: props.projectId,
 		branchId,
 		apiKey: props.apiKey,
 		apiHost: props.apiHost,
-		// Only these two: the SDK authenticates with DATABASE_URL's login, so
-		// the branch's Realtime secret is neither read nor needed.
-		envKeys: ["DATABASE_URL", "NEON_REALTIME_URL"],
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
 	});
 
 	const url = requiredEnv(vars, "NEON_REALTIME_URL");
 	const databaseUrl = requiredEnv(vars, "DATABASE_URL");
+	const secret = vars.NEON_REALTIME_SECRET || undefined;
 	const database = await databaseName(databaseUrl);
 	const realtime = await connect({
 		url,
 		databaseUrl,
+		...(secret ? { secret } : {}),
 		database,
 		debugMode: props.debug ?? false,
 	});
@@ -187,6 +191,43 @@ export const subscribe = async (
 	}
 };
 
+type ResolveEnvContext = Omit<
+	Parameters<typeof resolveNeonEnvVars>[0],
+	"services" | "envKeys"
+>;
+
+/**
+ * DATABASE_URL and the Realtime URL, plus the legacy secret when the branch
+ * still has one. The SDK seals envelopes when the branch publishes a key, and
+ * needs the secret only for a server that predates them. A branch whose
+ * secret is off answers 404 for it, so retry without the secret then.
+ */
+const resolveRealtimeVars = async (
+	resolveEnv: typeof resolveNeonEnvVars,
+	context: ResolveEnvContext,
+): Promise<Record<string, string>> => {
+	try {
+		const { vars } = await resolveEnv({
+			...context,
+			envKeys: [
+				"DATABASE_URL",
+				"NEON_REALTIME_URL",
+				"NEON_REALTIME_SECRET",
+			],
+		});
+		return vars;
+	} catch (error) {
+		if (!isPlatformError(error) || error.code !== ErrorCode.NotFound) {
+			throw error;
+		}
+	}
+	const { vars } = await resolveEnv({
+		...context,
+		envKeys: ["DATABASE_URL", "NEON_REALTIME_URL"],
+	});
+	return vars;
+};
+
 const connectRealtime = async (
 	options: RealtimeConnectionOptions,
 ): Promise<DirectSubscriber> => {
@@ -195,6 +236,7 @@ const connectRealtime = async (
 	const realtime = createRealtime({
 		url: options.url,
 		databaseUrl: options.databaseUrl,
+		secret: options.secret,
 		db: options.database,
 		debugMode: options.debugMode,
 	});

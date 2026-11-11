@@ -330,8 +330,10 @@ neon realtime subscribe "SELECT id, title, completed FROM realtime_todos ORDER B
 ```
 
 It authenticates with the branch's `DATABASE_URL`: the SDK seals the query and
-that login into an envelope for the branch's Realtime key, so the command needs
-no Realtime secret. Realtime accepts only the `neondb_owner` role for now.
+that login into an envelope for the branch's Realtime key. Realtime accepts only
+the `neondb_owner` role for now. When the branch's Realtime server predates
+envelopes and publishes no key, the command uses the branch's legacy Realtime
+secret instead, if it still has one.
 
 The default terminal output is append-only. It identifies the selected project,
 branch, and database; prints the initial result once; reports connection-state
