@@ -113,8 +113,8 @@
         "sql": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 32768,
-          "x-maxUtf8Bytes": 32768
+          "maxLength": 131072,
+          "x-maxUtf8Bytes": 131072
         },
         "parameters": {
           "type": "array",
