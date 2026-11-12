@@ -41,13 +41,15 @@ export const describeTableInputSchema = z.strictObject({
 
 const RESOLVE_TABLE_SQL = `
 	WITH exact AS (
-		SELECT cls.oid
+		SELECT
+			cls.oid,
+			'"' || replace(ns.nspname, '"', '""') || '"."' || replace(cls.relname, '"', '""') || '"' AS relation_name
 		FROM pg_catalog.pg_class cls
 		JOIN pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
 		WHERE (cls.relname = $1 AND pg_catalog.pg_table_is_visible(cls.oid))
 			OR ns.nspname || '.' || cls.relname = $1
 	)
-	SELECT oid, oid::regclass::text AS relation_name FROM exact
+	SELECT oid, relation_name FROM exact
 	UNION ALL
 	SELECT parsed.oid, parsed.oid::regclass::text
 	FROM (
