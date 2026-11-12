@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfigFromFile } from "@neon/config-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { takeCommandSuccessExtras } from "../analytics";
 import { renderNeonConfig } from "../config_template";
 import { openRegistry, type Registry } from "../functions/source";
 import { FIXTURE_REGISTRY_DIR } from "../test_utils/registry";
@@ -27,6 +28,7 @@ describe("functions new", () => {
 	let registry: Registry;
 
 	beforeEach(async () => {
+		takeCommandSuccessExtras();
 		workspace = mkdtempSync(join(tmpdir(), "neon-functions-new-"));
 		writeFileSync(join(workspace, "neon.ts"), renderNeonConfig([]));
 		registry = await openRegistry({
@@ -40,9 +42,7 @@ describe("functions new", () => {
 	});
 
 	const read = (path: string) => readFileSync(join(workspace, path), "utf8");
-	const run = (
-		options: Omit<ScaffoldFromTemplateOptions, "registry" | "interactive">,
-	) =>
+	const run = (options: Omit<ScaffoldFromTemplateOptions, "interactive">) =>
 		scaffoldFromTemplate({
 			cwd: workspace,
 			registry,
@@ -198,6 +198,55 @@ describe("functions new", () => {
 			),
 		);
 		expect(read("neon.ts")).toBe(renderNeonConfig([]));
+	});
+
+	describe("telemetry", () => {
+		const official = () => ({ ...registry, official: true });
+
+		it("records a template from the default registries for cli_command_success", async () => {
+			await run({ template: "hello", registry: official() });
+
+			expect(takeCommandSuccessExtras()).toEqual({ template: "hello" });
+		});
+
+		it("records the template when only the dependency install failed", async () => {
+			const result = await run({
+				template: "mailer",
+				operations: ["send"],
+				addToConfig: false,
+				install: true,
+				registry: official(),
+				run: async () => ({
+					ok: false,
+					detail: "registry unreachable",
+				}),
+			});
+
+			expect(result).toMatchObject({ install: "failed" });
+			expect(takeCommandSuccessExtras()).toEqual({ template: "mailer" });
+		});
+
+		it("records no template from a registry that replaced the defaults", async () => {
+			await run({ template: "hello" });
+
+			expect(takeCommandSuccessExtras()).toEqual({});
+		});
+
+		it("records no template when the scaffold fails", async () => {
+			await expect(
+				run({ template: "nope", registry: official() }),
+			).rejects.toThrow();
+			mkdirSync(join(workspace, "functions/hello"), { recursive: true });
+			writeFileSync(
+				join(workspace, "functions/hello/index.ts"),
+				"mine\n",
+			);
+			await expect(
+				run({ template: "hello", registry: official() }),
+			).rejects.toThrow(/--force/);
+
+			expect(takeCommandSuccessExtras()).toEqual({});
+		});
 	});
 
 	it("refuses to overwrite a differing file without --force", async () => {
