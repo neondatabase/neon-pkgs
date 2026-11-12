@@ -355,6 +355,34 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		);
 	});
 
+	it("schema.describeTable accepts the mixed case names schema.listTables returns", async () => {
+		await run(`CREATE TABLE "User" (id int PRIMARY KEY)`);
+		await run(`CREATE SCHEMA "Auth"`);
+		await run(`CREATE TABLE "Auth"."User" (auth_id int)`);
+		const { data: tables } = await tools["schema.listTables"].execute({
+			project_id: projectId,
+		});
+		expect(tables).toContainEqual({
+			table_schema: "public",
+			table_name: "User",
+			table_type: "BASE TABLE",
+		});
+		const columnsOf = async (table_name: string) => {
+			const { data } = await tools["schema.describeTable"].execute({
+				project_id: projectId,
+				table_name,
+			});
+			return data.raw.columns.map((column) => column.name);
+		};
+		expect(await columnsOf("User")).toEqual(["id"]);
+		expect(await columnsOf("public.User")).toEqual(["id"]);
+		expect(await columnsOf('"User"')).toEqual(["id"]);
+		expect(await columnsOf("Auth.User")).toEqual(["auth_id"]);
+		expect(await columnsOf('"Auth"."User"')).toEqual(["auth_id"]);
+		await run(`DROP SCHEMA "Auth" CASCADE`);
+		await run(`DROP TABLE "User"`);
+	});
+
 	it("branches.describe returns branch details and the database tree", async () => {
 		const { data } = await tools["branches.describe"].execute({
 			project_id: projectId,

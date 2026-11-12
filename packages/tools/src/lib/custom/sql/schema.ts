@@ -39,6 +39,27 @@ export const describeTableInputSchema = z.strictObject({
 	database_name: databaseNameField,
 });
 
+const RESOLVE_TABLE_SQL = `
+	WITH exact AS (
+		SELECT cls.oid
+		FROM pg_catalog.pg_class cls
+		JOIN pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
+		WHERE (cls.relname = $1 AND pg_catalog.pg_table_is_visible(cls.oid))
+			OR ns.nspname || '.' || cls.relname = $1
+	)
+	SELECT oid, oid::regclass::text AS relation_name FROM exact
+	UNION ALL
+	SELECT parsed.oid, parsed.oid::regclass::text
+	FROM (
+		SELECT CASE
+			WHEN EXISTS (SELECT 1 FROM exact) THEN NULL
+			ELSE to_regclass($1)::oid
+		END AS oid
+	) parsed
+	WHERE parsed.oid IS NOT NULL
+	ORDER BY relation_name;
+`;
+
 const LIST_TABLES_SQL = `
 	SELECT
 		table_schema,
@@ -58,7 +79,7 @@ const DESCRIBE_COLUMNS_SQL = `
 			cls.relname AS table_name
 		FROM pg_catalog.pg_class cls
 		JOIN pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
-		WHERE cls.oid = to_regclass($1)
+		WHERE cls.oid = $1::oid
 	)
 	SELECT
 		c.column_name as name,
@@ -78,7 +99,7 @@ const DESCRIBE_COLUMNS_SQL = `
 
 const DESCRIBE_INDEXES_SQL = `
 	WITH target AS (
-		SELECT to_regclass($1) AS oid
+		SELECT $1::oid AS oid
 	)
 	SELECT
 		i.relname as name,
@@ -99,7 +120,7 @@ const DESCRIBE_CONSTRAINTS_SQL = `
 			cls.relname AS table_name
 		FROM pg_catalog.pg_class cls
 		JOIN pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
-		WHERE cls.oid = to_regclass($1)
+		WHERE cls.oid = $1::oid
 	)
 	SELECT
 		tc.constraint_name as name,
@@ -116,10 +137,10 @@ const DESCRIBE_CONSTRAINTS_SQL = `
 
 const DESCRIBE_SIZES_SQL = `
 	SELECT
-		pg_size_pretty(pg_total_relation_size(to_regclass($1))) as total_size,
-		pg_size_pretty(pg_relation_size(to_regclass($1))) as table_size,
+		pg_size_pretty(pg_total_relation_size($1::oid)) as total_size,
+		pg_size_pretty(pg_relation_size($1::oid)) as table_size,
 		pg_size_pretty(
-			pg_total_relation_size(to_regclass($1)) - pg_relation_size(to_regclass($1))
+			pg_total_relation_size($1::oid) - pg_relation_size($1::oid)
 		) as index_size;
 `;
 
@@ -158,17 +179,20 @@ const describeTable = async (
 	signal?: AbortSignal,
 ): Promise<TableDescription | null> => {
 	const sql = sqlClient(uri, signal);
-	const relations = await sql.query(
-		"SELECT to_regclass($1)::text AS relation_name",
-		[tableName],
-	);
-	if (typeof relations[0]?.relation_name !== "string") return null;
+	const matches = await sql.query(RESOLVE_TABLE_SQL, [tableName]);
+	if (matches.length > 1) {
+		throw new NeonClientError(
+			`Table name is ambiguous: ${tableName}. Pass one of: ${matches.map((match) => match.relation_name).join(", ")}`,
+		);
+	}
+	const oid = matches[0]?.oid;
+	if (oid === undefined) return null;
 
 	const [columns, indexes, constraints, sizes] = await Promise.all([
-		sql.query(DESCRIBE_COLUMNS_SQL, [tableName]),
-		sql.query(DESCRIBE_INDEXES_SQL, [tableName]),
-		sql.query(DESCRIBE_CONSTRAINTS_SQL, [tableName]),
-		sql.query(DESCRIBE_SIZES_SQL, [tableName]),
+		sql.query(DESCRIBE_COLUMNS_SQL, [oid]),
+		sql.query(DESCRIBE_INDEXES_SQL, [oid]),
+		sql.query(DESCRIBE_CONSTRAINTS_SQL, [oid]),
+		sql.query(DESCRIBE_SIZES_SQL, [oid]),
 	]);
 	const size = sizes[0];
 	if (size === undefined) {
