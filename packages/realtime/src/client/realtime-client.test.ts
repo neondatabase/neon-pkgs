@@ -518,6 +518,33 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
+	it.each([
+		"unsubscribe",
+		"close",
+	] as const)("publishes one closed snapshot after reentrant %s from a live state listener", (action) => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const changed = vi.fn();
+		subscription.onStateChange((state) => {
+			if (state.status === "live") {
+				if (action === "unsubscribe") subscription.unsubscribe();
+				else client.close();
+			}
+		});
+		subscription.onChange(changed);
+		try {
+			baselineSync(connectAndAdmit(), "value");
+
+			expect(subscription.getState().status).toBe("closed");
+			expect(changed).toHaveBeenCalledExactlyOnceWith(
+				subscription.getSnapshot(),
+			);
+		} finally {
+			client.close();
+		}
+	});
+
 	it("queues the live diagnostic before reentrant state listeners", async () => {
 		useFakeWebSocket();
 		const events: string[] = [];
