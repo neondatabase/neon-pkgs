@@ -453,20 +453,19 @@ describe("openRegistry with the default sources", () => {
 				templates: [
 					entryFor("demo"),
 					{ ...partnerEntry, id: "examples-partner" },
-					{
-						...entryFor("future"),
-						source: { gitlab: { project: "a/b" } },
-					},
 				],
 			}),
 		});
+		const fallback = await start({});
 		const registry = await withRegistry(neon, {
 			primary: primary.url("/registry.json"),
+			fallback: fallback.url("/registry.json"),
 		});
 		expect(registry.entries.map((entry) => entry.id)).toEqual([
 			"partner",
 			"demo",
 		]);
+		expect(fallback.requests).toEqual([]);
 	});
 
 	it("loads template files from the fallback, not the primary", async () => {
