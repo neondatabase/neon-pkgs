@@ -91,6 +91,44 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
+	it("keeps terminal error state when renewal is rejected without a retry", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "initial");
+		try {
+			socket.receive({
+				type: "subscription_error",
+				live_id: "41",
+				code: "baseline_sync_failed",
+				message: "Terminal query failure",
+			});
+			const state = subscription.getState();
+			const snapshot = subscription.getSnapshot();
+			expect(state.status).toBe("error");
+			const stateChanged = vi.fn();
+			const snapshotChanged = vi.fn();
+			subscription.onStateChange(stateChanged);
+			subscription.onChange(snapshotChanged);
+			const sent = socket.sent.length;
+
+			await expect(
+				subscription.renew(query("replacement")),
+			).rejects.toMatchObject({
+				code: "connection_lost",
+			});
+
+			expect(socket.sent).toHaveLength(sent);
+			expect(stateChanged).not.toHaveBeenCalled();
+			expect(snapshotChanged).not.toHaveBeenCalled();
+			expect(subscription.getState()).toBe(state);
+			expect(subscription.getSnapshot()).toBe(snapshot);
+		} finally {
+			client.close();
+		}
+	});
+
 	it("does not restore stale when an older renewal is superseded", async () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({ url: "ws://live.test/v1" });
