@@ -455,7 +455,7 @@ client_id: ""
 "
 `;
 
-exports[`neon-auth > oauth-provider apple and microsoft > add apple reads the private key from --oauth-client-secret-file and prints its key IDs 1`] = `
+exports[`neon-auth > oauth-provider custom credentials > add apple reads the private key from --oauth-client-secret-file and prints its key IDs 1`] = `
 "
 OAuth provider added
   ID:         apple
@@ -471,7 +471,21 @@ Create a Services ID in the Apple Developer portal, enable Sign in with Apple fo
 "
 `;
 
-exports[`neon-auth > oauth-provider apple and microsoft > add microsoft passes the tenant ID and prints the callback URL 1`] = `
+exports[`neon-auth > oauth-provider custom credentials > add discord sends custom credentials and prints the callback URL 1`] = `
+"
+OAuth provider added
+  ID:         discord
+  Type:       standard
+  Client ID:  discord-client
+
+
+Create an application in the Discord Developer Portal, open OAuth2, and add the following redirect URL:
+  URL:  https://auth.test.neon.tech/callback/discord
+
+"
+`;
+
+exports[`neon-auth > oauth-provider custom credentials > add microsoft passes the tenant ID and prints the callback URL 1`] = `
 "
 OAuth provider added
   ID:         microsoft
@@ -486,7 +500,7 @@ Register an application in Microsoft Entra ID > App registrations, and add the f
 "
 `;
 
-exports[`neon-auth > oauth-provider apple and microsoft > update apple prints the team and key IDs 1`] = `
+exports[`neon-auth > oauth-provider custom credentials > update apple prints the team and key IDs 1`] = `
 "
 OAuth provider updated
   ID:         apple
@@ -502,7 +516,21 @@ Create a Services ID in the Apple Developer portal, enable Sign in with Apple fo
 "
 `;
 
-exports[`neon-auth > oauth-provider apple and microsoft > update microsoft sends the tenant ID and prints it 1`] = `
+exports[`neon-auth > oauth-provider custom credentials > update discord sends the rotated credentials and prints the callback URL 1`] = `
+"
+OAuth provider updated
+  ID:         discord
+  Type:       standard
+  Client ID:  discord-client-2
+
+
+Create an application in the Discord Developer Portal, open OAuth2, and add the following redirect URL:
+  URL:  https://auth.test.neon.tech/callback/discord
+
+"
+`;
+
+exports[`neon-auth > oauth-provider custom credentials > update microsoft sends the tenant ID and prints it 1`] = `
 "
 OAuth provider updated
   ID:         microsoft

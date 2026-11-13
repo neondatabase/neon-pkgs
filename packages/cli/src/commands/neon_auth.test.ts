@@ -181,7 +181,7 @@ describe("neon-auth", () => {
 		]);
 	});
 
-	describe("oauth-provider apple and microsoft", () => {
+	describe("oauth-provider custom credentials", () => {
 		const branchArgs = ["--project-id", "test", "--branch", "test_branch"];
 		const providerBodies = (requests: RecordedRequest[], method: string) =>
 			requests
@@ -232,6 +232,34 @@ describe("neon-auth", () => {
 					client_id: "ms-client",
 					client_secret: "ms-secret",
 					microsoft_tenant_id: "contoso.onmicrosoft.com",
+				},
+			]);
+		});
+
+		test("add discord sends custom credentials and prints the callback URL", async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				[
+					"neon-auth",
+					"oauth-provider",
+					"add",
+					...branchArgs,
+					"--provider-id",
+					"discord",
+					"--oauth-client-id",
+					"discord-client",
+					"--oauth-client-secret",
+					"discord-secret",
+				],
+				{ output: "table", onRequest: (r) => requests.push(r) },
+			);
+			expect(providerBodies(requests, "POST")).toEqual([
+				{
+					id: "discord",
+					client_id: "discord-client",
+					client_secret: "discord-secret",
 				},
 			]);
 		});
@@ -458,6 +486,47 @@ describe("neon-auth", () => {
 			]);
 		});
 
+		test("update discord sends the rotated credentials and prints the callback URL", async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				[
+					"neon-auth",
+					"oauth-provider",
+					"update",
+					...branchArgs,
+					"--provider-id",
+					"discord",
+					"--oauth-client-id",
+					"discord-client-2",
+					"--oauth-client-secret",
+					"discord-secret-2",
+				],
+				{ output: "table", onRequest: (r) => requests.push(r) },
+			);
+			expect(providerBodies(requests, "PATCH")).toEqual([
+				{
+					client_id: "discord-client-2",
+					client_secret: "discord-secret-2",
+				},
+			]);
+		});
+
+		test("add help lists discord and the providers that need their own credentials", async ({
+			testCliCommand,
+		}) => {
+			const { stdout } = await testCliCommand(
+				["neon-auth", "oauth-provider", "add", "--help"],
+				{ snapshot: false },
+			);
+			const help = stdout.replace(/\s+/g, " ");
+			expect(help).toContain('"discord"');
+			expect(help).toContain(
+				"microsoft, apple and discord always need your own credentials",
+			);
+		});
+
 		test("update apple prints the team and key IDs", async ({
 			testCliCommand,
 		}) => {
@@ -551,12 +620,15 @@ describe("neon-auth", () => {
 				"--oauth-client-secret",
 				"--microsoft-tenant-id",
 			];
+			const discordHint = ["--oauth-client-id", "--oauth-client-secret"];
 
 			test.for([
 				["add", "apple", appleHint],
 				["update", "apple", appleHint],
 				["add", "microsoft", microsoftHint],
 				["update", "microsoft", microsoftHint],
+				["add", "discord", discordHint],
+				["update", "discord", discordHint],
 			] as const)("%s %s names the provider's own flags", async ([
 				action,
 				provider,
