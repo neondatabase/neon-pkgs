@@ -12,6 +12,10 @@ const FETCH_TIMEOUT_MS = 30_000;
 const RETRY_STATUSES = new Set([502, 503, 504]);
 const RETRY_DELAY_MS = 1_000;
 const KID_PATTERN = /^[A-Za-z0-9_-]{21}[AQgw]$/;
+// Switch to a key up to a minute after its use_since, so a client clock ahead
+// of the proxy's never seals to a key the proxy doesn't open yet. The proxy
+// keeps the previous key open for at least 15 minutes after the switch.
+const SWITCH_LATENESS_MS = 60_000;
 
 /** Fetch implementation used for the keys endpoint. */
 export type RealtimeFetch = (
@@ -33,16 +37,26 @@ interface ResolvedKey extends EnvelopeKey {
 	readonly jwk: RealtimePublicKey;
 }
 
+/** A listed key and the time, in seconds since the epoch, to seal to it from. */
+export interface RealtimeListedKey {
+	readonly key: ResolvedKey;
+	readonly useSince: number;
+}
+
 /**
- * The branch's key, or `undefined` when the branch definitely publishes none:
- * the endpoint answers 400 (a proxy from before v3) or 404, or lists no keys.
+ * The branch's usable keys, never empty, or `undefined` when the branch
+ * definitely publishes none: the endpoint answers 400 (a proxy from before v3)
+ * or 404, or lists no keys.
  */
+export type RealtimeKeySet = readonly RealtimeListedKey[] | undefined;
+
+/** The key to seal to now, or `undefined` when the branch publishes none. */
 export type RealtimeKeyLookup = ResolvedKey | undefined;
 
 interface CacheEntry {
-	value?: RealtimeKeyLookup;
+	value?: RealtimeKeySet;
 	expiresAt: number;
-	pending?: Promise<RealtimeKeyLookup>;
+	pending?: Promise<RealtimeKeySet>;
 }
 
 // Shared per keys URL, so apps that create the SDK per request still fetch the
@@ -79,15 +93,24 @@ export function realtimeKeysUrl(realtimeUrl: string): string {
 }
 
 /**
- * Return the branch key, cached as the endpoint's Cache-Control allows, or
- * `undefined` when the branch publishes no key, cached for 60 s. Throws when
- * the answer can't be trusted either way.
+ * Return the key to seal to now, chosen from the key list cached as the
+ * endpoint's Cache-Control allows, or `undefined` when the branch publishes no
+ * key, cached for 60 s. Throws when the answer can't be trusted either way.
  */
 export async function cachedRealtimeKey(
 	keysUrl: string,
 	fetchImpl?: RealtimeFetch,
 	clock: () => number = Date.now,
 ): Promise<RealtimeKeyLookup> {
+	const keys = await cachedRealtimeKeys(keysUrl, fetchImpl, clock);
+	return keys && selectRealtimeKey(keys, clock());
+}
+
+async function cachedRealtimeKeys(
+	keysUrl: string,
+	fetchImpl: RealtimeFetch | undefined,
+	clock: () => number,
+): Promise<RealtimeKeySet> {
 	let entry = cache.get(keysUrl);
 	if (entry && entry.expiresAt > 0 && clock() < entry.expiresAt) {
 		return entry.value;
@@ -96,13 +119,13 @@ export async function cachedRealtimeKey(
 	entry ??= { expiresAt: 0 };
 	cache.set(keysUrl, entry);
 	const current = entry;
-	const pending = loadRealtimeKey(keysUrl, fetchImpl).then(
-		({ key, cacheSeconds }) => {
+	const pending = loadRealtimeKeys(keysUrl, fetchImpl).then(
+		({ keys, cacheSeconds }) => {
 			current.pending = undefined;
-			current.value = key;
+			current.value = keys;
 			current.expiresAt =
 				cacheSeconds > 0 ? clock() + cacheSeconds * 1_000 : 0;
-			return key;
+			return keys;
 		},
 		(error: unknown) => {
 			current.pending = undefined;
@@ -123,10 +146,36 @@ export function noRealtimeKeyError(keysUrl: string): Error {
 }
 
 /**
+ * The key to seal to at `nowMs`: with `t` a minute before `nowMs`, the key
+ * with the latest `useSince` at or before `t`, else the one with the earliest
+ * `useSince`. On a tie, the one listed first.
+ */
+export function selectRealtimeKey(
+	keys: readonly RealtimeListedKey[],
+	nowMs: number,
+): ResolvedKey {
+	const t = nowMs - SWITCH_LATENESS_MS;
+	let current: RealtimeListedKey | undefined;
+	let earliest: RealtimeListedKey | undefined;
+	for (const listed of keys) {
+		if (
+			listed.useSince * 1_000 <= t &&
+			(!current || listed.useSince > current.useSince)
+		) {
+			current = listed;
+		}
+		if (!earliest || listed.useSince < earliest.useSince) earliest = listed;
+	}
+	const chosen = current ?? earliest;
+	if (!chosen) throw new Error("No Realtime key to choose from");
+	return chosen.key;
+}
+
+/**
  * Fetch the endpoint once, without the cache.
  *
- * - A key: `key` is set, cached per Cache-Control.
- * - No key (400 or 404, or an empty list): `key` is undefined, cached for
+ * - Keys: `keys` lists the usable ones, cached per Cache-Control.
+ * - No key (400 or 404, or an empty list): `keys` is undefined, cached for
  *   60 s.
  * - Anything else (network error, timeout, other status, a body that is not
  *   a key list, or entries none of which is usable) throws, so the caller
@@ -135,11 +184,11 @@ export function noRealtimeKeyError(keysUrl: string): Error {
  * Each attempt has 30 s. A timeout or a 502, 503 or 504 is retried once,
  * after 1 s, since the request may be starting the branch's VM.
  */
-export async function loadRealtimeKey(
+export async function loadRealtimeKeys(
 	keysUrl: string,
 	fetchImpl: RealtimeFetch | undefined,
 ): Promise<{
-	readonly key: RealtimeKeyLookup;
+	readonly keys: RealtimeKeySet;
 	readonly cacheSeconds: number;
 }> {
 	const fetchFunction = fetchImpl ?? globalThis.fetch;
@@ -153,7 +202,7 @@ export async function loadRealtimeKey(
 	// WebSocket upgrade, which refuses a plain GET with 400. Every v3 proxy
 	// answers 200 here, so 400 and 404 both mean the branch has no key.
 	if (response.status === 400 || response.status === 404) {
-		return { key: undefined, cacheSeconds: NO_KEY_CACHE_SECONDS };
+		return { keys: undefined, cacheSeconds: NO_KEY_CACHE_SECONDS };
 	}
 	if (response.status !== 200) {
 		throw new Error(
@@ -172,15 +221,15 @@ export async function loadRealtimeKey(
 		throw new Error(`The Realtime keys from ${keysUrl} are not a key list`);
 	}
 	if (body.keys.length === 0) {
-		return { key: undefined, cacheSeconds: NO_KEY_CACHE_SECONDS };
+		return { keys: undefined, cacheSeconds: NO_KEY_CACHE_SECONDS };
 	}
-	const key = await firstUsableKey(body.keys);
-	if (!key) {
+	const keys = await usableKeys(body.keys);
+	if (keys.length === 0) {
 		throw new Error(
 			`The Realtime keys from ${keysUrl} list no key this SDK can use`,
 		);
 	}
-	return { key, cacheSeconds: cacheSeconds(response.headers) };
+	return { keys, cacheSeconds: cacheSeconds(response.headers) };
 }
 
 async function fetchWithRetry(
@@ -238,17 +287,20 @@ function delay(milliseconds: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function firstUsableKey(
+async function usableKeys(
 	entries: readonly unknown[],
-): Promise<ResolvedKey | undefined> {
+): Promise<RealtimeListedKey[]> {
+	const keys: RealtimeListedKey[] = [];
 	for (const entry of entries) {
 		const key = await usableKey(entry);
-		if (key) return key;
+		if (key) keys.push(key);
 	}
-	return undefined;
+	return keys;
 }
 
-async function usableKey(entry: unknown): Promise<ResolvedKey | undefined> {
+async function usableKey(
+	entry: unknown,
+): Promise<RealtimeListedKey | undefined> {
 	if (
 		!isRecord(entry) ||
 		entry.kty !== "EC" ||
@@ -261,9 +313,17 @@ async function usableKey(entry: unknown): Promise<ResolvedKey | undefined> {
 		typeof entry.y !== "string"
 	)
 		return undefined;
+	// A proxy from before time windows lists one key without use_since.
+	const useSince = "use_since" in entry ? entry.use_since : 0;
+	if (!Number.isSafeInteger(useSince) || (useSince as number) < 0) {
+		return undefined;
+	}
 	const jwk = { kid: entry.kid, x: entry.x, y: entry.y };
 	try {
-		return { ...(await importRealtimePublicKey(jwk)), jwk };
+		return {
+			key: { ...(await importRealtimePublicKey(jwk)), jwk },
+			useSince: useSince as number,
+		};
 	} catch {
 		return undefined;
 	}

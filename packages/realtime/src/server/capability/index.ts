@@ -18,11 +18,12 @@ export {
 export {
 	cachedRealtimeKey,
 	importRealtimePublicKey,
-	loadRealtimeKey,
+	loadRealtimeKeys,
 	noRealtimeKeyError,
 	type RealtimeFetch,
 	type RealtimeKeyLookup,
 	type RealtimePublicKey,
 	realtimeKeysUrl,
+	selectRealtimeKey,
 } from "./keys.js";
 export { parseRealtimeSecret, type RealtimeSecret } from "./secret.js";

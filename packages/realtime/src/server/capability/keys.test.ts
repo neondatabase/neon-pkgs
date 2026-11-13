@@ -21,6 +21,8 @@ const fixtures = JSON.parse(
 const [primary, secondary] = fixtures.keys as [FixtureKey, FixtureKey];
 const KEYS_URL =
 	"https://ep-test.rt.example.test/.well-known/neon-realtime-keys";
+/** The faked clock, in seconds since the epoch. */
+const NOW = 1_767_225_600;
 
 function jwk(key: FixtureKey, overrides: Record<string, unknown> = {}) {
 	return {
@@ -79,7 +81,7 @@ async function keyFrom(fetchImpl: RealtimeFetch) {
 
 beforeEach(() => {
 	clearRealtimeKeyCache();
-	vi.useFakeTimers({ now: 1_767_225_600_000, toFake: ["Date"] });
+	vi.useFakeTimers({ now: NOW * 1_000, toFake: ["Date"] });
 });
 
 afterEach(() => {
@@ -355,6 +357,11 @@ describe("Realtime key cache", () => {
 		["the wrong use", [jwk(primary, { use: "sig" })]],
 		["a malformed kid", [jwk(primary, { kid: "short" })]],
 		["padded coordinates", [jwk(primary, { x: `${primary.x}=` })]],
+		["a fractional use_since", [jwk(primary, { use_since: NOW + 0.5 })]],
+		["a negative use_since", [jwk(primary, { use_since: -1 })]],
+		["a string use_since", [jwk(primary, { use_since: String(NOW) })]],
+		["a null use_since", [jwk(primary, { use_since: null })]],
+		["an unsafe use_since", [jwk(primary, { use_since: 2 ** 53 })]],
 		[
 			"a point off the curve",
 			[
@@ -421,6 +428,21 @@ describe("Realtime key cache", () => {
 		expect((await keyFrom(fetchImpl)).kid).toBe(secondary.kid);
 	});
 
+	it.each([
+		["fractional", NOW - 3_600.5],
+		["negative", -1],
+		["a string", String(NOW - 3_600)],
+	])("skips an entry whose use_since is %s", async (_, useSince) => {
+		// Accepted, the bad entry would be the current key.
+		const fetchImpl = fetchReturning(() =>
+			keysResponse([
+				jwk(primary, { use_since: useSince }),
+				jwk(secondary, { use_since: NOW + 3_600 }),
+			]),
+		);
+		expect((await keyFrom(fetchImpl)).kid).toBe(secondary.kid);
+	});
+
 	it("rejects a body that is not JSON", async () => {
 		const fetchImpl = vi.fn(
 			async () => new Response("<html>", { status: 200 }),
@@ -428,5 +450,108 @@ describe("Realtime key cache", () => {
 		await expect(cachedRealtimeKey(KEYS_URL, fetchImpl)).rejects.toThrow(
 			`The Realtime keys from ${KEYS_URL} are not JSON`,
 		);
+	});
+});
+
+describe("Realtime key choice", () => {
+	// Each case lists [key, use_since] pairs; undefined leaves use_since out.
+	// The clock is NOW, so the SDK switches to keys with use_since <= NOW - 60.
+	const K1 = primary;
+	const K2 = secondary;
+	it.each<[string, [FixtureKey, number | undefined][], FixtureKey]>([
+		[
+			"before a switch",
+			[
+				[K1, NOW - 3_600],
+				[K2, NOW + 3_600],
+			],
+			K1,
+		],
+		[
+			"at the new key's use_since",
+			[
+				[K1, NOW - 3_600],
+				[K2, NOW],
+			],
+			K1,
+		],
+		[
+			"59 s after it",
+			[
+				[K1, NOW - 3_600],
+				[K2, NOW - 59],
+			],
+			K1,
+		],
+		[
+			"60 s after it",
+			[
+				[K1, NOW - 3_600],
+				[K2, NOW - 60],
+			],
+			K2,
+		],
+		[
+			"well after it",
+			[
+				[K1, NOW - 3_600],
+				[K2, NOW - 600],
+			],
+			K2,
+		],
+		["only a future key", [[K2, NOW + 3_600]], K2],
+		[
+			"only future keys, the earliest",
+			[
+				[K1, NOW + 60],
+				[K2, NOW + 120],
+			],
+			K1,
+		],
+		["a key without use_since", [[K1, undefined]], K1],
+		[
+			"one without use_since before a switch",
+			[
+				[K1, undefined],
+				[K2, NOW + 3_600],
+			],
+			K1,
+		],
+		[
+			"one without use_since after a switch",
+			[
+				[K1, undefined],
+				[K2, NOW - 600],
+			],
+			K2,
+		],
+	])("picks the right key %s, in either list order", async (_, listed, expected) => {
+		const entries = listed.map(([key, useSince]) =>
+			jwk(key, useSince === undefined ? {} : { use_since: useSince }),
+		);
+		for (const keys of [entries, [...entries].reverse()]) {
+			clearRealtimeKeyCache();
+			const fetchImpl = fetchReturning(() => keysResponse(keys));
+			expect((await keyFrom(fetchImpl)).kid).toBe(expected.kid);
+		}
+	});
+
+	it("switches a cached list to the next key on time, without a refetch", async () => {
+		const fetchImpl = fetchReturning(() =>
+			keysResponse(
+				[
+					jwk(K1, { use_since: NOW - 3_600 }),
+					jwk(K2, { use_since: NOW + 120 }),
+				],
+				"public, max-age=600",
+			),
+		);
+
+		expect((await keyFrom(fetchImpl)).kid).toBe(K1.kid);
+		vi.advanceTimersByTime(179_000);
+		expect((await keyFrom(fetchImpl)).kid).toBe(K1.kid);
+		vi.advanceTimersByTime(1_000);
+		expect((await keyFrom(fetchImpl)).kid).toBe(K2.kid);
+		expect(fetchImpl).toHaveBeenCalledOnce();
 	});
 });

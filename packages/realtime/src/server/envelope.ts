@@ -2,11 +2,12 @@ import type { SealedLiveQuery } from "../client/sealed-query.js";
 import {
 	createEnvelopeIssuer,
 	importRealtimePublicKey,
-	loadRealtimeKey,
+	loadRealtimeKeys,
 	noRealtimeKeyError,
 	type RealtimeFetch,
 	type RealtimePublicKey,
 	realtimeKeysUrl,
+	selectRealtimeKey,
 	validateEnvelopeCredential,
 	validateEnvelopeUser,
 } from "./capability/index.js";
@@ -21,10 +22,11 @@ export interface FetchRealtimeKeyOptions {
 }
 
 /**
- * Fetch the branch's current public key from the Realtime endpoint.
+ * Fetch the branch's public key to seal to now from the Realtime endpoint.
  *
- * Low-level, for tooling and tests: it always makes a request, while
- * `createRealtime()` caches the key as the endpoint's `Cache-Control` allows.
+ * Low-level, for tooling and tests: it always makes a request and picks the
+ * key once, while `createRealtime()` caches the key list as the endpoint's
+ * `Cache-Control` allows and picks the key again at every seal.
  *
  * @param url - Realtime WebSocket (or HTTPS) URL of the branch.
  * @throws If the branch publishes no key, or the request or its answer fails.
@@ -34,9 +36,9 @@ export async function fetchRealtimeKey(
 	options: FetchRealtimeKeyOptions = {},
 ): Promise<RealtimePublicKey> {
 	const keysUrl = realtimeKeysUrl(url);
-	const { key } = await loadRealtimeKey(keysUrl, options.fetch);
-	if (!key) throw noRealtimeKeyError(keysUrl);
-	return Object.freeze({ ...key.jwk });
+	const { keys } = await loadRealtimeKeys(keysUrl, options.fetch);
+	if (!keys) throw noRealtimeKeyError(keysUrl);
+	return Object.freeze({ ...selectRealtimeKey(keys, Date.now()).jwk });
 }
 
 /** Options for {@link sealRealtimeEnvelope}. */

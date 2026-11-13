@@ -113,10 +113,15 @@ apply to Realtime too. No Realtime secret is involved.
   });
   ```
 
-- **Public key.** The SDK fetches the key from
+- **Public key.** The SDK fetches the branch's keys from
   `/.well-known/neon-realtime-keys` on the `url` host (`wss://` becomes
-  `https://`) and caches it per process as the response's `Cache-Control`
+  `https://`) and caches them per process as the response's `Cache-Control`
   allows, at most 10 minutes. The request opts out of framework fetch caches.
+  During a rotation the list holds the current key and the next one, each with
+  a `use_since` time. At each seal the SDK takes the newest key whose
+  `use_since` is at least a minute old, or the earliest if none is, so a fast
+  clock doesn't switch before Realtime does. It switches on time without
+  refetching.
   It may start the branch's Realtime VM, so each attempt has 30 seconds, and
   a timeout or a `502`, `503` or `504` is retried once after a second.
   Concurrent seals share one request. Pass `fetch` to use your own, for
@@ -644,8 +649,8 @@ them out of URLs, logs, and persistent browser storage. Never expose
 Two low-level helpers on `@neon/realtime/server` serve tooling and end-to-end
 tests. Applications use `createRealtime()` instead.
 
-- `fetchRealtimeKey(url, { fetch? })` fetches the branch's current public key,
-  `{ kid, x, y }`, without caching.
+- `fetchRealtimeKey(url, { fetch? })` fetches the branch's public key to seal
+  to now, `{ kid, x, y }`, without caching. Fetch again after a rotation.
 - `sealRealtimeEnvelope({ key, db, user, credential, query, debugMode? })`
   seals one envelope for any user and credential, without the `neondb_owner`
   check, for example to confirm that Realtime itself rejects another role:

@@ -26,7 +26,7 @@ const fixtures = JSON.parse(
 		"utf8",
 	),
 ) as { readonly keys: readonly FixtureKey[] };
-const primary = fixtures.keys[0] as FixtureKey;
+const [primary, secondary] = fixtures.keys as [FixtureKey, FixtureKey];
 const REALTIME_URL = "wss://ep-test.rt.example.test";
 const KEYS_URL =
 	"https://ep-test.rt.example.test/.well-known/neon-realtime-keys";
@@ -162,6 +162,28 @@ describe("Realtime backend SDK with a database URL", () => {
 		});
 		expect(claims.exp - claims.iat).toBe(60);
 		expect(sealed.expiresAt).toBe(claims.exp * 1_000);
+	});
+
+	it("seals each query to the key whose time has come, from the cached list", async () => {
+		vi.useFakeTimers({ now: 1_767_225_600_000, toFake: ["Date"] });
+		const now = Date.now() / 1_000;
+		const fetch = keysFetch([
+			{ ...publicJwk(primary), use_since: now - 3_600 },
+			{ ...publicJwk(secondary), use_since: now + 60 },
+		]);
+		const realtime = createRealtime({
+			databaseUrl: DATABASE_URL,
+			url: REALTIME_URL,
+			fetch,
+		});
+
+		const before = await realtime.seal({ query });
+		vi.advanceTimersByTime(120_000);
+		const after = await realtime.seal({ query });
+
+		expect(headerOf(before.capability).kid).toBe(primary.kid);
+		expect(headerOf(after.capability).kid).toBe(secondary.kid);
+		expect(fetch).toHaveBeenCalledOnce();
 	});
 
 	it("lets db override the URL's database", async () => {
@@ -515,6 +537,18 @@ describe("Low-level envelope helpers", () => {
 		});
 		await fetchRealtimeKey(REALTIME_URL, { fetch });
 		expect(fetch).toHaveBeenCalledTimes(2);
+	});
+
+	it("fetches the key to seal to now", async () => {
+		vi.useFakeTimers({ now: 1_767_225_600_000, toFake: ["Date"] });
+		const now = Date.now() / 1_000;
+		const fetch = keysFetch([
+			{ ...publicJwk(primary), use_since: now - 3_600 },
+			{ ...publicJwk(secondary), use_since: now - 600 },
+		]);
+		await expect(
+			fetchRealtimeKey(REALTIME_URL, { fetch }),
+		).resolves.toMatchObject({ kid: secondary.kid });
 	});
 
 	it("seals an envelope for any user and credential", async () => {
