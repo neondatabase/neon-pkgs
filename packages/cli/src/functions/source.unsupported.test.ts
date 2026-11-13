@@ -4,8 +4,6 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_REGISTRY_URL, openRegistry } from "./source";
 
-// Stands in for a newer published schema that accepts a source kind this CLI
-// cannot read, so the test does not depend on what neon.com serves.
 const futureRegistrySchema = {
 	type: "object",
 	required: ["templates"],
