@@ -59,13 +59,10 @@ import {
 	uniqueAgentIds,
 } from "../mcp/agents.js";
 import { bootstrapPluginAgents } from "../plugins/targets.js";
-import {
-	reportTemplateTooling,
-	runTemplateTooling,
-	selectTemplateTooling,
-	type TemplateToolingEntry,
-	type TemplateToolingOperations,
-	type TemplateToolingTrust,
+import type {
+	TemplateToolingEntry,
+	TemplateToolingOperations,
+	TemplateToolingTrust,
 } from "../templates/agent_tooling_run.js";
 import type { CommonProps } from "../types.js";
 import { coerceAgentFlag } from "../utils/agent_flag.js";
@@ -807,6 +804,9 @@ const executePostScaffold = async (
 			toolingAgents.length > 0
 				? toolingAgents
 				: await detectToolingAgents(props, targetDir);
+		const { reportTemplateTooling, runTemplateTooling } = await import(
+			"../templates/agent_tooling_run.js"
+		);
 		reportTemplateTooling(
 			"table",
 			await runTemplateTooling({
@@ -869,6 +869,9 @@ const chooseTemplateTooling = async (
 ): Promise<ChosenTemplateTooling | undefined> => {
 	if (template.agent === undefined) return undefined;
 	const trust = bootstrapTemplateTrust(template);
+	const { selectTemplateTooling } = await import(
+		"../templates/agent_tooling_run.js"
+	);
 	const entries = await selectTemplateTooling({
 		tooling: template.agent,
 		trust,

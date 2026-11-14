@@ -1,6 +1,5 @@
 import { writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import prompts from "prompts";
 import { recordScaffoldedTemplate } from "../analytics.js";
 import { isInteractiveTerminal } from "../env.js";
 import { resolveEnvFilePath } from "../env_file.js";
@@ -33,21 +32,13 @@ import {
 	printInitDone,
 } from "../init/chrome.js";
 import { detectAgent } from "../init/detect_host.js";
-import { resolveNamedAgents } from "../init/plan.js";
 import { log } from "../log.js";
-import {
-	type AgentType,
-	detectProjectAgents,
-	uniqueAgentIds,
-} from "../mcp/agents.js";
+import type { AgentType } from "../mcp/agents.js";
 import { projectConfigPath, projectDir } from "../project.js";
-import {
-	reportTemplateTooling,
-	runTemplateTooling,
-	selectTemplateTooling,
-	type TemplateToolingOperations,
-	type TemplateToolingReport,
-	type TemplateToolingTrust,
+import type {
+	TemplateToolingOperations,
+	TemplateToolingReport,
+	TemplateToolingTrust,
 } from "../templates/agent_tooling_run.js";
 import type { BranchScopeProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -62,11 +53,6 @@ import {
 	runCommandWithDetail,
 } from "../utils/package_manager.js";
 import { writer } from "../writer.js";
-import {
-	ensureConfigPackages,
-	installCommandFrom,
-	missingDependencies,
-} from "./config.js";
 import { displayPath } from "./env_output.js";
 
 const TEMPLATE_FIELDS = ["id", "title", "provider", "description"] as const;
@@ -225,6 +211,7 @@ const pickOperations = async (
 	operations: readonly FunctionTemplateOperation[],
 	provider: string,
 ): Promise<FunctionTemplateOperation[] | undefined> => {
+	const { default: prompts } = await import("prompts");
 	const answer = await prompts({
 		type: "multiselect",
 		name: "value",
@@ -245,6 +232,7 @@ const pickOperations = async (
 };
 
 const confirm = async (message: string, initial: boolean) => {
+	const { default: prompts } = await import("prompts");
 	const answer = await prompts({
 		type: "confirm",
 		name: "value",
@@ -356,11 +344,16 @@ export const scaffoldFromTemplate = async (
 	}
 	const { dependencies } = template;
 	const pm = resolvePackageManager(projectRoot);
+	const config =
+		registration?.created || dependencies.length > 0
+			? await import("./config.js")
+			: undefined;
 	const installHint = (packages: readonly string[], exact = false) =>
-		installCommandFrom(projectRoot, pm, packages, { exact });
-	const configPackages = registration?.created
-		? missingDependencies(projectRoot)
-		: [];
+		config?.installCommandFrom(projectRoot, pm, packages, { exact }) ?? "";
+	const configPackages =
+		registration?.created && config
+			? config.missingDependencies(projectRoot)
+			: [];
 	const packages = [...configPackages, ...dependencies];
 	let install = options.install === true;
 	if (options.install === undefined && packages.length > 0 && interactive) {
@@ -370,8 +363,8 @@ export const scaffoldFromTemplate = async (
 				true,
 			)) === true;
 	}
-	if (configPackages.length > 0) {
-		await ensureConfigPackages(projectRoot, {
+	if (config && configPackages.length > 0) {
+		await config.ensureConfigPackages(projectRoot, {
 			install,
 			packageManager: pm,
 			...(options.run ? { run: options.run } : {}),
@@ -398,6 +391,9 @@ export const scaffoldFromTemplate = async (
 
 	let agentTooling: TemplateToolingReport | undefined;
 	if (template.agent !== undefined) {
+		const { runTemplateTooling, selectTemplateTooling } = await import(
+			"../templates/agent_tooling_run.js"
+		);
 		const trust = functionTemplateTrust(entry, options.env);
 		const entries = await selectTemplateTooling({
 			tooling: template.agent,
@@ -415,6 +411,9 @@ export const scaffoldFromTemplate = async (
 				: {}),
 		});
 		if (entries.length > 0) {
+			const { detectProjectAgents, uniqueAgentIds } = await import(
+				"../mcp/agents.js"
+			);
 			const host = (options.detectAgent ?? detectAgent)();
 			const agents =
 				options.agents && options.agents.length > 0
@@ -451,9 +450,10 @@ export const scaffoldFromTemplate = async (
 	}));
 	const nextSteps: string[] = [];
 	const next: string[] = [];
-	const missingConfig = registration?.created
-		? missingDependencies(projectRoot)
-		: [];
+	const missingConfig =
+		registration?.created && config
+			? config.missingDependencies(projectRoot)
+			: [];
 	if (missingConfig.length > 0) {
 		nextSteps.push(
 			`Install the Neon config packages: \`${installHint(missingConfig)}\``,
@@ -630,6 +630,7 @@ export const formatNewFunctionDone = (result: ScaffoldedTemplate): string => {
 const pickTemplate = async (
 	entries: readonly RegistryIndexEntry[],
 ): Promise<string | undefined> => {
+	const { default: prompts } = await import("prompts");
 	const answer = await prompts({
 		type: "select",
 		name: "value",
@@ -687,7 +688,12 @@ export const handleNew = async (props: NewFunctionProps): Promise<void> => {
 		...(props.templateTooling !== undefined
 			? { templateTooling: props.templateTooling }
 			: {}),
-		agents: resolveNamedAgents(props.agent ?? []),
+		agents:
+			props.agent && props.agent.length > 0
+				? (await import("../init/plan.js")).resolveNamedAgents(
+						props.agent,
+					)
+				: [],
 		...(props.templateToolingOperations
 			? { templateToolingOperations: props.templateToolingOperations }
 			: {}),
@@ -722,6 +728,9 @@ export const handleNew = async (props: NewFunctionProps): Promise<void> => {
 	}
 
 	if (result.agentTooling) {
+		const { reportTemplateTooling } = await import(
+			"../templates/agent_tooling_run.js"
+		);
 		reportTemplateTooling(props.output, {
 			rows: result.agentTooling.rows,
 			next: [],
