@@ -10,7 +10,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { gunzipSync } from "fflate";
+import { Gunzip, gunzipSync } from "fflate";
 import YAML from "yaml";
 import {
 	parseTemplateAgentTooling,
@@ -324,6 +324,9 @@ const isZeroBlock = (buf: Buffer, offset: number): boolean => {
 	return true;
 };
 
+const paddedSize = (size: number): number =>
+	Math.ceil(size / TAR_BLOCK) * TAR_BLOCK;
+
 /**
  * Parse pax extended-header records ("<len> <key>=<value>\n"). GitHub uses
  * these for the global header and for any path that doesn't fit the legacy
@@ -346,64 +349,187 @@ const parsePaxRecords = (data: Buffer): Record<string, string> => {
 	return records;
 };
 
+type TarHeader = Omit<TarEntry, "data"> & { size: number };
+
+const decodeTarHeader = (block: Buffer): TarHeader => {
+	let name = readTarString(block, 0, 100);
+	const typeByte = block[156];
+	const magic = readTarString(block, 257, 6);
+	if (magic.startsWith("ustar")) {
+		const prefix = readTarString(block, 345, 155);
+		if (prefix !== "") name = `${prefix}/${name}`;
+	}
+	return {
+		name,
+		type: typeByte === 0 ? "0" : String.fromCharCode(typeByte),
+		mode: readTarOctal(block, 100, 8),
+		size: readTarOctal(block, 124, 12),
+		linkname: readTarString(block, 157, 100),
+	};
+};
+
 /**
- * Decode a (decompressed) tar archive into its file/symlink entries. Pure and
- * dependency-free so it can be unit tested without touching the network.
+ * Incremental tar decoder: bytes go in as they arrive, entries come out in
+ * archive order. `keep` decides per entry whether its contents are copied, so
+ * a caller after one subdirectory never holds the rest of the archive in
+ * memory; an unkept entry is reported with empty `data` as soon as its header
+ * is read. Returning false from `onEntry` stops decoding.
+ *
  * Handles the ustar `prefix` field, pax extended headers (type 'x'/'g'), and
  * GNU long-name/long-link headers (type 'L'/'K') so deep template paths and
  * long symlink targets round-trip correctly.
  */
-export const parseTar = (buf: Buffer): TarEntry[] => {
-	const entries: TarEntry[] = [];
+export class TarDecoder {
+	private chunks: Buffer[] = [];
+	private buffered = 0;
+	private skip = 0;
+	/** The header whose contents are still arriving. */
+	private pending: (TarHeader & { keep: boolean }) | undefined;
 	// Overrides carried from a preceding pax/GNU header to the next real entry.
-	let overridePath: string | undefined;
-	let overrideLink: string | undefined;
-	let offset = 0;
+	private overridePath: string | undefined;
+	private overrideLink: string | undefined;
+	/** True once the end-of-archive block is read or `onEntry` stopped decoding. */
+	done = false;
 
-	while (offset + TAR_BLOCK <= buf.length) {
-		if (isZeroBlock(buf, offset)) break;
+	constructor(
+		private readonly onEntry: (entry: TarEntry) => boolean | undefined,
+		private readonly keep: (name: string) => boolean = () => true,
+	) {}
 
-		let name = readTarString(buf, offset, 100);
-		const mode = readTarOctal(buf, offset + 100, 8);
-		const size = readTarOctal(buf, offset + 124, 12);
-		const typeByte = buf[offset + 156];
-		const type = typeByte === 0 ? "0" : String.fromCharCode(typeByte);
-		let linkname = readTarString(buf, offset + 157, 100);
-		const magic = readTarString(buf, offset + 257, 6);
-		if (magic.startsWith("ustar")) {
-			const prefix = readTarString(buf, offset + 345, 155);
-			if (prefix !== "") name = `${prefix}/${name}`;
-		}
-
-		offset += TAR_BLOCK;
-		const data = buf.subarray(offset, offset + size);
-		offset += Math.ceil(size / TAR_BLOCK) * TAR_BLOCK;
-
-		if (type === "x") {
-			const records = parsePaxRecords(data);
-			if (records.path !== undefined) overridePath = records.path;
-			if (records.linkpath !== undefined) overrideLink = records.linkpath;
-			continue;
-		}
-		if (type === "g") {
-			// Global pax header (e.g. GitHub's comment block): not per-entry state.
-			continue;
-		}
-		if (type === "L" || type === "K") {
-			const longValue = data.toString("utf8").replace(/\0+$/, "");
-			if (type === "L") overridePath = longValue;
-			else overrideLink = longValue;
-			continue;
-		}
-
-		if (overridePath !== undefined) name = overridePath;
-		if (overrideLink !== undefined) linkname = overrideLink;
-		overridePath = undefined;
-		overrideLink = undefined;
-
-		entries.push({ name, type, mode, linkname, data: Buffer.from(data) });
+	push(chunk: Uint8Array): void {
+		if (this.done || chunk.byteLength === 0) return;
+		this.chunks.push(
+			Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength),
+		);
+		this.buffered += chunk.byteLength;
+		this.drain();
 	}
 
+	/**
+	 * Report an entry whose contents were cut off by the end of input with what
+	 * did arrive, as a whole-buffer parse would.
+	 */
+	end(): void {
+		const header = this.pending;
+		if (this.done || header === undefined) return;
+		this.pending = undefined;
+		this.consume(header, this.take(Math.min(this.buffered, header.size)));
+		this.done = true;
+	}
+
+	private drain(): void {
+		while (!this.done) {
+			if (this.skip > 0) {
+				this.discard(Math.min(this.skip, this.buffered));
+				if (this.skip > 0) return;
+			}
+			const header = this.pending;
+			if (header !== undefined) {
+				if (this.buffered < header.size) return;
+				this.pending = undefined;
+				const data = this.take(header.size);
+				this.skip = paddedSize(header.size) - header.size;
+				this.consume(header, data);
+				continue;
+			}
+			if (this.buffered < TAR_BLOCK) return;
+			const block = this.take(TAR_BLOCK);
+			if (isZeroBlock(block, 0)) {
+				this.done = true;
+				return;
+			}
+			this.start(decodeTarHeader(block));
+		}
+	}
+
+	private start(header: TarHeader): void {
+		if (header.type === "g") {
+			// Global pax header (e.g. GitHub's comment block): not per-entry state.
+			this.skip = paddedSize(header.size);
+			return;
+		}
+		if (header.type === "x" || header.type === "L" || header.type === "K") {
+			this.pending = { ...header, keep: true };
+			return;
+		}
+		if (this.overridePath !== undefined) header.name = this.overridePath;
+		if (this.overrideLink !== undefined)
+			header.linkname = this.overrideLink;
+		this.overridePath = undefined;
+		this.overrideLink = undefined;
+		if (header.size > 0 && this.keep(header.name)) {
+			this.pending = { ...header, keep: true };
+			return;
+		}
+		this.skip = paddedSize(header.size);
+		this.consume({ ...header, keep: false }, Buffer.alloc(0));
+	}
+
+	private consume(header: TarHeader & { keep: boolean }, data: Buffer): void {
+		if (header.type === "x") {
+			const records = parsePaxRecords(data);
+			if (records.path !== undefined) this.overridePath = records.path;
+			if (records.linkpath !== undefined)
+				this.overrideLink = records.linkpath;
+			return;
+		}
+		if (header.type === "L" || header.type === "K") {
+			const longValue = data.toString("utf8").replace(/\0+$/, "");
+			if (header.type === "L") this.overridePath = longValue;
+			else this.overrideLink = longValue;
+			return;
+		}
+		const { name, type, mode, linkname } = header;
+		if (this.onEntry({ name, type, mode, linkname, data }) === false) {
+			this.done = true;
+		}
+	}
+
+	/** Remove `n` buffered bytes as one Buffer that owns its memory. */
+	private take(n: number): Buffer {
+		const out = Buffer.allocUnsafe(n);
+		let filled = 0;
+		while (filled < n) {
+			const chunk = this.chunks[0] as Buffer;
+			const count = Math.min(chunk.length, n - filled);
+			chunk.copy(out, filled, 0, count);
+			filled += count;
+			this.dropFront(chunk, count);
+		}
+		this.buffered -= n;
+		return out;
+	}
+
+	private discard(n: number): void {
+		let left = n;
+		while (left > 0) {
+			const chunk = this.chunks[0] as Buffer;
+			const count = Math.min(chunk.length, left);
+			left -= count;
+			this.dropFront(chunk, count);
+		}
+		this.buffered -= n;
+		this.skip -= n;
+	}
+
+	private dropFront(chunk: Buffer, count: number): void {
+		if (count === chunk.length) this.chunks.shift();
+		else this.chunks[0] = chunk.subarray(count);
+	}
+}
+
+/**
+ * Decode a (decompressed) tar archive into its file/symlink entries. Pure and
+ * dependency-free so it can be unit tested without touching the network.
+ */
+export const parseTar = (buf: Buffer): TarEntry[] => {
+	const entries: TarEntry[] = [];
+	const decoder = new TarDecoder((entry) => {
+		entries.push(entry);
+		return true;
+	});
+	decoder.push(buf);
+	decoder.end();
 	return entries;
 };
 
@@ -413,22 +539,32 @@ export const parseTar = (buf: Buffer): TarEntry[] => {
  * it can be unit tested. Directory and other non-regular entries are dropped —
  * writing files re-creates their parent directories.
  */
+const subdirPrefix = (subdir: string): string => {
+	const trimmed = subdir.replace(/^\/+|\/+$/g, "");
+	return trimmed ? `${trimmed}/` : "";
+};
+
+/** The path of archive entry `name` relative to `prefix`, or undefined outside it. */
+const pathUnderPrefix = (name: string, prefix: string): string | undefined => {
+	// codeload wraps everything in a single top-level dir ("<repo>-<ref>/");
+	// strip that first segment to get the repo-relative path.
+	const slash = name.indexOf("/");
+	if (slash === -1) return undefined;
+	const repoPath = name.slice(slash + 1);
+	return repoPath.startsWith(prefix)
+		? repoPath.slice(prefix.length)
+		: undefined;
+};
+
 export const selectTemplateFiles = (
 	entries: TarEntry[],
 	subdir: string,
 ): TemplateFile[] => {
-	const trimmed = subdir.replace(/^\/+|\/+$/g, "");
-	const prefix = trimmed ? `${trimmed}/` : "";
+	const prefix = subdirPrefix(subdir);
 	const files: TemplateFile[] = [];
 	for (const entry of entries) {
-		// codeload wraps everything in a single top-level dir ("<repo>-<ref>/");
-		// strip that first segment to get the repo-relative path.
-		const slash = entry.name.indexOf("/");
-		if (slash === -1) continue;
-		const repoPath = entry.name.slice(slash + 1);
-		if (!repoPath.startsWith(prefix)) continue;
-		const path = repoPath.slice(prefix.length);
-		if (path === "") continue;
+		const path = pathUnderPrefix(entry.name, prefix);
+		if (path === undefined || path === "") continue;
 		if (entry.type === "2") {
 			files.push({ kind: "symlink", path, target: entry.linkname });
 		} else if (entry.type === "0" || entry.type === "7") {
@@ -465,6 +601,13 @@ const friendlyGithubError = (status: number, url: string): Error => {
 	return new Error(`GitHub returned HTTP ${status} for ${url}.`);
 };
 
+const decompressError = (url: string, err: unknown): Error =>
+	new Error(
+		`Failed to decompress the template archive from ${url}: ${
+			err instanceof Error ? err.message : String(err)
+		}`,
+	);
+
 export const downloadGithubTarball = async (
 	owner: string,
 	repo: string,
@@ -488,11 +631,63 @@ export const downloadGithubTarball = async (
 	try {
 		return Buffer.from(gunzipSync(new Uint8Array(gzipped)));
 	} catch (err) {
-		throw new Error(
-			`Failed to decompress the template archive from ${url}: ${
-				err instanceof Error ? err.message : String(err)
-			}`,
-		);
+		throw decompressError(url, err);
+	}
+};
+
+/**
+ * Stream the tarball at `url` through gunzip into `decoder`, and stop reading
+ * as soon as the decoder is done, so bytes it no longer wants are never
+ * downloaded.
+ */
+const streamGithubTarball = async (
+	url: string,
+	decoder: TarDecoder,
+	signal: AbortSignal | undefined,
+	env: NodeJS.ProcessEnv = process.env,
+): Promise<void> => {
+	const timeout = AbortSignal.timeout(30_000);
+	let res: Response;
+	try {
+		res = await fetch(url, {
+			headers: githubRequestHeaders(url, env),
+			signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+		});
+	} catch (err) {
+		throw err instanceof Error ? err : new Error(String(err));
+	}
+	if (!res.ok) throw friendlyGithubError(res.status, url);
+
+	const gunzip = new Gunzip((chunk) => decoder.push(chunk));
+	const push = (chunk: Uint8Array, final: boolean): void => {
+		try {
+			gunzip.push(chunk, final);
+		} catch (err) {
+			throw decompressError(url, err);
+		}
+	};
+	const reader = res.body?.getReader();
+	if (reader === undefined) {
+		push(new Uint8Array(0), true);
+		decoder.end();
+		return;
+	}
+	let finished = false;
+	try {
+		while (!decoder.done) {
+			const { done, value } = await reader.read();
+			if (done) {
+				finished = true;
+				push(new Uint8Array(0), true);
+				decoder.end();
+				return;
+			}
+			push(value, false);
+		}
+	} catch (err) {
+		throw err instanceof Error ? err : new Error(String(err));
+	} finally {
+		if (!finished) reader.cancel().catch(() => {});
 	}
 };
 
@@ -501,13 +696,31 @@ export const downloadGithubTarball = async (
  * entire subtree is captured in one tarball request, so the copy is atomically
  * consistent: a push to the template repo mid-download cannot produce a
  * mismatched checkout (unlike fetching a file list and then each blob).
+ *
+ * codeload builds the tarball with `git archive`, which writes a directory's
+ * whole subtree as one contiguous run of entries. So the first entry outside
+ * the subdir after entries inside it means the subdir is complete, and the
+ * rest of the repository is not downloaded.
  */
 export const downloadTemplate = async (
 	template: BootstrapTemplate,
+	options: { signal?: AbortSignal } = {},
 ): Promise<TemplateFile[]> => {
 	const { owner, repo, ref, subdir } = template.source;
-	const tar = await downloadGithubTarball(owner, repo, ref);
-	const files = selectTemplateFiles(parseTar(tar), subdir);
+	const url = githubTarballUrl(owner, repo, ref);
+	const prefix = subdirPrefix(subdir);
+	const inSubdir = (name: string): boolean =>
+		pathUnderPrefix(name, prefix) !== undefined;
+	const entries: TarEntry[] = [];
+	const decoder = new TarDecoder((entry) => {
+		if (inSubdir(entry.name)) {
+			entries.push(entry);
+			return true;
+		}
+		return entries.length === 0;
+	}, inSubdir);
+	await streamGithubTarball(url, decoder, options.signal);
+	const files = selectTemplateFiles(entries, subdir);
 	if (files.length === 0) {
 		throw new Error(
 			`Template subdirectory "${subdir}" was not found in ${owner}/${repo}@${ref}.`,
@@ -599,6 +812,8 @@ const writeSymlink = (
 export type ScaffoldOptions = {
 	/** Called for non-fatal warnings (e.g. a symlink that fell back to a file). */
 	onWarn?: (message: string) => void;
+	/** A {@link downloadTemplate} of `template` the caller already started. */
+	download?: Promise<TemplateFile[]>;
 };
 
 /**
@@ -613,7 +828,7 @@ export const scaffoldTemplate = async (
 	targetDir: string,
 	options: ScaffoldOptions = {},
 ): Promise<number> => {
-	const files = await downloadTemplate(template);
+	const files = await (options.download ?? downloadTemplate(template));
 
 	mkdirSync(targetDir, { recursive: true });
 	for (const file of files) {
