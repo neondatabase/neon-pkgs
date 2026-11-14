@@ -135,6 +135,7 @@ The recovery path returns `void` when waiting completes. Exceptions outside the 
 ```ts
 import { createNeonClient } from "@neon/sdk";
 import { toNeonEffectError } from "@neon/effect";
+import { Effect } from "effect";
 
 const client = createNeonClient({ apiKey, throwOnError: true });
 
