@@ -12,11 +12,13 @@ import {
 } from "../functions/registry.js";
 import {
 	collidingFiles,
+	installedConfigVersion,
 	operationsFromFlags,
 	planConfigRegistration,
 	planEnvExample,
 	planScaffold,
 	type ScaffoldFunction,
+	supportsDeclaredEnv,
 	writeScaffold,
 } from "../functions/scaffold.js";
 import {
@@ -272,8 +274,12 @@ export const scaffoldFromTemplate = async (
 	}
 
 	const register = options.addToConfig !== false;
+	const configVersion = installedConfigVersion(projectRoot);
+	const envForm = supportsDeclaredEnv(configVersion)
+		? "declaration"
+		: "process-env";
 	const registration = register
-		? planConfigRegistration(configPath, targetDir, plan.functions)
+		? planConfigRegistration(configPath, targetDir, plan.functions, envForm)
 		: undefined;
 	if (
 		registration &&
@@ -289,6 +295,16 @@ export const scaffoldFromTemplate = async (
 	}
 
 	const envExample = planEnvExample(projectRoot, template.environment);
+	if (
+		registration?.source !== undefined &&
+		envForm === "process-env" &&
+		template.environment.length > 0
+	) {
+		log.warning(
+			"@neon/config %s predates { value, required } Function env declarations, so neon.ts reads each variable as process.env.X!. Upgrade to @neon/config 1.13.0 or later to declare them.",
+			configVersion,
+		);
+	}
 
 	writeScaffold(targetDir, plan.files);
 	if (registration?.source !== undefined) {

@@ -19,6 +19,8 @@ export const isContainedRelativePath = (value: string): boolean =>
 export type FunctionTemplateEnvironment = {
 	name: string;
 	description: string;
+	/** Written as the declaration's `required`. Defaults to `true`. */
+	required?: boolean | "default-branch";
 };
 
 export type TemplateLayout = "router" | "separate";

@@ -9,6 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertFunctionEnv } from "@neon/config";
 import { loadConfigFromFile } from "@neon/config-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { takeCommandSuccessExtras } from "../analytics";
@@ -119,10 +120,29 @@ describe("functions new", () => {
 		await run({ template: "mailer", operations: ["send"] });
 
 		expect(read("neon.ts")).toContain(
-			"env: { MAILER_API_KEY: process.env.MAILER_API_KEY! }",
+			"env: { MAILER_API_KEY: { value: process.env.MAILER_API_KEY, required: true } }",
 		);
 		expect(read(".env.example")).toBe(MAILER_ENV_EXAMPLE);
 		expect(existsSync(join(workspace, ".env.local"))).toBe(false);
+	});
+
+	it("reads env from process.env when the installed @neon/config predates declarations", async () => {
+		const configPackage = join(
+			workspace,
+			"node_modules",
+			"@neon",
+			"config",
+		);
+		mkdirSync(configPackage, { recursive: true });
+		writeFileSync(
+			join(configPackage, "package.json"),
+			JSON.stringify({ name: "@neon/config", version: "1.12.0" }),
+		);
+		await run({ template: "mailer", operations: ["send"] });
+
+		expect(read("neon.ts")).toContain(
+			"env: { MAILER_API_KEY: process.env.MAILER_API_KEY! }",
+		);
 	});
 
 	it("appends to an existing .env.example without repeating a name", async () => {
@@ -155,7 +175,7 @@ describe("functions new", () => {
 		);
 	});
 
-	it("writes a neon.ts that loads with the env set and names it when unset", async () => {
+	it("writes a neon.ts that loads with the env unset, and whose deploy check names it", async () => {
 		const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 		const project = mkdtempSync(
 			join(packageRoot, "node_modules", ".neon-functions-new-"),
@@ -174,13 +194,16 @@ describe("functions new", () => {
 				path: join(project, "neon.ts"),
 			});
 			expect(config.functions?.mailsend?.env).toEqual({
-				MAILER_API_KEY: "key_test",
+				MAILER_API_KEY: { value: "key_test", required: true },
 			});
 
 			delete process.env.MAILER_API_KEY;
-			await expect(
-				loadConfigFromFile({ path: join(project, "neon.ts") }),
-			).rejects.toThrow(/MAILER_API_KEY/);
+			const unset = await loadConfigFromFile({
+				path: join(project, "neon.ts"),
+			});
+			expect(() => assertFunctionEnv(unset.config, "deploy")).toThrow(
+				/"MAILER_API_KEY" for function "mailsend" is required and unset/,
+			);
 		} finally {
 			if (previous === undefined) delete process.env.MAILER_API_KEY;
 			else process.env.MAILER_API_KEY = previous;
