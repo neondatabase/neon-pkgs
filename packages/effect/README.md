@@ -130,6 +130,23 @@ Effect.runPromise(createBranch.pipe(Effect.provide(layerConfig)));
 
 The recovery path returns `void` when waiting completes. Exceptions outside the SDK error hierarchy become Effect defects. Cancellation interrupts the fiber; the SDK's `aborted` error kind has no tagged counterpart.
 
+`toNeonEffectError` is the mapping these methods use. Pass it as the `catch` of `Effect.tryPromise` to bring a promise from `@neon/sdk`, or from a library built on it, onto the same error channel:
+
+```ts
+import { createNeonClient } from "@neon/sdk";
+import { toNeonEffectError } from "@neon/effect";
+import { Effect } from "effect";
+
+const client = createNeonClient({ apiKey, throwOnError: true });
+
+const project = Effect.tryPromise({
+  try: () => client.projects.get({ projectId: "my-project-id" }),
+  catch: toNeonEffectError,
+});
+```
+
+An SDK error becomes its tagged class. Any other error is rethrown, so the Effect dies with it as a defect.
+
 ## Cancellation and deadlines
 
 Interruption through `Effect.timeout`, `Fiber.interrupt`, `Effect.race` or scope closure for scoped fibers aborts the in-flight request and stops readiness polling. Each Stream page uses the signal of the Effect that pulls it.
