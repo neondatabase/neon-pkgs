@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://neon.tech/schemas/realtime/realtime-protocol-v2.schema.json",
-  "title": "Neon Realtime protocol v2",
+  "$id": "https://neon.tech/schemas/realtime/realtime-protocol-v3.schema.json",
+  "title": "Neon Realtime protocol v3",
   "type": "object",
   "$defs": {
     "u64": {
@@ -24,6 +24,63 @@
       "pattern": "^(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?$"
     },
     "rowKey": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "segmentTag": {
+      "type": "string",
+      "$comment": "The 32-byte digest that names a multi-row segment, as lowercase hex. Opaque to applications.",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "round": {
+      "$ref": "#/$defs/u64",
+      "$comment": "Identifies one recomputation of a live ID's result. A new round of the same live ID gets a new value."
+    },
+    "selector": {
+      "type": "object",
+      "$comment": "One segment a selected round replaces: a multi-row segment by tag, or a one-row segment by its row key.",
+      "oneOf": [
+        {
+          "required": ["tag"],
+          "properties": { "tag": { "$ref": "#/$defs/segmentTag" } },
+          "additionalProperties": false
+        },
+        {
+          "required": ["row_key"],
+          "properties": { "row_key": { "$ref": "#/$defs/rowKey" } },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "$comment": "What a round replaces. 'all' replaces the whole result; 'selected' replaces the named segments, including those that turn out empty. An absent scope never means 'all'.",
+      "discriminator": { "propertyName": "kind" },
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "properties": { "kind": { "const": "all" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "selectors"],
+          "properties": {
+            "kind": { "const": "selected" },
+            "selectors": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/selector" } }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "covered": {
+      "type": "object",
+      "$comment": "The change sequences a round resolves: from the live ID's first unresolved hole through the tick of the round's snapshot. Semantic validation requires first_sequence <= last_sequence.",
+      "required": ["first_sequence", "last_sequence"],
+      "properties": {
+        "first_sequence": { "$ref": "#/$defs/u64" },
+        "last_sequence": { "$ref": "#/$defs/u64" }
+      },
+      "additionalProperties": false
+    },
     "base64Cell": {
       "type": "object",
       "required": ["base64"],
@@ -48,7 +105,8 @@
       "required": ["row_key", "values"],
       "properties": {
         "row_key": { "$ref": "#/$defs/rowKey" },
-        "values": { "type": "array", "items": { "$ref": "#/$defs/cell" } }
+        "values": { "type": "array", "items": { "$ref": "#/$defs/cell" } },
+        "segment_tag": { "$ref": "#/$defs/segmentTag" }
       },
       "additionalProperties": false
     },
@@ -104,7 +162,8 @@
           "properties": {
             "op": { "const": "upsert" },
             "row_key": { "$ref": "#/$defs/rowKey" },
-            "values": { "type": "array", "items": { "$ref": "#/$defs/cell" } }
+            "values": { "type": "array", "items": { "$ref": "#/$defs/cell" } },
+            "segment_tag": { "$ref": "#/$defs/segmentTag" }
           },
           "additionalProperties": false
         },
@@ -238,24 +297,30 @@
         },
         {
           "type": "object",
-          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "mvcc"],
+          "$comment": "Starts one attempt of a round, sent with the round's first batch. A higher baseline_sync_attempt of the same round supersedes the earlier attempt. A different round in the same epoch starts only after the previous round's baseline_sync_end, unless reset_required changed the epoch first. A selected round arrives while the live ID is live, in its current epoch, and carries covered; a round that starts an epoch carries none.",
+          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "round", "scope", "mvcc"],
           "properties": {
             "type": { "const": "baseline_sync_start" },
             "live_id": { "$ref": "#/$defs/u64" },
             "epoch": { "$ref": "#/$defs/u64" },
             "baseline_sync_attempt": { "$ref": "#/$defs/u64" },
-            "mvcc": { "$ref": "#/$defs/mvcc" }
+            "round": { "$ref": "#/$defs/round" },
+            "scope": { "$ref": "#/$defs/scope" },
+            "mvcc": { "$ref": "#/$defs/mvcc" },
+            "covered": { "$ref": "#/$defs/covered" }
           },
           "additionalProperties": false
         },
         {
           "type": "object",
-          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "index", "rows"],
+          "$comment": "Batch indices start at 0 in each attempt.",
+          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "round", "index", "rows"],
           "properties": {
             "type": { "const": "baseline_sync_batch" },
             "live_id": { "$ref": "#/$defs/u64" },
             "epoch": { "$ref": "#/$defs/u64" },
             "baseline_sync_attempt": { "$ref": "#/$defs/u64" },
+            "round": { "$ref": "#/$defs/round" },
             "index": { "$ref": "#/$defs/u32" },
             "rows": { "type": "array", "items": { "$ref": "#/$defs/row" } }
           },
@@ -263,12 +328,13 @@
         },
         {
           "type": "object",
-          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "batch_count"],
+          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "round", "batch_count"],
           "properties": {
             "type": { "const": "baseline_sync_end" },
             "live_id": { "$ref": "#/$defs/u64" },
             "epoch": { "$ref": "#/$defs/u64" },
             "baseline_sync_attempt": { "$ref": "#/$defs/u64" },
+            "round": { "$ref": "#/$defs/round" },
             "batch_count": { "$ref": "#/$defs/u32" }
           },
           "additionalProperties": false
@@ -292,6 +358,19 @@
             "txids": { "type": "array", "items": { "$ref": "#/$defs/u64" } },
             "targets": { "type": "array", "items": { "$ref": "#/$defs/changeTarget" } },
             "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "$comment": "A publication body that commits a hole: some of each target's rows for this tick arrive later, in a round. It lists no segments and does not change the epoch. Every keyed_results and segments_pending body for one live ID in one publication carries the same sequence and the same txids, and a target has at most one hole body per publication. The sequence advances once, at commit. segments_pending and reset_required never target the same live ID in one publication.",
+          "required": ["type", "publication_id", "index", "txids", "targets"],
+          "properties": {
+            "type": { "const": "segments_pending" },
+            "publication_id": { "$ref": "#/$defs/publicationId" },
+            "index": { "$ref": "#/$defs/u32" },
+            "txids": { "type": "array", "items": { "$ref": "#/$defs/u64" } },
+            "targets": { "type": "array", "items": { "$ref": "#/$defs/changeTarget" } }
           },
           "additionalProperties": false
         },

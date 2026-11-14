@@ -1,8 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import Ajv2020 from "ajv/dist/2020.js";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import legacyV2Schema from "../../../schema/legacy/realtime-protocol-v2.schema.json";
 import {
 	base64Candidates,
 	base64CellPattern,
@@ -12,10 +14,13 @@ import {
 	decodeServerMessage,
 	encodeClientMessage,
 	ProtocolError,
+	REALTIME_SUBPROTOCOL_V2,
+	REALTIME_SUBPROTOCOL_V3,
 } from "./index.js";
 import type { ClientMessage } from "./messages.js";
 import orderedFixtures from "./schema/ordered-changes.fixtures.json";
 import fixtures from "./schema/realtime-protocol.fixtures.json";
+import segmentRoundFixtures from "./schema/segment-rounds.fixtures.json";
 
 const CLIENT_TYPES = new Set([
 	"client_info",
@@ -37,6 +42,7 @@ const SERVER_TYPES = new Set([
 	"baseline_sync_end",
 	"open",
 	"keyed_results",
+	"segments_pending",
 	"reset_required",
 	"commit",
 	"subscription_error",
@@ -46,11 +52,16 @@ const SERVER_TYPES = new Set([
 	"pong",
 ]);
 const ROW_KEY = "a".repeat(64);
+
+const decode = (text: string) =>
+	decodeServerMessage(text, REALTIME_SUBPROTOCOL_V3);
+const decodeFrame = (text: string) =>
+	decodeServerFrame(text, REALTIME_SUBPROTOCOL_V3);
 const FOUR_MIB = 4 * 1024 * 1024;
 
 function rejectServerMessage(value: unknown): void {
 	const text = typeof value === "string" ? value : JSON.stringify(value);
-	expect(() => decodeServerMessage(text)).toThrow(ProtocolError);
+	expect(() => decode(text)).toThrow(ProtocolError);
 }
 
 function batchWithBase64Cell(base64: string): object {
@@ -59,6 +70,7 @@ function batchWithBase64Cell(base64: string): object {
 		live_id: "9",
 		epoch: "1",
 		baseline_sync_attempt: "1",
+		round: "1",
 		index: 0,
 		rows: [{ row_key: ROW_KEY, values: [{ base64 }] }],
 	};
@@ -67,7 +79,7 @@ function batchWithBase64Cell(base64: string): object {
 // True when the frame decodes; only a ProtocolError means "rejected".
 function decodesCleanly(frame: string): boolean {
 	try {
-		decodeServerMessage(frame);
+		decode(frame);
 		return true;
 	} catch (error) {
 		if (error instanceof ProtocolError) return false;
@@ -75,12 +87,10 @@ function decodesCleanly(frame: string): boolean {
 	}
 }
 
-describe("Realtime v2 JSON codec", () => {
+describe("Realtime JSON codec", () => {
 	it("requires a canonical move predecessor and rejects unsupported rollout fields", () => {
 		for (const fixture of orderedFixtures.valid)
-			expect(decodeServerMessage(JSON.stringify(fixture))).toEqual(
-				fixture,
-			);
+			expect(decode(JSON.stringify(fixture))).toEqual(fixture);
 		for (const fixture of orderedFixtures.invalid)
 			rejectServerMessage(fixture);
 		expect(() =>
@@ -97,17 +107,88 @@ describe("Realtime v2 JSON codec", () => {
 	});
 
 	it("decodes every valid server fixture", () => {
-		const validServerFixtures = fixtures.valid.filter(({ type }) =>
-			SERVER_TYPES.has(type),
-		);
+		const validServerFixtures = [
+			...fixtures.valid,
+			...segmentRoundFixtures.valid,
+		].filter(({ type }) => SERVER_TYPES.has(type));
 		expect(new Set(validServerFixtures.map(({ type }) => type))).toEqual(
 			SERVER_TYPES,
 		);
 		for (const fixture of validServerFixtures) {
-			expect(() =>
-				decodeServerMessage(JSON.stringify(fixture)),
-			).not.toThrow();
+			expect(() => decode(JSON.stringify(fixture))).not.toThrow();
 		}
+	});
+
+	it("decodes a v2 session exactly as the v2 schema accepts, in the v3 shape", () => {
+		// The frozen v2 schema is the oracle for the v2 decoder, which shares no
+		// validation code with it.
+		const ajv = new Ajv2020({
+			discriminator: true,
+			strict: true,
+			validateFormats: false,
+		}).addSchema(legacyV2Schema);
+		const v2Schema = ajv.getSchema(
+			`${legacyV2Schema.$id}#/$defs/serverMessage`,
+		);
+		if (!v2Schema) throw new Error("v2 schema has no server messages");
+		const decodesAsV2 = (value: unknown) => {
+			try {
+				decodeServerMessage(
+					JSON.stringify(value),
+					REALTIME_SUBPROTOCOL_V2,
+				);
+				return true;
+			} catch (error) {
+				if (error instanceof ProtocolError) return false;
+				throw error;
+			}
+		};
+		const strip = (value: Record<string, unknown>) => {
+			const {
+				round: _round,
+				scope: _scope,
+				covered: _covered,
+				...rest
+			} = value;
+			return rest;
+		};
+		const candidates = [
+			...fixtures.valid,
+			...fixtures.invalid,
+			...orderedFixtures.valid,
+			...orderedFixtures.invalid,
+			...segmentRoundFixtures.valid,
+			...segmentRoundFixtures.invalid,
+		].flatMap((fixture) => [
+			fixture,
+			strip(fixture as Record<string, unknown>),
+		]);
+		let accepted = 0;
+		for (const candidate of candidates) {
+			const expected = v2Schema(candidate);
+			if (expected) accepted += 1;
+			expect(decodesAsV2(candidate), JSON.stringify(candidate)).toBe(
+				expected,
+			);
+		}
+		expect(accepted).toBeGreaterThan(20);
+
+		const start = decodeServerMessage(
+			JSON.stringify(
+				strip(
+					fixtures.valid.find(
+						({ type }) => type === "baseline_sync_start",
+					) as Record<string, unknown>,
+				),
+			),
+			REALTIME_SUBPROTOCOL_V2,
+		);
+		expect(start).toMatchObject({
+			type: "baseline_sync_start",
+			round: "1",
+			scope: { kind: "all" },
+		});
+		expect(start).not.toHaveProperty("covered");
 	});
 
 	it("rejects malformed and noncanonical server messages", () => {
@@ -117,14 +198,14 @@ describe("Realtime v2 JSON codec", () => {
 				SERVER_TYPES.has(fixture.type)
 			) {
 				expect(
-					() => decodeServerMessage(JSON.stringify(fixture)),
+					() => decode(JSON.stringify(fixture)),
 					JSON.stringify(fixture),
 				).toThrow(ProtocolError);
 			}
 		}
-		expect(() => decodeServerMessage("not json")).toThrow(ProtocolError);
+		expect(() => decode("not json")).toThrow(ProtocolError);
 		expect(() =>
-			decodeServerMessage(
+			decode(
 				JSON.stringify({
 					type: "subscription_error",
 					live_id: "18446744073709551616",
@@ -134,12 +215,13 @@ describe("Realtime v2 JSON codec", () => {
 			),
 		).toThrow(ProtocolError);
 		expect(() =>
-			decodeServerMessage(
+			decode(
 				JSON.stringify({
 					type: "baseline_sync_batch",
 					live_id: "1",
 					epoch: "1",
 					baseline_sync_attempt: "1",
+					round: "1",
 					index: 0,
 					rows: [
 						{
@@ -153,14 +235,14 @@ describe("Realtime v2 JSON codec", () => {
 	});
 
 	it("rejects duplicate object keys before JSON parsing can erase them", () => {
+		expect(() => decode('{"type":"ready","type":"ready"}')).toThrow(
+			ProtocolError,
+		);
+		expect(() => decode('{"type":"ready","\\u0074ype":"ready"}')).toThrow(
+			ProtocolError,
+		);
 		expect(() =>
-			decodeServerMessage('{"type":"ready","type":"ready"}'),
-		).toThrow(ProtocolError);
-		expect(() =>
-			decodeServerMessage('{"type":"ready","\\u0074ype":"ready"}'),
-		).toThrow(ProtocolError);
-		expect(() =>
-			decodeServerMessage(
+			decode(
 				'{"type":"commit","publication_id":"p","body_count":0,"frontier":{"lsn":"0/0","lsn":"0/0"}}',
 			),
 		).toThrow(ProtocolError);
@@ -168,12 +250,13 @@ describe("Realtime v2 JSON codec", () => {
 
 	it("allows repeated keys in separate objects and punctuation inside values", () => {
 		expect(() =>
-			decodeServerMessage(
+			decode(
 				JSON.stringify({
 					type: "baseline_sync_batch",
 					live_id: "9",
 					epoch: "1",
 					baseline_sync_attempt: "1",
+					round: "1",
 					index: 0,
 					rows: [
 						{ row_key: ROW_KEY, values: ['"key":{[', "\\"] },
@@ -215,18 +298,16 @@ describe("Realtime v2 JSON codec", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
+			round: "1",
+			scope: { kind: "all" },
 			mvcc: {
 				xmin: "1",
 				xmax: "18446744073709551615",
 				xip: ["18446744073709551614"],
 			},
 		};
-		expect(() =>
-			decodeServerMessage(JSON.stringify(keyedResults)),
-		).not.toThrow();
-		expect(() =>
-			decodeServerMessage(JSON.stringify(baselineSyncStart)),
-		).not.toThrow();
+		expect(() => decode(JSON.stringify(keyedResults))).not.toThrow();
+		expect(() => decode(JSON.stringify(baselineSyncStart))).not.toThrow();
 		for (const invalid of [
 			"0",
 			"01",
@@ -246,7 +327,7 @@ describe("Realtime v2 JSON codec", () => {
 			type: "progress",
 			mvcc: { xmin: "100", xmax: "110", xip: ["103"] },
 		};
-		const frame = decodeServerFrame(JSON.stringify(message));
+		const frame = decodeFrame(JSON.stringify(message));
 		expect(frame.message).toEqual(message);
 		expect(frame.mvcc).toMatchObject({
 			xmin: 100n,
@@ -266,6 +347,8 @@ describe("Realtime v2 JSON codec", () => {
 				live_id: "1",
 				epoch: "1",
 				baseline_sync_attempt: "1",
+				round: "1",
+				scope: { kind: "all" },
 			},
 		];
 		for (const envelope of envelopes) {
@@ -275,7 +358,7 @@ describe("Realtime v2 JSON codec", () => {
 				{ xmin: "10", xmax: "20", xip: ["20"] },
 			]) {
 				expect(() =>
-					decodeServerMessage(JSON.stringify({ ...envelope, mvcc })),
+					decode(JSON.stringify({ ...envelope, mvcc })),
 				).toThrow(/MVCC/);
 			}
 			for (const invalid of ["0", "01", "18446744073709551616"]) {
@@ -288,7 +371,7 @@ describe("Realtime v2 JSON codec", () => {
 				}
 			}
 			expect(() =>
-				decodeServerMessage(
+				decode(
 					JSON.stringify({
 						...envelope,
 						mvcc: {
@@ -308,18 +391,19 @@ describe("Realtime v2 JSON codec", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
+			round: "1",
 			index: 0,
 			rows: [{ row_key: ROW_KEY, values: [{ base64 }] }],
 		});
 		for (const base64 of ["", "AA==", "AAA=", "/w==", "////"]) {
 			expect(() =>
-				decodeServerMessage(JSON.stringify(snapshot(base64))),
+				decode(JSON.stringify(snapshot(base64))),
 			).not.toThrow();
 		}
 		for (const base64 of ["AB==", "AAB=", "/x==", "not canonical"]) {
-			expect(() =>
-				decodeServerMessage(JSON.stringify(snapshot(base64))),
-			).toThrow("is not canonical base64");
+			expect(() => decode(JSON.stringify(snapshot(base64)))).toThrow(
+				"is not canonical base64",
+			);
 		}
 	});
 
@@ -327,7 +411,7 @@ describe("Realtime v2 JSON codec", () => {
 		const base64 = Buffer.alloc(FOUR_MIB, 0x41).toString("base64");
 		expect(base64).toHaveLength(5_592_408);
 		const batch = batchWithBase64Cell(base64);
-		expect(decodeServerMessage(JSON.stringify(batch))).toEqual(batch);
+		expect(decode(JSON.stringify(batch))).toEqual(batch);
 	});
 
 	it("decodes base64 cells past the length where V8's RegExp overflows", () => {
@@ -335,7 +419,7 @@ describe("Realtime v2 JSON codec", () => {
 		const base64 = Buffer.alloc(3_375_003, 0x41).toString("base64");
 		expect(base64).toHaveLength(4_500_004);
 		const batch = batchWithBase64Cell(base64);
-		expect(decodeServerMessage(JSON.stringify(batch))).toEqual(batch);
+		expect(decode(JSON.stringify(batch))).toEqual(batch);
 	});
 
 	it("still rejects noncanonical base64 cells at the same size", () => {
@@ -348,9 +432,7 @@ describe("Realtime v2 JSON codec", () => {
 			`${canonical}Q`,
 		]) {
 			expect(() =>
-				decodeServerMessage(
-					JSON.stringify(batchWithBase64Cell(invalid)),
-				),
+				decode(JSON.stringify(batchWithBase64Cell(invalid))),
 			).toThrow("is not canonical base64");
 		}
 	});
@@ -373,6 +455,7 @@ describe("Realtime v2 JSON codec", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
+			round: "1",
 			index: 0,
 			rows: [{ row_key: ROW_KEY, values: [], extra: true }],
 		});
@@ -381,6 +464,7 @@ describe("Realtime v2 JSON codec", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
+			round: "1",
 			index: 0,
 			rows: [{ row_key: "zz", values: [] }],
 		});
@@ -389,6 +473,7 @@ describe("Realtime v2 JSON codec", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
+			round: "1",
 			index: 0,
 			rows: [{ row_key: ROW_KEY, values: [123] }],
 		});
@@ -404,7 +489,7 @@ describe("Realtime v2 JSON codec", () => {
 
 	it("applies protocol limits to UTF-8 bytes", () => {
 		expect(() =>
-			decodeServerMessage(
+			decode(
 				JSON.stringify({
 					type: "open",
 					publication_id: "é".repeat(32),
@@ -412,7 +497,7 @@ describe("Realtime v2 JSON codec", () => {
 			),
 		).not.toThrow();
 		expect(() =>
-			decodeServerMessage(
+			decode(
 				JSON.stringify({
 					type: "open",
 					publication_id: "é".repeat(33),
@@ -420,7 +505,15 @@ describe("Realtime v2 JSON codec", () => {
 			),
 		).toThrow(ProtocolError);
 		expect(() =>
-			decodeServerMessage(
+			decode(
+				JSON.stringify({
+					...segmentRoundFixtures.valid[0],
+					publication_id: "é".repeat(33),
+				}),
+			),
+		).toThrow(ProtocolError);
+		expect(() =>
+			decode(
 				JSON.stringify({
 					type: "pong",
 					token: "😀".repeat(17),
@@ -431,7 +524,7 @@ describe("Realtime v2 JSON codec", () => {
 
 	it("accepts server messages larger than the former 1 MiB limit", () => {
 		expect(() =>
-			decodeServerMessage(
+			decode(
 				JSON.stringify({
 					type: "connection_error",
 					code: "protocol_error",

@@ -28,6 +28,8 @@ describe("baseline-sync reconciliation", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
+			round: "1",
+			scope: { kind: "all" },
 			mvcc: { xmin: "100", xmax: "105", xip: ["103"] },
 		});
 		keyedPublication(
@@ -201,6 +203,8 @@ describe("baseline-sync reconciliation", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
+			round: "1",
+			scope: { kind: "all" },
 			mvcc: { xmin: "100", xmax: "105", xip: [] },
 		});
 		keyedPublication(reconciler, "p", "1", "1", [], ["99", "105"]);

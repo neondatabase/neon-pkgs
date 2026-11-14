@@ -6,6 +6,7 @@ import capabilitySchema from "../../../../schema/realtime-query-capability.schem
 import capabilityFixtures from "../../../server/capability/schema/realtime-query-capability-v2.fixtures.json";
 import orderedFixtures from "./ordered-changes.fixtures.json";
 import protocolFixtures from "./realtime-protocol.fixtures.json";
+import segmentRoundFixtures from "./segment-rounds.fixtures.json";
 
 describe("Realtime protocol contracts", () => {
 	it("accepts every public protocol fixture marked valid", () => {
@@ -13,6 +14,7 @@ describe("Realtime protocol contracts", () => {
 		for (const fixture of [
 			...protocolFixtures.valid,
 			...orderedFixtures.valid,
+			...segmentRoundFixtures.valid,
 		]) {
 			expect(validate(fixture), JSON.stringify(validate.errors)).toBe(
 				true,
@@ -25,6 +27,7 @@ describe("Realtime protocol contracts", () => {
 		for (const fixture of [
 			...protocolFixtures.invalid,
 			...orderedFixtures.invalid,
+			...segmentRoundFixtures.invalid,
 		]) {
 			expect(validate(fixture), JSON.stringify(fixture)).toBe(false);
 		}

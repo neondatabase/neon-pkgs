@@ -31,6 +31,8 @@ class FakeWebSocket implements WebSocketLike {
 	readyState = 0;
 	readonly sent: Record<string, unknown>[] = [];
 	readonly protocols: string | string[];
+	/** The subprotocol this fake server selects; v2 unless a test changes it. */
+	protocol: string | undefined = "neon.realtime.v2";
 	private readonly listeners = new Map<string, Set<FakeWebSocketListener>>();
 
 	constructor(_url: string, protocols: string | string[]) {
@@ -228,10 +230,10 @@ describe("RealtimeClient", () => {
 		client.subscribe(query("custom socket"));
 
 		expect(webSocketFactory).toHaveBeenCalledOnce();
-		expect(webSocketFactory).toHaveBeenCalledWith(
-			"ws://live.test/v1",
+		expect(webSocketFactory).toHaveBeenCalledWith("ws://live.test/v1", [
+			"neon.realtime.v3",
 			"neon.realtime.v2",
-		);
+		]);
 		client.close();
 	});
 
@@ -731,13 +733,17 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "connecting",
 			error: undefined,
+			updating: false,
 			data: undefined,
 		});
 
 		const socket = connectAndAdmit();
 		baselineSync(socket, "before");
 
-		expect(socket.protocols).toBe("neon.realtime.v2");
+		expect(socket.protocols).toEqual([
+			"neon.realtime.v3",
+			"neon.realtime.v2",
+		]);
 		expect(socket.sent).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({ type: "subscribe" }),
@@ -746,6 +752,7 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [{ id: 1, title: "before" }],
 		});
 		client.close();
@@ -775,6 +782,7 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [
 				{ id: 3, title: "third" },
 				{ id: 1, title: "first" },
@@ -786,6 +794,7 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [
 				{ id: 3, title: "third" },
 				{ id: 1, title: "first" },
@@ -809,6 +818,7 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [
 				{ id: 2, title: "second replacement" },
 				{ id: 3, title: "third replacement" },
@@ -1362,6 +1372,7 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "stale",
 			error: undefined,
+			updating: false,
 			data: [{ id: 1, title: "before" }],
 		});
 
@@ -1389,6 +1400,7 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [{ id: 1, title: "after" }],
 		});
 		expect(resets).toEqual([
@@ -1540,6 +1552,7 @@ describe("RealtimeClient", () => {
 		expect(surviving.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [{ value: "private-value" }],
 		});
 		expect(socket.sent).toContainEqual({

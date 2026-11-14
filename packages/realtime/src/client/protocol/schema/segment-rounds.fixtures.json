@@ -1,0 +1,31 @@
+{
+  "valid": [
+    { "type": "segments_pending", "publication_id": "7", "index": 1, "txids": ["9"], "targets": [{ "live_id": "2", "epoch": "1", "sequence": "2" }] },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "4", "round": "3", "scope": { "kind": "selected", "selectors": [{ "tag": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }, { "row_key": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }] }, "mvcc": { "xmin": "5", "xmax": "9", "xip": ["7"] }, "covered": { "first_sequence": "2", "last_sequence": "4" } },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "5", "round": "4", "scope": { "kind": "all" }, "mvcc": { "xmin": "5", "xmax": "9", "xip": [] }, "covered": { "first_sequence": "5", "last_sequence": "5" } },
+    { "type": "baseline_sync_batch", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "4", "round": "3", "index": 0, "rows": [{ "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "values": ["1"], "segment_tag": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }, { "row_key": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "values": ["2"] }] },
+    { "type": "baseline_sync_end", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "4", "round": "3", "batch_count": 1 },
+    { "type": "keyed_results", "publication_id": "7", "index": 0, "txids": ["9"], "targets": [{ "live_id": "2", "epoch": "1", "sequence": "2" }], "changes": [{ "op": "upsert", "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "values": ["2"], "segment_tag": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }, { "op": "remove", "row_key": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }] }
+  ],
+  "invalid": [
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "round": "1", "mvcc": { "xmin": "1", "xmax": "2", "xip": [] } },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "scope": { "kind": "all" }, "mvcc": { "xmin": "1", "xmax": "2", "xip": [] } },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "round": "0", "scope": { "kind": "all" }, "mvcc": { "xmin": "1", "xmax": "2", "xip": [] } },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "round": "1", "scope": { "kind": "selected", "selectors": [] }, "mvcc": { "xmin": "1", "xmax": "2", "xip": [] }, "covered": { "first_sequence": "1", "last_sequence": "1" } },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "round": "1", "scope": { "kind": "selected" }, "mvcc": { "xmin": "1", "xmax": "2", "xip": [] }, "covered": { "first_sequence": "1", "last_sequence": "1" } },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "round": "1", "scope": { "kind": "all", "selectors": [{ "tag": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }] }, "mvcc": { "xmin": "1", "xmax": "2", "xip": [] } },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "round": "1", "scope": { "kind": "some" }, "mvcc": { "xmin": "1", "xmax": "2", "xip": [] } },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "round": "1", "scope": { "kind": "selected", "selectors": [{ "tag": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "row_key": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }] }, "mvcc": { "xmin": "1", "xmax": "2", "xip": [] }, "covered": { "first_sequence": "1", "last_sequence": "1" } },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "round": "1", "scope": { "kind": "selected", "selectors": [{ "tag": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" }] }, "mvcc": { "xmin": "1", "xmax": "2", "xip": [] }, "covered": { "first_sequence": "1", "last_sequence": "1" } },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "round": "1", "scope": { "kind": "selected", "selectors": [{}] }, "mvcc": { "xmin": "1", "xmax": "2", "xip": [] }, "covered": { "first_sequence": "1", "last_sequence": "1" } },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "round": "1", "scope": { "kind": "all" }, "mvcc": { "xmin": "1", "xmax": "2", "xip": [] }, "covered": { "first_sequence": "1" } },
+    { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "round": "1", "scope": { "kind": "all" }, "mvcc": { "xmin": "1", "xmax": "2", "xip": [] }, "covered": { "first_sequence": "0", "last_sequence": "1" } },
+    { "type": "baseline_sync_batch", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "index": 0, "rows": [] },
+    { "type": "baseline_sync_batch", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "round": "1", "index": 0, "rows": [{ "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "values": [], "segment_tag": "bbbb" }] },
+    { "type": "baseline_sync_end", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "batch_count": 0 },
+    { "type": "keyed_results", "publication_id": "7", "index": 0, "txids": ["9"], "targets": [{ "live_id": "2", "epoch": "1", "sequence": "2" }], "changes": [{ "op": "remove", "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "segment_tag": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }] },
+    { "type": "segments_pending", "publication_id": "7", "index": 1, "txids": ["9"], "targets": [{ "live_id": "2", "epoch": "1", "sequence": "2" }], "changes": [] },
+    { "type": "segments_pending", "publication_id": "7", "index": 1, "targets": [{ "live_id": "2", "epoch": "1", "sequence": "2" }] },
+    { "type": "segments_pending", "publication_id": "7", "index": 1, "txids": ["9"], "targets": [{ "live_id": "2", "epoch": "1", "first_sequence": "1" }] }
+  ]
+}

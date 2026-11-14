@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { decodeServerMessage } from "../protocol/codec.js";
+import { REALTIME_SUBPROTOCOL_V3 } from "../protocol/messages.js";
 import { BaselineSyncPublicationReconciler } from "./reconciler.js";
 import {
 	accept,
@@ -36,7 +37,10 @@ describe("publication reconciliation", () => {
 		const first = keyedResults("large", 0, "1", "1", [
 			{ op: "upsert", row_key: ROW_A, values: [value] },
 		]);
-		const decoded = decodeServerMessage(JSON.stringify(first));
+		const decoded = decodeServerMessage(
+			JSON.stringify(first),
+			REALTIME_SUBPROTOCOL_V3,
+		);
 		if (decoded.type !== "keyed_results")
 			throw new Error("expected keyed results");
 		accept(reconciler, decoded);

@@ -498,6 +498,33 @@ the core retains unordered keyed semantics for those batches. Application
 callback side effects are outside SDK rollback; callbacks across independent
 adapters are not a transaction.
 
+### Partial refreshes
+
+Over protocol v3 the server can recompute part of a result instead of patching
+it. While such a refresh is pending, a materialized snapshot has
+`updating: true` and keeps showing the last complete result, with `status`
+unchanged. Changes committed in the meantime wait with it: they become visible
+together when the refresh lands, as one update, and `awaitTxId()` resolves for
+them only then. A snapshot that is not refreshing has `updating: false`.
+
+Raw subscriptions receive a landed refresh as one `changes` update, never as a
+`rows` replacement: first a `remove` for every row the refresh replaces or
+removes, then an `upsert` for every row it shows. A consumer that keys rows by
+their contents can therefore apply the batch in order without seeing two row
+IDs claim one key. The batch's `txids` list every transaction it makes visible.
+Rows of an unordered result have no defined position, so a materialized array
+lists replaced rows wherever its map puts them.
+
+Costs, for a result of N rows in G non-empty multi-row segments: each live
+query on protocol v3 keeps a segment index of Θ(N + G) space, raw
+subscriptions included, so a refresh can find a segment's rows without
+scanning the result. Installing a refresh on a raw subscription takes time
+proportional to the buffered changes it replays and the rows it removes and
+inserts, plus one pass over the buffered ticks and held progress proofs. A
+materialized subscription also builds its new snapshot array, Θ(N), as it
+does for every update, and a TanStack collection copies its key maps, Θ(N),
+as it does for every batch.
+
 For SSR, pass server-executed rows as `initialData` when subscribing. They are
 available immediately with status `connecting` until the first authoritative
 result. Realtime does not transform those rows: the application is responsible
@@ -556,22 +583,24 @@ Custom raw consumers should follow the complete-batch staging and validation
 requirements above. TanStack collections retain unordered keyed semantics;
 their local queries must establish any desired order.
 
-The SDK requests only `neon.realtime.v2`, including on reconnect. Deploy a
-server that requires the one-time `client_info` message before releasing this
-SDK. Protocol v1 remains available for previously released clients. There is no
-client-side protocol fallback, subscription opt-in, or mode acknowledgment.
+The SDK offers `neon.realtime.v3` and `neon.realtime.v2`, including on
+reconnect, and decodes the connection with the subprotocol the server selects.
+A custom `webSocketFactory` must return a transport that reports the selected
+subprotocol through the standard `protocol` property, as browser, React Native
+and `ws` WebSockets do. Protocol v1 remains available for previously released
+clients. There is no subscription opt-in or mode acknowledgment.
 
 ## Protocol schemas
 
 The package exports the active protocol and decoded capability schemas at
-`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v2) and
+`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v3) and
 `@neon/realtime/schema/realtime-query-capability.schema.json` (currently capability
 v2). Their filenames stay stable across revisions; `$id` and `title` retain each
 contract's version.
 
 Existing versioned exports continue to resolve to their original contracts.
-Protocol v1 and capability v1 resolve to frozen legacy snapshots, separate from
-the active generator and tests. The versioned protocol v2 and capability v2
+Protocol v1, protocol v2 and capability v1 resolve to frozen legacy snapshots,
+separate from the active generator. The versioned protocol v3 and capability v2
 exports alias the active contracts.
 See the [schema maintenance notes](schema/README.md) for generation, legacy
 removal and downstream synchronization.
