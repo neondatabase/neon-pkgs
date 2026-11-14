@@ -20,6 +20,7 @@ import {
 import {
 	ADD_MCP_PACKAGE,
 	addMcpArgs,
+	addMcpCommand,
 	addMcpRetry,
 	type RunTemplateToolingOptions,
 	runTemplateTooling,
@@ -104,6 +105,27 @@ const run = (
 		env: {},
 		...options,
 	});
+
+describe("addMcpCommand", () => {
+	it("runs the installed add-mcp with this Node instead of npx", () => {
+		expect(
+			addMcpCommand(["-y", ADD_MCP_PACKAGE, "u", "-y"], () => "/b.js"),
+		).toEqual({ file: process.execPath, args: ["/b.js", "u", "-y"] });
+		expect(
+			addMcpCommand(["-y", ADD_MCP_PACKAGE, "u"]).args.includes(
+				ADD_MCP_PACKAGE,
+			),
+		).toBe(false);
+	});
+
+	it("falls back to npx without an installed add-mcp", () => {
+		const args = ["-y", ADD_MCP_PACKAGE, "u"];
+		expect(addMcpCommand(args, () => undefined)).toEqual({
+			file: "npx",
+			args,
+		});
+	});
+});
 
 describe("ADD_MCP_PACKAGE", () => {
 	it("pins the add-mcp version the CLI depends on", () => {

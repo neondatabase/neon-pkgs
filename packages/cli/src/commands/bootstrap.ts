@@ -12,11 +12,13 @@ import type { InitAuthOptions } from "../init/auth.js";
 import {
 	BootstrapInputError,
 	type BootstrapTemplate,
+	downloadTemplate,
 	ensureTargetUsable,
 	FALLBACK_TEMPLATES,
 	fetchTemplates,
 	findTemplate,
 	scaffoldTemplate,
+	type TemplateFile,
 	templateIds,
 } from "../init/bootstrap.js";
 import {
@@ -323,9 +325,19 @@ export const handler = async (
 			interactive,
 			await resolveTemplateList(props),
 		));
-	const targetDir = await resolveTargetDir(props, interactive, template);
-	ensureTargetUsable(targetDir, props.force);
-	await scaffold(template, targetDir);
+	// Started before the directory prompt so the download runs while the user types.
+	const download = new AbortController();
+	const files = downloadTemplate(template, { signal: download.signal });
+	files.catch(() => {});
+	let targetDir: string;
+	try {
+		targetDir = await resolveTargetDir(props, interactive, template);
+		ensureTargetUsable(targetDir, props.force);
+	} catch (error) {
+		download.abort();
+		throw error;
+	}
+	await scaffold(template, targetDir, files);
 	recordScaffoldedTemplate(template.id);
 	printScaffolded(template, targetDir);
 	if (props.deploy && !hasNeonConfig(targetDir)) {
@@ -445,12 +457,14 @@ const defaultDirName = (template: BootstrapTemplate): string =>
 const scaffold = async (
 	template: BootstrapTemplate,
 	targetDir: string,
+	download: Promise<TemplateFile[]>,
 ): Promise<number> => {
 	log.info('Fetching template "%s" from GitHub…', template.id);
 	const filesWritten = await scaffoldTemplate(template, targetDir, {
 		onWarn: (message) => {
 			log.warning(message);
 		},
+		download,
 	});
 	log.info("Scaffolded %d files into %s.", filesWritten, targetDir);
 	return filesWritten;

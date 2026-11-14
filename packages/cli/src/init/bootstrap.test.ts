@@ -9,15 +9,18 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createGzip } from "node:zlib";
 import { gunzipSync, gzipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
 	type BootstrapTemplate,
+	downloadTemplate,
 	FALLBACK_TEMPLATES,
 	parseManifest,
 	parseTar,
 	scaffoldTemplate,
 	selectTemplateFiles,
+	TarDecoder,
 } from "./bootstrap.js";
 
 // ---------------------------------------------------------------------------
@@ -264,6 +267,61 @@ describe("parseTar long paths", () => {
 		const link = files.find((f) => f.path === "link");
 		expect(link?.kind).toBe("symlink");
 		if (link?.kind === "symlink") expect(link.target).toBe(longTarget);
+	});
+});
+
+describe("TarDecoder", () => {
+	const tar = buildTar(EXAMPLE_TAR);
+
+	test("decodes the same entries one byte at a time as in one buffer", () => {
+		const entries: string[] = [];
+		const decoder = new TarDecoder((entry) => {
+			entries.push(`${entry.name}:${entry.data.toString("utf8")}`);
+			return true;
+		});
+		for (const byte of tar) decoder.push(Uint8Array.of(byte));
+		expect(entries).toEqual(
+			parseTar(tar).map((e) => `${e.name}:${e.data.toString("utf8")}`),
+		);
+		expect(decoder.done).toBe(true);
+	});
+
+	test("copies only the entries it keeps", () => {
+		const entries = new Map<string, string>();
+		const decoder = new TarDecoder(
+			(entry) => {
+				entries.set(entry.name, entry.data.toString("utf8"));
+				return true;
+			},
+			(name) => name.includes("/with-hono/"),
+		);
+		decoder.push(tar);
+		expect(entries.get("examples-main/with-hono/src/index.ts")).toBe(
+			'export const app = "hono";\n',
+		);
+		expect(entries.get("examples-main/with-remix/package.json")).toBe("");
+	});
+
+	test("stops when onEntry returns false and ignores later bytes", () => {
+		const names: string[] = [];
+		const decoder = new TarDecoder((entry) => {
+			names.push(entry.name);
+			return !entry.name.includes("with-remix");
+		});
+		decoder.push(tar);
+		decoder.push(Buffer.from("not a tar header"));
+		expect(decoder.done).toBe(true);
+		expect(names.at(-1)).toBe("examples-main/with-remix/package.json");
+	});
+
+	test("reports a truncated last entry with the bytes that arrived", () => {
+		const file = Buffer.concat([
+			tarHeader("examples-main/with-hono/big.txt", 1000, 0o644, "0"),
+			Buffer.from("partial"),
+		]);
+		const entries = parseTar(file);
+		expect(entries).toHaveLength(1);
+		expect(entries[0]?.data.toString("utf8")).toBe("partial");
 	});
 });
 
@@ -554,6 +612,43 @@ describe("scaffoldTemplate", () => {
 		await new Promise<void>((resolve, reject) =>
 			server.close((err) => (err ? reject(err) : resolve())),
 		);
+	});
+
+	test("stops downloading once the subdir is complete", async () => {
+		const hanging = createServer((_req, res) => {
+			res.setHeader("content-type", "application/gzip");
+			const gzip = createGzip();
+			gzip.pipe(res);
+			// The sibling after with-hono arrives, but the archive never ends.
+			gzip.write(buildTar(EXAMPLE_TAR).subarray(0, -1024));
+			gzip.flush();
+		});
+		await new Promise<void>((resolve) => hanging.listen(0, resolve));
+		process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD = `http://localhost:${
+			(hanging.address() as AddressInfo).port
+		}`;
+		try {
+			const files = await downloadTemplate(TEMPLATE);
+			expect(files.map((f) => f.path).sort()).toEqual([
+				".claude/skills/neon",
+				"package.json",
+				"scripts/run.sh",
+				"src/index.ts",
+			]);
+		} finally {
+			hanging.closeAllConnections();
+			await new Promise<void>((resolve) =>
+				hanging.close(() => resolve()),
+			);
+		}
+	});
+
+	test("reads to the end when the subdir is the last directory", async () => {
+		const files = await downloadTemplate({
+			...TEMPLATE,
+			source: { ...TEMPLATE.source, subdir: "with-remix" },
+		});
+		expect(files.map((f) => f.path)).toEqual(["package.json"]);
 	});
 
 	test("writes the template subtree, preserving files, exec bits, and symlinks", async () => {
