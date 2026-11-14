@@ -15,13 +15,36 @@ import { afterEach, describe, expect, test } from "vitest";
 import {
 	existingNeonApiKey,
 	installNeonMcpServer,
+	isMcpCategory,
 	isNeonMcpUrl,
 	mcpInstallOrder,
+	NEON_MCP_CATEGORIES,
 	NEON_MCP_URL,
 	neonMcpUrl,
 	parseMcpCategories,
 	trackedProjectMcpConfig,
 } from "./install.js";
+
+/**
+ * `SCOPE_CATEGORIES` in mcp-server-neon (`mcp/utils/grant-context.ts`): the names the hosted
+ * server accepts in `?category=`. Written out instead of derived from `NEON_MCP_CATEGORIES`, so
+ * these tests compare the CLI's list with the server's rather than with itself.
+ */
+const SERVER_CATEGORIES = [
+	"projects",
+	"branches",
+	"endpoints",
+	"snapshots",
+	"schema",
+	"querying",
+	"neon_auth",
+	"data_api",
+	"observability",
+	"docs",
+	"functions",
+	"storage",
+	"realtime",
+] as const;
 
 const dirs: string[] = [];
 
@@ -272,13 +295,72 @@ describe("neonMcpUrl", () => {
 			"https://mcp.neon.tech/mcp?category=docs&category=docs",
 		);
 	});
+
+	test("sends every server category as its own category param", () => {
+		const url = neonMcpUrl({ categories: SERVER_CATEGORIES });
+		expect(new URL(url).searchParams.getAll("category")).toEqual([
+			...SERVER_CATEGORIES,
+		]);
+	});
 });
 
 describe("parseMcpCategories", () => {
+	function rejection(names: readonly string[]): string {
+		try {
+			parseMcpCategories(names);
+		} catch (err) {
+			return err instanceof Error ? err.message : String(err);
+		}
+		throw new Error(`Accepted ${JSON.stringify(names)}`);
+	}
+
 	test("rejects unknown names", () => {
 		expect(() => parseMcpCategories(["querying", "nope"])).toThrow(
 			/Unknown MCP category: "nope"/,
 		);
+	});
+
+	test.each(SERVER_CATEGORIES)("accepts %s", (category) => {
+		expect(isMcpCategory(category)).toBe(true);
+		expect(parseMcpCategories([category])).toEqual([category]);
+	});
+
+	test("accepts every server category together and keeps their order", () => {
+		const reversed = [...SERVER_CATEGORIES].reverse();
+		expect(parseMcpCategories(reversed)).toEqual(reversed);
+	});
+
+	test("accepts exactly the categories the server does", () => {
+		// The server silently drops a name it does not know, so a name only the CLI accepts would
+		// install a URL in which that category does nothing.
+		expect([...NEON_MCP_CATEGORIES].sort()).toEqual(
+			[...SERVER_CATEGORIES].sort(),
+		);
+	});
+
+	test.each([
+		"Storage",
+		"neon-auth",
+		"data-api",
+		"snapshot",
+		"function",
+		"endpoint",
+		"all",
+		"",
+	])("rejects %j", (name) => {
+		expect(isMcpCategory(name)).toBe(false);
+		expect(rejection([name])).toContain(`Unknown MCP category: "${name}"`);
+	});
+
+	test("rejects the whole list when one name is unknown", () => {
+		expect(rejection(["storage", "realtime", "nope"])).toContain('"nope"');
+	});
+
+	test("lists every supported category in the rejection", () => {
+		const listed = rejection(["nope"])
+			.split("Supported categories: ")[1]
+			?.split(", ");
+		expect(listed?.sort()).toEqual([...SERVER_CATEGORIES].sort());
 	});
 });
 
