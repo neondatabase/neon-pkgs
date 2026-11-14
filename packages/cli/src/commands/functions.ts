@@ -229,7 +229,9 @@ export const builder = (argv: yargs.Argv) =>
 						branch: { hidden: true },
 					}),
 				async (args) => {
-					const { listTemplates } = await import("./functions_new.js");
+					const { listTemplates } = await import(
+						"./functions_new.js"
+					);
 					await listTemplates(args as any);
 				},
 			),
