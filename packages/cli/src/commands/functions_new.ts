@@ -432,8 +432,7 @@ export const scaffoldFromTemplate = async (
 				cwd: projectRoot,
 				agents: uniqueAgentIds(agents),
 				interactive,
-				packageManager: pm,
-				installPackages: install,
+				installGlobal: options.templateTooling === true || interactive,
 				envFile: resolveEnvFilePath(location),
 				...(options.env ? { env: options.env } : {}),
 				...(options.templateToolingOperations

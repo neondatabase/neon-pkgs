@@ -801,8 +801,7 @@ const executePostScaffold = async (
 				cwd: targetDir,
 				agents: uniqueAgentIds(agents),
 				interactive: !choices.yes,
-				packageManager: choices.pm,
-				installPackages: installed,
+				installGlobal: choices.templateTooling.installGlobal,
 				envFile: join(targetDir, ".env"),
 				...(props.templateToolingOperations
 					? { operations: props.templateToolingOperations }
@@ -834,6 +833,7 @@ const executePostScaffold = async (
 type ChosenTemplateTooling = {
 	trust: TemplateToolingTrust;
 	entries: TemplateToolingEntry[];
+	installGlobal: boolean;
 };
 
 /**
@@ -868,7 +868,11 @@ const chooseTemplateTooling = async (
 			? { pick: props.templateToolingOperations.pick }
 			: {}),
 	});
-	return { trust, entries };
+	return {
+		trust,
+		entries,
+		installGlobal: props.templateTooling === true || mode.interactive,
+	};
 };
 
 /** Agents for the template's tooling when the Neon step installed into none. */

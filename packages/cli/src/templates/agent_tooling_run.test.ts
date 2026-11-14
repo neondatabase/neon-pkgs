@@ -75,6 +75,10 @@ const fakeOps = <T extends Partial<TemplateToolingOperations>>(
 	runAddMcp: vi.fn<TemplateToolingOperations["runAddMcp"]>(async () => ({
 		ok: true,
 	})),
+	globalInstall: vi.fn<TemplateToolingOperations["globalInstall"]>((pkg) => ({
+		command: "npm",
+		args: ["install", "-g", pkg],
+	})),
 	install: vi.fn<TemplateToolingOperations["install"]>(async () => ({
 		ok: true,
 	})),
@@ -96,8 +100,7 @@ const run = (
 		cwd: dir,
 		agents: ["cursor"],
 		interactive: false,
-		packageManager: "pnpm",
-		installPackages: true,
+		installGlobal: true,
 		env: {},
 		...options,
 	});
@@ -193,6 +196,44 @@ describe("selectTemplateTooling", () => {
 			expect.stringContaining("Neon has not reviewed it"),
 			"neondatabase/examples",
 		);
+	});
+
+	it("offers each skill on its own and installs the picked ones per source", async () => {
+		const pick = vi.fn<TemplateToolingOperations["pick"]>(async (entries) =>
+			entries.filter(
+				(entry) =>
+					entry.kind === "skills" &&
+					entry.item.skills[0] !== "ai-sdk-ui",
+			),
+		);
+		const picked = await selectTemplateTooling({
+			...base,
+			tooling: parseTemplateAgentTooling({
+				skills: [
+					{
+						source: "vercel/ai",
+						skills: ["ai-sdk", "ai-sdk-ui", "ai-sdk-rsc"],
+					},
+				],
+			}),
+			trust: "neon",
+			interactive: true,
+			pick,
+		});
+		expect(
+			pick.mock.calls[0]?.[0].map((entry) =>
+				entry.kind === "skills" ? entry.item.skills : [],
+			),
+		).toEqual([["ai-sdk"], ["ai-sdk-ui"], ["ai-sdk-rsc"]]);
+		expect(picked).toEqual([
+			{
+				kind: "skills",
+				item: expect.objectContaining({
+					source: "vercel/ai",
+					skills: ["ai-sdk", "ai-sdk-rsc"],
+				}),
+			},
+		]);
 	});
 
 	it("treats a cancelled picker as nothing selected", async () => {
@@ -513,12 +554,13 @@ describe("runTemplateTooling CLIs", () => {
 		}),
 	);
 
-	it("adds npm CLIs as exact devDependencies once dependencies are installed", async () => {
+	it("installs a confirmed npm CLI globally when it is not on PATH", async () => {
 		const ops = fakeOps();
 		const report = await run(clis, { operations: ops });
+		expect(ops.globalInstall).toHaveBeenCalledWith("inngest-cli@1.4.2");
 		expect(ops.install).toHaveBeenCalledWith(
-			"pnpm",
-			["add", "-D", "-E", "inngest-cli@1.4.2"],
+			"npm",
+			["install", "-g", "inngest-cli@1.4.2"],
 			dir,
 		);
 		expect(report.rows[0]).toMatchObject({
@@ -527,18 +569,57 @@ describe("runTemplateTooling CLIs", () => {
 		});
 	});
 
-	it("leaves npm CLIs in next steps when dependencies were not installed", async () => {
+	it("leaves an npm CLI that is already on PATH alone", async () => {
+		const ops = fakeOps({
+			probe: vi.fn<TemplateToolingOperations["probe"]>((name) =>
+				name === "inngest"
+					? { found: true, version: "1.4.2" }
+					: { found: false },
+			),
+		});
+		const report = await run(clis, { operations: ops });
+		expect(ops.install).not.toHaveBeenCalled();
+		expect(report.rows[0]).toMatchObject({
+			status: "found",
+			detail: "1.4.2",
+		});
+	});
+
+	it("leaves npm CLIs in next steps when the global install was not confirmed", async () => {
 		const ops = fakeOps();
 		const report = await run(clis, {
-			installPackages: false,
+			installGlobal: false,
 			operations: ops,
 		});
 		expect(ops.install).not.toHaveBeenCalled();
 		expect(report.rows[0]).toMatchObject({
 			status: "skipped",
-			detail: "dependencies not installed",
+			detail: "global install not confirmed",
 		});
-		expect(report.next).toContain("pnpm add -D -E inngest-cli@1.4.2");
+		expect(report.next).toContain("npm install -g inngest-cli@1.4.2");
+	});
+
+	it("prints the global install when no package manager can run it, or it fails", async () => {
+		const none = await run(clis, {
+			operations: fakeOps({ globalInstall: () => undefined }),
+		});
+		expect(none.rows[0]).toMatchObject({ status: "skipped" });
+		expect(none.next).toContain("npm install -g inngest-cli@1.4.2");
+
+		const failed = await run(clis, {
+			operations: fakeOps({
+				globalInstall: (pkg: string) => ({
+					command: "pnpm",
+					args: ["add", "-g", pkg],
+				}),
+				install: async () => ({ ok: false, detail: "EACCES" }),
+			}),
+		});
+		expect(failed.rows[0]).toMatchObject({
+			status: "failed",
+			detail: "EACCES",
+		});
+		expect(failed.next).toContain("pnpm add -g inngest-cli@1.4.2");
 	});
 
 	it("checks system CLIs and only prints how to install them", async () => {

@@ -170,7 +170,7 @@
 			"type": "object",
 			"minProperties": 1,
 			"additionalProperties": false,
-			"description": "Coding-agent tooling the CLI sets up in the project after scaffolding. Nothing here is bundled: skills go through the skills CLI and MCP servers through the add-mcp CLI, both run with npx for the agents the user picked; npm CLIs are added as devDependencies with the project's package manager.",
+			"description": "Coding-agent tooling the CLI sets up in the project after scaffolding. Nothing here is bundled: skills go through the skills CLI and MCP servers through the add-mcp CLI, both run with npx for the agents the user picked; npm CLIs are installed globally with npm install -g, only after the user confirms.",
 			"properties": {
 				"skills": {
 					"type": "array",
@@ -372,7 +372,7 @@
 				"npm": {
 					"type": "string",
 					"pattern": "^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*@\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
-					"description": "An exact name@version pin, added as a devDependency with the project's package manager. Agents run it through the project's local runner (pnpm exec, npx --no), never a fetching one."
+					"description": "An exact name@version pin, installed globally with npm install -g when the CLI's name is not already on PATH."
 				},
 				"minVersion": {
 					"type": "string",

@@ -28,9 +28,7 @@ import {
 } from "../skills/run.js";
 import {
 	type CommandResult,
-	formatInstallCommand,
-	installArgs,
-	type PackageManager,
+	globalInstallCommand,
 	runCommandWithDetail,
 } from "../utils/package_manager.js";
 import { writer } from "../writer.js";
@@ -91,8 +89,12 @@ export type TemplateToolingOperations = {
 		cwd: string;
 		env: NodeJS.ProcessEnv;
 	}) => Promise<CommandResult>;
+	/** The global install command for an npm package, or undefined when no manager can do one. */
+	globalInstall: (
+		pkg: string,
+	) => { command: string; args: string[] } | undefined;
 	install: (
-		pm: PackageManager,
+		command: string,
 		args: string[],
 		cwd: string,
 	) => Promise<CommandResult>;
@@ -147,7 +149,7 @@ export const describeTemplateToolingEntry = (
 			const cli = entry.item;
 			const what =
 				cli.kind === "npm"
-					? `CLI, adds ${cli.package} to devDependencies`
+					? `CLI, installs ${cli.package} globally with npm install -g unless \`${cli.name}\` is on PATH`
 					: `CLI, checks \`${cli.name}\` is on PATH${cli.minVersion ? ` at ${cli.minVersion} or newer` : ""}`;
 			return [what, cli.description].filter(Boolean).join(". ");
 		}
@@ -158,26 +160,79 @@ export const describeTemplateToolingEntry = (
 	}
 };
 
+const PICK_MESSAGES: Record<TemplateToolingEntry["kind"], string> = {
+	skills: "Which skills should your coding agents get?",
+	mcp: "Which MCP servers should your coding agents get?",
+	cli: "Which CLIs should be installed?",
+};
+
+/** One multiselect per kind, so each can be taken whole, in part, or not at all. */
 const pickEntries: TemplateToolingOperations["pick"] = async (
 	entries,
 	selected,
 ) => {
-	const answer = await prompts({
-		type: "multiselect",
-		name: "value",
-		message: "Install the agent tooling this template suggests?",
-		hint: "Space to toggle. Enter to confirm.",
-		choices: entries.map((entry, index) => ({
-			title: `${entry.kind}: ${entryName(entry)}`,
-			description: describeTemplateToolingEntry(entry),
-			value: index,
-			selected: selected[index] === true,
-		})),
-		instructions: false,
-	});
-	if (!Array.isArray(answer.value)) return undefined;
-	const chosen = new Set<number>(answer.value);
+	const chosen = new Set<number>();
+	for (const kind of ["skills", "mcp", "cli"] as const) {
+		const indexes = entries.flatMap((entry, index) =>
+			entry.kind === kind ? [index] : [],
+		);
+		if (indexes.length === 0) continue;
+		const answer = await prompts({
+			type: "multiselect",
+			name: "value",
+			message: PICK_MESSAGES[kind],
+			hint: "Space to toggle, a to toggle all, Enter to confirm.",
+			choices: indexes.map((index) => {
+				const entry = entries[index] as TemplateToolingEntry;
+				return {
+					title: entryName(entry),
+					description: describeTemplateToolingEntry(entry),
+					value: index,
+					selected: selected[index] === true,
+				};
+			}),
+			instructions: false,
+		});
+		if (!Array.isArray(answer.value)) return undefined;
+		for (const index of answer.value as number[]) chosen.add(index);
+	}
 	return entries.filter((_entry, index) => chosen.has(index));
+};
+
+/** One entry per skill, so the picker offers each skill on its own. */
+const splitSkills = (
+	entries: readonly TemplateToolingEntry[],
+): TemplateToolingEntry[] =>
+	entries.flatMap((entry): TemplateToolingEntry[] =>
+		entry.kind === "skills"
+			? entry.item.skills.map((skill) => ({
+					kind: "skills",
+					item: { ...entry.item, skills: [skill] },
+				}))
+			: [entry],
+	);
+
+/** Back to one entry per source, so each source is still a single skills CLI run. */
+const joinSkills = (
+	entries: readonly TemplateToolingEntry[],
+): TemplateToolingEntry[] => {
+	const bySource = new Map<string, TemplateSkills>();
+	const joined: TemplateToolingEntry[] = [];
+	for (const entry of entries) {
+		if (entry.kind !== "skills") {
+			joined.push(entry);
+			continue;
+		}
+		const existing = bySource.get(entry.item.source);
+		if (existing) {
+			existing.skills.push(...entry.item.skills);
+			continue;
+		}
+		const item = { ...entry.item, skills: [...entry.item.skills] };
+		bySource.set(item.source, item);
+		joined.push({ kind: "skills", item });
+	}
+	return joined;
 };
 
 const askSecret: TemplateToolingOperations["askSecret"] = async (message) => {
@@ -220,13 +275,14 @@ export const selectTemplateTooling = async (
 				options.origin,
 			);
 		}
+		const choices = splitSkills(entries);
 		const picked = await (options.pick ?? pickEntries)(
-			entries,
-			entries.map(
+			choices,
+			choices.map(
 				(entry) => options.trust === "neon" && entry.item.recommended,
 			),
 		);
-		return picked ?? [];
+		return joinSkills(picked ?? []);
 	}
 	if (recommended.length === 0) return [];
 	if (options.yes && options.trust === "neon") return recommended;
@@ -320,6 +376,7 @@ const probeCli = (name: string, cwd: string): CliProbe => {
 const defaultOperations: TemplateToolingOperations = {
 	runSkills: (options) => runSkillsCli(options),
 	runAddMcp,
+	globalInstall: (pkg) => globalInstallCommand("npm", pkg),
 	install: runCommandWithDetail,
 	probe: probeCli,
 	askSecret,
@@ -329,13 +386,16 @@ const defaultOperations: TemplateToolingOperations = {
 export type RunTemplateToolingOptions = {
 	entries: readonly TemplateToolingEntry[];
 	trust: TemplateToolingTrust;
-	/** The project the tooling is for: skills, MCP configs, and devDependencies land here. */
+	/** The project the tooling is for: skills and MCP configs land here. */
 	cwd: string;
 	agents: readonly AgentType[];
 	interactive: boolean;
-	packageManager: PackageManager;
-	/** False when the user declined installing dependencies; npm CLIs are then left in next steps. */
-	installPackages: boolean;
+	/**
+	 * Whether the user agreed to global installs, by picking npm CLIs in a terminal or passing
+	 * `--template-tooling`. A bare `-y` changes nothing outside the project, so it leaves npm
+	 * CLIs in next steps.
+	 */
+	installGlobal: boolean;
 	/** A dotenv file Neon templates may fill `${NAME}` from. Third-party templates never read it. */
 	envFile?: string;
 	env?: NodeJS.ProcessEnv;
@@ -685,43 +745,57 @@ export const runTemplateTooling = async (
 	const npmClis: TemplateNpmCli[] = options.entries.flatMap((entry) =>
 		entry.kind === "cli" && entry.item.kind === "npm" ? [entry.item] : [],
 	);
-	if (npmClis.length > 0) {
-		const packages = npmClis.map((cli) => cli.package);
-		const command = formatInstallCommand(options.packageManager, packages, {
-			dev: true,
-			exact: true,
-		});
-		let status: TemplateToolingRow["status"] = "skipped";
-		let detail: string | undefined = "dependencies not installed";
-		if (options.installPackages) {
-			log.info(
-				"Installing %s with %s…",
-				packages.join(", "),
-				options.packageManager,
-			);
-			const result = await ops.install(
-				options.packageManager,
-				installArgs(options.packageManager, packages, {
-					dev: true,
-					exact: true,
-				}),
-				options.cwd,
-			);
-			status = result.ok ? "installed" : "failed";
-			detail = result.ok ? undefined : result.detail;
-		}
-		if (status !== "installed") next.push(command);
-		for (const cli of npmClis) {
+	for (const cli of npmClis) {
+		const row = { kind: "cli" as const, name: cli.name, agents: "" };
+		const probe = ops.probe(cli.name, options.cwd);
+		if (probe.found) {
 			rows.push({
-				kind: "cli",
-				name: cli.name,
-				agents: "",
-				status,
-				detail:
-					status === "installed"
-						? cli.package
-						: (detail ?? cli.package),
+				...row,
+				status: "found",
+				...(probe.version ? { detail: probe.version } : {}),
 			});
+			continue;
+		}
+		const manual = `npm install -g ${shellQuote(cli.package)}`;
+		if (!options.installGlobal) {
+			rows.push({
+				...row,
+				status: "skipped",
+				detail: "global install not confirmed",
+			});
+			next.push(manual);
+			continue;
+		}
+		const install = ops.globalInstall(cli.package);
+		if (install === undefined) {
+			rows.push({
+				...row,
+				status: "skipped",
+				detail: "npm, pnpm, or bun is needed for a global install",
+			});
+			next.push(manual);
+			continue;
+		}
+		log.info(
+			"Installing %s globally: %s %s",
+			cli.package,
+			install.command,
+			install.args.join(" "),
+		);
+		const result = await ops.install(
+			install.command,
+			install.args,
+			options.cwd,
+		);
+		rows.push(
+			result.ok
+				? { ...row, status: "installed", detail: cli.package }
+				: { ...row, status: "failed", detail: result.detail },
+		);
+		if (!result.ok) {
+			next.push(
+				[install.command, ...install.args].map(shellQuote).join(" "),
+			);
 		}
 	}
 

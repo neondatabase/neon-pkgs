@@ -8,7 +8,7 @@ CLIs that make it pleasant to work on with a coding agent. `neon bootstrap` and
 | --- | --- |
 | Skills | `npx -y skills@latest add <source> --skill <name>… --agent <id>… -y`, project scope |
 | MCP servers | `npx -y add-mcp@2.6.0 <target> --name <name> -a <id>… -y`, project scope |
-| npm CLIs | `<pm> add -D -E <name>@<version>`, only when the user installed dependencies |
+| npm CLIs | `npm install -g <package>@<version>` when `<name>` is not on PATH, only after the user confirms. pnpm or bun only when npm is missing |
 | System CLIs | `<name> --version` is checked; install hints are printed, never run |
 
 Nothing is bundled. The `add-mcp` pin is the CLI's own `add-mcp` dependency version, and
@@ -41,7 +41,7 @@ agent:
         STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
   cli:
     - name: inngest
-      npm: inngest-cli@1.4.2       # exact pin, added as a devDependency
+      npm: inngest-cli@1.4.2       # exact pin, installed globally unless `inngest` is on PATH
     - name: stripe
       minVersion: 1.21.0
       install: { brew: stripe/stripe-cli/stripe, url: https://docs.stripe.com/stripe-cli }
@@ -82,11 +82,18 @@ parser refuses anything a terminal, a shell, or an agent would interpret:
 
 | Template | Terminal | `-y` / `--default` | `--template-tooling` |
 | --- | --- | --- | --- |
-| Neon's: the default bootstrap manifest with `source.owner: neondatabase`, or a registry entry without `source` | Picker, recommended entries preselected | Installs the recommended entries | Installs the recommended entries |
-| Third-party: a registry `source.github`, any manifest or registry override (`NEON_BOOTSTRAP_MANIFEST_URL`, `NEON_FUNCTION_REGISTRY_*`) | Warning plus picker, nothing preselected | Skipped, with a hint naming the flag | Installs the recommended entries |
+| Neon's: the default bootstrap manifest with `source.owner: neondatabase`, or a registry entry without `source` | Pickers, recommended entries preselected | Installs the recommended skills and MCP servers; prints npm CLI global installs | Installs the recommended entries |
+| Third-party: a registry `source.github`, any manifest or registry override (`NEON_BOOTSTRAP_MANIFEST_URL`, `NEON_FUNCTION_REGISTRY_*`) | Warning plus pickers, nothing preselected | Skipped, with a hint naming the flag | Installs the recommended entries |
 
-`--no-template-tooling` skips it everywhere. The picker shows what each entry runs or writes:
-the skills source, the MCP URL or full command, and the variables it needs.
+`--no-template-tooling` skips it everywhere. A terminal asks three separate questions, skipping
+any kind the template has none of: which skills (one choice per skill, regrouped per source so
+each source is still one skills CLI run), which MCP servers, and which CLIs. Each choice shows
+what it runs or writes: the skills source, the MCP URL or full command, the variables it needs,
+and for an npm CLI the global install. `a` toggles a whole list.
+
+A global install changes the machine, not the project, so it needs a decision the user made
+for this run: picking the CLI in a terminal, or `--template-tooling`. `-y` alone leaves it as a
+next step.
 
 ## Secrets
 
