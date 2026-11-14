@@ -26,6 +26,7 @@ export type {
 	RawLiveQueryUpdate,
 	RealtimeClient,
 	RealtimeClientOptions,
+	RealtimeConnectionState,
 	RealtimeLogEntry,
 	RealtimeLogEvent,
 	RealtimeLogger,

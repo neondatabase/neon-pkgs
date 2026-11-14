@@ -72,6 +72,10 @@ export interface RealtimeLogEventDefinition {
 		readonly level: "debug";
 		readonly metadata: object;
 	};
+	readonly connection_listener_failed: {
+		readonly level: "warn";
+		readonly metadata: { readonly error: unknown };
+	};
 	readonly connection_lost: {
 		readonly level: "warn";
 		readonly metadata: {
@@ -278,6 +282,39 @@ export type LiveQueryState =
 			readonly error: LiveQueryError;
 	  };
 
+/** Lifecycle state of the WebSocket connection a client shares. */
+export type RealtimeConnectionState =
+	| {
+			/**
+			 * Current non-error connection status.
+			 *
+			 * `idle` means no connection is open because no subscription needs
+			 * one: before the first subscription, or after the last one ends.
+			 * `connecting` means the client is opening a connection and no
+			 * attempt has failed yet, and `connected` means it is ready. `reconnecting` means
+			 * an attempt failed or an open connection was lost, and the client
+			 * is retrying with backoff while its subscriptions are
+			 * `connecting`. `closed` means `close()` was called.
+			 */
+			readonly status:
+				| "idle"
+				| "connecting"
+				| "connected"
+				| "reconnecting"
+				| "closed";
+			/** Non-error states never carry an error. */
+			readonly error: undefined;
+	  }
+	| {
+			/**
+			 * Indicates that automatic recovery has stopped. Every subscription
+			 * has failed, and new subscriptions fail immediately.
+			 */
+			readonly status: "error";
+			/** Failure that stopped the connection. */
+			readonly error: LiveQueryError;
+	  };
+
 /**
  * Materialized query rows paired with their atomic lifecycle state.
  *
@@ -400,19 +437,25 @@ export interface RawLiveQuerySubscription<Row> {
 	 */
 	onStateChange(listener: (state: LiveQueryState) => void): () => void;
 	/**
-	 * Wait until this subscription has applied a PostgreSQL transaction.
+	 * Wait until this subscription has applied a state that includes a
+	 * PostgreSQL transaction, whether or not the transaction changed this
+	 * query's rows.
 	 *
-	 * Recently applied transaction IDs are retained so this also succeeds when
-	 * the batch arrives before the caller receives the mutation response.
+	 * It resolves when the subscription applies a change batch carrying the
+	 * transaction, or a result or progress update whose MVCC snapshot shows
+	 * it as visible. Recently applied transaction IDs are retained so this
+	 * also succeeds when the batch arrives before the caller receives the
+	 * mutation response.
 	 *
 	 * @remarks
 	 * This does not determine whether a transaction committed, so pass only IDs
-	 * from transactions known to have committed.
+	 * from transactions known to have committed. The wait continues through
+	 * reconnects, capability expiry, and renewal, so pass a timeout.
 	 *
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
 	 * @param timeout - Optional maximum wait in milliseconds. By default the
-	 * promise remains pending until the transaction arrives, the subscription
-	 * fails, or the subscription closes.
+	 * promise remains pending until the subscription applies the transaction,
+	 * fails, or closes.
 	 * @throws If the timeout elapses, the transaction ID is invalid, or the
 	 * subscription fails or closes before applying the transaction.
 	 */
@@ -480,6 +523,11 @@ export interface RealtimeClientOptions {
 	 * This is primarily useful in runtimes such as React Native, whose
 	 * WebSocket constructor accepts platform-specific connection options. In
 	 * browsers, omit this option to use the built-in WebSocket constructor.
+	 *
+	 * In Node.js, supply a `ws` socket. Node's built-in WebSocket waits for
+	 * the server to close the TCP connection after `close()` and cannot be
+	 * terminated, which can keep the process alive. The client terminates a
+	 * `ws` socket whose close handshake has not finished within one second.
 	 */
 	readonly webSocketFactory?: WebSocketFactory;
 	/**
@@ -534,6 +582,32 @@ export interface RealtimeClient {
 		query: SealedLiveQuery<Row>,
 		options: RawLiveQueryOptions,
 	): RawLiveQuerySubscription<Row>;
-	/** Permanently close all subscriptions and the underlying WebSocket. */
+	/**
+	 * Return the current state of the connection shared by all subscriptions.
+	 *
+	 * The returned object is immutable and keeps its identity until the state
+	 * changes.
+	 */
+	getConnectionState(): RealtimeConnectionState;
+	/**
+	 * Observe connection state transitions.
+	 *
+	 * The listener runs from a microtask after a transition and receives the
+	 * latest state, so it cannot interrupt connection handling. Read the
+	 * current state with {@link RealtimeClient.getConnectionState} when
+	 * registering. Listeners are removed after the `closed` state is
+	 * delivered.
+	 *
+	 * @returns A function that removes this listener.
+	 */
+	onConnectionStateChange(
+		listener: (state: RealtimeConnectionState) => void,
+	): () => void;
+	/**
+	 * Permanently close all subscriptions and the underlying WebSocket.
+	 *
+	 * In Node.js, use a `ws` socket so the process can exit afterwards; see
+	 * {@link RealtimeClientOptions.webSocketFactory}.
+	 */
 	close(): void;
 }
