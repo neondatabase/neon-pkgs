@@ -4,7 +4,7 @@ import pkg from "../pkg.js";
 
 const TELEMETRY_BLOCKERS = ["DISABLE_TELEMETRY", "DO_NOT_TRACK"] as const;
 
-export type SkillsMetadataCommand = "skills";
+export type SkillsMetadataCommand = "skills" | "template";
 
 export const skillsMetadata = (command: SkillsMetadataCommand): string =>
 	JSON.stringify({
@@ -172,12 +172,13 @@ export type SkillsRunResult = {
 export const runSkillsCli = async (options: {
 	args: readonly string[];
 	cwd: string;
+	env?: NodeJS.ProcessEnv;
 }): Promise<SkillsRunResult> => {
 	assertSkillsNode();
 	try {
 		const result = await execa("npx", options.args, {
 			cwd: options.cwd,
-			env: skillsChildEnv(),
+			env: options.env ?? skillsChildEnv(),
 			// extendEnv would copy DISABLE_TELEMETRY / DO_NOT_TRACK back in.
 			extendEnv: false,
 			stdio: "pipe",

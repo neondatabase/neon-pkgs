@@ -467,7 +467,7 @@ so "reach into an internal" is not a thing it can do.
 
 - `--help` lists every value an enum flag accepts (`--skill`, `--category`, supported agent names).
 - `-y` / `--yes` / `--default` is the non-interactive path. If it cannot decide, the error names the flag (and values) to pass. `neon link` with no project: pass `--project-id <id>`. `neon skills -y` with no agent: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
-- Every command exposes flags for every interactive question so it can run with no TTY (`--agent`, `--project-id`, `--skill`, `--global`, `--oauth`, `--project`, `--no-agent-setup`, …). Coding-agent targeting is `--agent <name>` on `skills`, `plugins`, `mcp`, `init`, and `bootstrap`; init Recommended detection is global config, project folders, and the host CLI. `init` may install the plugin and skills/MCP in one run; `bootstrap` still refuses that mix. `link` has no `--agent`.
+- Every command exposes flags for every interactive question so it can run with no TTY (`--agent`, `--project-id`, `--skill`, `--global`, `--oauth`, `--project`, `--no-agent-setup`, …). Coding-agent targeting is `--agent <name>` on `skills`, `plugins`, `mcp`, `init`, `bootstrap`, and `functions new`; init Recommended detection is global config, project folders, and the host CLI. `init` may install the plugin and skills/MCP in one run; `bootstrap` still refuses that mix. `link` has no `--agent`.
 
 #### Staging-only features
 

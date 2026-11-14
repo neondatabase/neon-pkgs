@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
 	allowGithubTemplateSources,
+	allowTemplateAgentTooling,
 	parseRegistryIndex,
+	parseTemplateItem,
 	type RegistryIndexDocument,
 	remoteSourceJsonSchema,
 	type SchemaValidate,
+	type TemplateDocument,
 } from "./registry";
 
 const permissive: SchemaValidate<RegistryIndexDocument> = {
@@ -92,5 +95,60 @@ describe("parseRegistryIndex source", () => {
 				field,
 			);
 		}
+	});
+});
+
+describe("template agent tooling", () => {
+	const anyTemplate: SchemaValidate<TemplateDocument> = {
+		check: (data): data is TemplateDocument => true,
+		errorsText: () => "",
+	};
+	const template = (agent: unknown) =>
+		JSON.stringify({
+			id: "stripe",
+			title: "Stripe",
+			description: "d",
+			layout: "router",
+			agent,
+		});
+
+	it("admits agent in a published schema that closes its properties", () => {
+		const published = {
+			additionalProperties: false,
+			properties: { id: { type: "string" } },
+		};
+		expect(allowTemplateAgentTooling(published)).toEqual({
+			additionalProperties: false,
+			properties: { id: { type: "string" }, agent: { type: "object" } },
+		});
+		expect(published.properties).not.toHaveProperty("agent");
+	});
+
+	it("parses a valid agent block onto the template", () => {
+		const parsed = parseTemplateItem(
+			template({
+				mcp: [{ name: "stripe", url: "https://mcp.stripe.com" }],
+			}),
+			anyTemplate,
+		);
+		expect(parsed.agent?.mcp[0]).toMatchObject({
+			kind: "remote",
+			name: "stripe",
+		});
+	});
+
+	it("rejects the template when its agent block is invalid", () => {
+		expect(() =>
+			parseTemplateItem(
+				template({ mcp: [{ name: "Neon", url: "https://x.dev" }] }),
+				anyTemplate,
+			),
+		).toThrow(/Invalid template.json for "stripe": agent.mcp\[0\].name/);
+	});
+
+	it("leaves templates without an agent block unchanged", () => {
+		expect(
+			parseTemplateItem(template(undefined), anyTemplate),
+		).not.toHaveProperty("agent");
 	});
 });

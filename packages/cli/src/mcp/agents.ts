@@ -74,6 +74,13 @@ export function agentSupportsHttpMcp(id: AgentType): boolean {
 	return agents[id].supportedTransports.includes("http");
 }
 
+export function agentSupportsTransport(
+	id: AgentType,
+	transport: "stdio" | "http" | "sse",
+): boolean {
+	return agents[id].supportedTransports.includes(transport);
+}
+
 export function tryResolveAddMcpAgentId(
 	rawAgent: string,
 ): AgentType | undefined {

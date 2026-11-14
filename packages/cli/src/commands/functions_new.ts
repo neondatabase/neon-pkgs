@@ -21,7 +21,10 @@ import {
 } from "../functions/scaffold.js";
 import {
 	describeRegistrySources,
+	GITHUB_RAW_ENV,
 	openRegistry,
+	REGISTRY_DIR_ENV,
+	REGISTRY_URL_ENV,
 	type Registry,
 } from "../functions/source.js";
 import {
@@ -29,8 +32,23 @@ import {
 	type InitDoneRow,
 	printInitDone,
 } from "../init/chrome.js";
+import { detectAgent } from "../init/detect_host.js";
+import { resolveNamedAgents } from "../init/plan.js";
 import { log } from "../log.js";
+import {
+	type AgentType,
+	detectProjectAgents,
+	uniqueAgentIds,
+} from "../mcp/agents.js";
 import { projectConfigPath, projectDir } from "../project.js";
+import {
+	reportTemplateTooling,
+	runTemplateTooling,
+	selectTemplateTooling,
+	type TemplateToolingOperations,
+	type TemplateToolingReport,
+	type TemplateToolingTrust,
+} from "../templates/agent_tooling_run.js";
 import type { BranchScopeProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
@@ -65,6 +83,7 @@ const NEW_FUNCTION_FIELDS = [
 	"installed",
 	"environment",
 	"env_example",
+	"agent_tooling",
 	"next_steps",
 ] as const;
 
@@ -85,6 +104,16 @@ export type ScaffoldFromTemplateOptions = {
 	registry?: Registry;
 	interactive: boolean;
 	run?: typeof runCommandWithDetail;
+	/** `--yes`: install a Neon template's recommended agent tooling. */
+	yes?: boolean;
+	/** `--template-tooling`: install the suggested agent tooling without asking (false skips it). */
+	templateTooling?: boolean;
+	/** Coding agents for the template's skills and MCP servers; detected when empty. */
+	agents?: readonly AgentType[];
+	templateToolingOperations?: Partial<TemplateToolingOperations>;
+	detectProjectAgents?: (cwd: string) => readonly AgentType[];
+	detectAgent?: () => AgentType | null;
+	env?: NodeJS.ProcessEnv;
 };
 
 export type ScaffoldedFunction = Pick<
@@ -116,6 +145,7 @@ export type ScaffoldFromTemplateResult =
 			install: "installed" | "failed" | "skipped";
 			environment: string[];
 			envExample?: { path: string; added: string[] };
+			agentTooling?: TemplateToolingReport;
 			nextSteps: string[];
 			next: string[];
 	  };
@@ -123,12 +153,39 @@ export type ScaffoldFromTemplateResult =
 export type NewFunctionProps = OutputProps &
 	Omit<
 		ScaffoldFromTemplateOptions,
-		"template" | "operations" | "cwd" | "registry" | "interactive" | "run"
+		| "template"
+		| "operations"
+		| "cwd"
+		| "registry"
+		| "interactive"
+		| "run"
+		| "agents"
+		| "detectProjectAgents"
+		| "detectAgent"
+		| "env"
 	> & {
 		template?: string;
 		operation?: string[];
-		yes?: boolean;
+		agent?: string[];
 	};
+
+const REGISTRY_OVERRIDES = [
+	REGISTRY_DIR_ENV,
+	REGISTRY_URL_ENV,
+	GITHUB_RAW_ENV,
+] as const;
+
+/**
+ * Neon's own registry entries are Neon's. An entry loaded from another repository is not,
+ * and neither is anything once the registry location is overridden.
+ */
+export const functionTemplateTrust = (
+	entry: RegistryIndexEntry,
+	env: NodeJS.ProcessEnv = process.env,
+): TemplateToolingTrust =>
+	entry.source === undefined && REGISTRY_OVERRIDES.every((name) => !env[name])
+		? "neon"
+		: "third-party";
 
 const structured = (props: OutputProps) =>
 	props.output === "json" || props.output === "yaml";
@@ -339,6 +396,53 @@ export const scaffoldFromTemplate = async (
 		}
 	}
 
+	let agentTooling: TemplateToolingReport | undefined;
+	if (template.agent !== undefined) {
+		const trust = functionTemplateTrust(entry, options.env);
+		const entries = await selectTemplateTooling({
+			tooling: template.agent,
+			trust,
+			origin: entry.source
+				? `${entry.source.github.owner}/${entry.source.github.repo}`
+				: describeRegistrySources(registry.sources),
+			...(options.templateTooling !== undefined
+				? { flag: options.templateTooling }
+				: {}),
+			yes: options.yes === true,
+			interactive,
+			...(options.templateToolingOperations?.pick
+				? { pick: options.templateToolingOperations.pick }
+				: {}),
+		});
+		if (entries.length > 0) {
+			const host = (options.detectAgent ?? detectAgent)();
+			const agents =
+				options.agents && options.agents.length > 0
+					? options.agents
+					: [
+							...(
+								options.detectProjectAgents ??
+								detectProjectAgents
+							)(projectRoot),
+							...(host ? [host] : []),
+						];
+			agentTooling = await runTemplateTooling({
+				entries,
+				trust,
+				cwd: projectRoot,
+				agents: uniqueAgentIds(agents),
+				interactive,
+				packageManager: pm,
+				installPackages: install,
+				envFile: resolveEnvFilePath(location),
+				...(options.env ? { env: options.env } : {}),
+				...(options.templateToolingOperations
+					? { operations: options.templateToolingOperations }
+					: {}),
+			});
+		}
+	}
+
 	const cli = getCliName();
 	const functions = plan.functions.map((fn) => ({
 		slug: fn.slug,
@@ -384,6 +488,10 @@ export const scaffoldFromTemplate = async (
 		nextSteps.push(
 			`Routes: ${plan.routes.join(", ")}. Other paths return 404.`,
 		);
+	}
+	for (const command of agentTooling?.next ?? []) {
+		nextSteps.push(`Agent tooling: \`${command}\``);
+		next.push(command);
 	}
 	if (register) {
 		const flag = options.config ? ` --config ${options.config}` : "";
@@ -447,6 +555,7 @@ export const scaffoldFromTemplate = async (
 					},
 				}
 			: {}),
+		...(agentTooling ? { agentTooling } : {}),
 		nextSteps,
 		next,
 	};
@@ -497,6 +606,15 @@ export const formatNewFunctionDone = (result: ScaffoldedTemplate): string => {
 		});
 	} else if (result.environment.length > 0) {
 		rows.push({ label: "Env", value: result.environment.join(", ") });
+	}
+	if (result.agentTooling && result.agentTooling.rows.length > 0) {
+		const installed = result.agentTooling.rows.filter(
+			(row) => row.status === "installed" || row.status === "found",
+		).length;
+		rows.push({
+			label: "Agent tooling",
+			value: `${installed} of ${result.agentTooling.rows.length} ready`,
+		});
 	}
 	return formatInitDone({
 		heading:
@@ -566,6 +684,14 @@ export const handleNew = async (props: NewFunctionProps): Promise<void> => {
 		contextFile: props.contextFile,
 		registry,
 		interactive,
+		yes: props.yes === true,
+		...(props.templateTooling !== undefined
+			? { templateTooling: props.templateTooling }
+			: {}),
+		agents: resolveNamedAgents(props.agent ?? []),
+		...(props.templateToolingOperations
+			? { templateToolingOperations: props.templateToolingOperations }
+			: {}),
 	});
 	if (result.cancelled) {
 		log.info("Cancelled; no files were changed.");
@@ -588,6 +714,7 @@ export const handleNew = async (props: NewFunctionProps): Promise<void> => {
 				installed: result.installed,
 				environment: result.environment,
 				env_example: result.envExample ?? null,
+				agent_tooling: result.agentTooling?.rows ?? [],
 				next_steps: result.nextSteps,
 			},
 			{ fields: NEW_FUNCTION_FIELDS },
@@ -595,5 +722,11 @@ export const handleNew = async (props: NewFunctionProps): Promise<void> => {
 		return;
 	}
 
+	if (result.agentTooling) {
+		reportTemplateTooling(props.output, {
+			rows: result.agentTooling.rows,
+			next: [],
+		});
+	}
 	printInitDone(formatNewFunctionDone(result));
 };

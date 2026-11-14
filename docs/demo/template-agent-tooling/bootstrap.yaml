@@ -1,0 +1,17 @@
+templates:
+  - id: ai-sdk
+    title: Image-generation agent
+    source: { owner: neondatabase, repo: examples, ref: main, subdir: with-ai-sdk }
+    agent:
+      skills:
+        - source: vercel/ai
+          skills: [ai-sdk]
+      mcp:
+        - name: context7
+          url: https://mcp.context7.com/mcp
+          headers:
+            CONTEXT7_API_KEY: ${CONTEXT7_API_KEY}
+        - name: exa
+          url: https://mcp.exa.ai/mcp
+          headers:
+            x-api-key: ${EXA_API_KEY}

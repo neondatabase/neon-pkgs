@@ -19,7 +19,11 @@ import {
 	skillsInstallError,
 } from "../commands/skills.js";
 import { log } from "../log.js";
-import { type AgentType, detectProjectAgents } from "../mcp/agents.js";
+import {
+	type AgentType,
+	detectProjectAgents,
+	tryResolveAddMcpAgentId,
+} from "../mcp/agents.js";
 import { CannotMintApiKeyError } from "../mcp/mint.js";
 import type { CommonProps } from "../types.js";
 import {
@@ -82,6 +86,8 @@ export type AgentToolingOptions = AgentDetectors & {
 	agentSetup?: InitAgentSetup;
 	command?: "init" | "bootstrap";
 	narrate?: "command" | "human";
+	/** Receives the agents each step installed into, including ones picked interactively. */
+	onAgents?: (agents: readonly AgentType[]) => void;
 };
 
 const defaultProjectAgents = (cwd: string): readonly AgentType[] =>
@@ -154,8 +160,14 @@ export const runToolingSteps = async (
 		allowAgentSkip?: boolean;
 		/** Set when MCP auth was not chosen by the user, so OAuth may stand in for a key the credential cannot mint. */
 		mcpOauthFallback?: boolean;
+		onAgents?: (agents: readonly AgentType[]) => void;
 	},
 ): Promise<ToolingStep["kind"][]> => {
+	const reportAgents = (names: readonly string[]) => {
+		options.onAgents?.(
+			names.flatMap((name) => tryResolveAddMcpAgentId(name) ?? []),
+		);
+	};
 	const ops: ToolingOperations = {
 		installPlugins,
 		installSkills,
@@ -198,6 +210,7 @@ export const runToolingSteps = async (
 						}),
 					);
 					reportPluginsInstall(reportProps, outcome);
+					reportAgents(outcome.rows.map((row) => row.agent));
 					const error = pluginsInstallError(outcome);
 					if (error) throw error;
 					break;
@@ -210,6 +223,7 @@ export const runToolingSteps = async (
 						}),
 					);
 					reportSkillsInstall(reportProps, outcome);
+					reportAgents(outcome.agents);
 					const error = skillsInstallError(outcome);
 					if (error) throw error;
 					break;
@@ -238,6 +252,7 @@ export const runToolingSteps = async (
 						outcome = await install(true);
 					}
 					reportMcpInstall(reportProps, outcome);
+					reportAgents(outcome.rows.map((row) => row.agent));
 					const error = mcpInstallError(outcome);
 					if (error) throw error;
 					break;

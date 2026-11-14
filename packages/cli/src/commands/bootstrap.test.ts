@@ -735,6 +735,125 @@ describe("bootstrap", () => {
 		);
 	});
 
+	test("-y installs a Neon template's agent tooling into the agents the Neon step used", async () => {
+		const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+		const previousCodeload = process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD;
+		const previousCi = process.env.CI;
+		process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD = base;
+		process.env.CI = "true";
+		const { handler } = await import("./bootstrap.js");
+		const { parseTemplateAgentTooling } = await import(
+			"../templates/agent_tooling.js"
+		);
+		const installPlugins = vi.fn().mockResolvedValue({
+			rows: [
+				{
+					scope: "user",
+					plugin: "neon",
+					agent: "cursor",
+					status: "installed",
+				},
+			],
+			failed: [],
+		});
+		const runAddMcp = vi.fn().mockResolvedValue({ ok: true });
+		const runSkills = vi.fn().mockResolvedValue({});
+		try {
+			await handler({
+				apiClient: {} as never,
+				apiKey: "test-key",
+				apiHost: "https://console.neon.tech/api/v2",
+				output: "table",
+				contextFile: join(dest, ".neon"),
+				directory: dest,
+				force: true,
+				listTemplates: false,
+				default: true,
+				install: false,
+				git: false,
+				link: false,
+				analytics: false,
+				printBanner: false,
+				skipDoneSummary: true,
+				detectProjectAgents: () => ["cursor"],
+				detectAgent: () => null,
+				hasProjectPlugins: async () => true,
+				operations: { installPlugins },
+				templateToolingOperations: { runAddMcp, runSkills },
+				selectedTemplate: {
+					id: "hono",
+					title: "REST API",
+					description: "d",
+					requires: ["database"],
+					source: {
+						owner: "neondatabase",
+						repo: "examples",
+						ref: "main",
+						subdir: "with-hono",
+					},
+					agent: parseTemplateAgentTooling({
+						mcp: [
+							{
+								name: "docs",
+								url: "https://mcp.example.com/mcp",
+							},
+							{
+								name: "extra",
+								url: "https://extra.example.com/mcp",
+								recommended: false,
+							},
+						],
+					}),
+				},
+			});
+		} finally {
+			if (previousCodeload === undefined) {
+				delete process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD;
+			} else {
+				process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD = previousCodeload;
+			}
+			if (previousCi === undefined) {
+				delete process.env.CI;
+			} else {
+				process.env.CI = previousCi;
+			}
+		}
+
+		expect(installPlugins).toHaveBeenCalled();
+		expect(runAddMcp).toHaveBeenCalledTimes(1);
+		expect(runAddMcp.mock.calls[0]?.[0]).toMatchObject({
+			cwd: dest,
+			args: expect.arrayContaining([
+				"https://mcp.example.com/mcp",
+				"-a",
+				"cursor",
+			]),
+		});
+	});
+
+	test("trusts only Neon-owned templates from the default manifest", async () => {
+		const { bootstrapTemplateTrust } = await import("./bootstrap.js");
+		const template = (owner: string): BootstrapTemplate => ({
+			id: "x",
+			title: "X",
+			description: "d",
+			requires: ["database"],
+			source: { owner, repo: "examples", ref: "main", subdir: "x" },
+		});
+		expect(bootstrapTemplateTrust(template("neondatabase"), {})).toBe(
+			"neon",
+		);
+		expect(bootstrapTemplateTrust(template("acme"), {})).toBe(
+			"third-party",
+		);
+		expect(
+			bootstrapTemplateTrust(template("neondatabase"), {
+				NEON_BOOTSTRAP_MANIFEST_URL:
+					"https://evil.example/manifest.yaml",
+			}),
+		).toBe("third-party");
+	});
+
 	test("--list-templates does not record a scaffolded template", async () => {
 		const base = `http://localhost:${(server.address() as AddressInfo).port}`;
 		const previousManifest = process.env.NEON_BOOTSTRAP_MANIFEST_URL;

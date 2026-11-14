@@ -1,3 +1,9 @@
+import {
+	parseTemplateAgentTooling,
+	type TemplateAgentTooling,
+	TemplateToolingError,
+} from "../templates/agent_tooling.js";
+
 const MAX_PATH_LENGTH = 255;
 export const MAX_FILE_BYTES = 256 * 1024;
 export const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
@@ -42,6 +48,8 @@ export type FunctionTemplate = {
 	dependencies: string[];
 	environment: FunctionTemplateEnvironment[];
 	operations?: FunctionTemplateOperation[];
+	/** Skills, MCP servers, and CLIs the template suggests for coding agents. */
+	agent?: TemplateAgentTooling;
 };
 
 export const GITHUB_OWNER_PATTERN =
@@ -91,6 +99,20 @@ export const allowGithubTemplateSources = (schema: object): object => {
 	return clone;
 };
 
+/**
+ * The published template schema predates `agent` and closes its properties, so the CLI
+ * admits the field and validates it in {@link parseTemplateAgentTooling} instead.
+ */
+export const allowTemplateAgentTooling = (schema: object): object => {
+	const clone = structuredClone(schema) as {
+		properties?: Record<string, unknown>;
+	};
+	if (clone.properties && clone.properties.agent === undefined) {
+		clone.properties.agent = { type: "object" };
+	}
+	return clone;
+};
+
 export type SchemaValidate<T> = {
 	check(data: unknown): data is T;
 	errorsText(): string;
@@ -107,10 +129,11 @@ export type RegistryIndexDocument = {
 
 export type TemplateDocument = Omit<
 	FunctionTemplate,
-	"dependencies" | "environment"
+	"dependencies" | "environment" | "agent"
 > & {
 	dependencies?: string[];
 	environment?: FunctionTemplateEnvironment[];
+	agent?: unknown;
 };
 
 function assertValid<T>(
@@ -241,6 +264,17 @@ export const parseTemplateItem = (
 			? operation
 			: { ...operation, route: operation.route ?? `/${operation.id}` };
 	});
+	let agent: TemplateAgentTooling | undefined;
+	if (data.agent !== undefined) {
+		try {
+			agent = parseTemplateAgentTooling(data.agent);
+		} catch (error) {
+			if (!(error instanceof TemplateToolingError)) throw error;
+			throw new Error(
+				`Invalid template.json for "${data.id}": ${error.message}`,
+			);
+		}
+	}
 	return {
 		id: data.id,
 		...(data.provider ? { provider: data.provider } : {}),
@@ -250,5 +284,6 @@ export const parseTemplateItem = (
 		dependencies: data.dependencies ?? [],
 		environment: data.environment ?? [],
 		...(operations ? { operations } : {}),
+		...(agent ? { agent } : {}),
 	};
 };

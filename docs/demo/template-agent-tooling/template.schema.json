@@ -1,0 +1,464 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://neon.com/functions/registry/schemas/template.schema.json",
+	"title": "Neon Function Registry template",
+	"type": "object",
+	"required": [
+		"id",
+		"title",
+		"description",
+		"layout"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"$schema": {
+			"type": "string"
+		},
+		"id": {
+			"type": "string",
+			"pattern": "^[a-z0-9][a-z0-9-]*$"
+		},
+		"provider": {
+			"type": "string"
+		},
+		"title": {
+			"type": "string",
+			"minLength": 1
+		},
+		"description": {
+			"type": "string",
+			"minLength": 1
+		},
+		"categories": {
+			"type": "array",
+			"minItems": 1,
+			"maxItems": 16,
+			"uniqueItems": true,
+			"items": {
+				"type": "string",
+				"minLength": 1,
+				"maxLength": 64,
+				"pattern": "^[a-z0-9][a-z0-9-]*$"
+			},
+			"description": "Display-only topical labels, e.g. ai and bots. The source label (first-party, partner, or community) goes in the index entry, not here."
+		},
+		"layout": {
+			"enum": [
+				"router",
+				"separate"
+			],
+			"description": "router generates one function that dispatches on URL path; separate deploys each operation as its own function."
+		},
+		"dependencies": {
+			"type": "array",
+			"items": {
+				"type": "string",
+				"pattern": "^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*@\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+				"description": "An exact name@version pin."
+			}
+		},
+		"environment": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": [
+					"name",
+					"description"
+				],
+				"additionalProperties": false,
+				"properties": {
+					"name": {
+						"type": "string",
+						"pattern": "^[A-Z_][A-Z0-9_]*$"
+					},
+					"description": {
+						"type": "string"
+					},
+					"required": {
+						"description": "Written as the variable's required in neon.ts. true (the default) fails neon deploy and neon dev while it is unset; false lets both run without it; \"default-branch\" requires it only when deploying the project's default branch.",
+						"oneOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"const": "default-branch"
+							}
+						]
+					}
+				}
+			}
+		},
+		"operations": {
+			"type": "array",
+			"minItems": 1,
+			"maxItems": 40,
+			"items": {
+				"type": "object",
+				"required": [
+					"id",
+					"title",
+					"description",
+					"source",
+					"recommended"
+				],
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[a-z0-9][a-z0-9-]*$"
+					},
+					"title": {
+						"type": "string",
+						"minLength": 1
+					},
+					"description": {
+						"type": "string",
+						"minLength": 1
+					},
+					"source": {
+						"type": "string",
+						"maxLength": 255,
+						"description": "Module path relative to this template.json."
+					},
+					"route": {
+						"type": "string",
+						"pattern": "^\\/[A-Za-z0-9\\-._~/]*$",
+						"description": "Router layout: the URL path. Defaults to /<id>."
+					},
+					"slug": {
+						"type": "string",
+						"pattern": "^[a-z0-9]{1,20}$",
+						"description": "Separate layout: the Neon function slug."
+					},
+					"recommended": {
+						"type": "boolean"
+					}
+				}
+			}
+		},
+		"agent": {
+			"$ref": "#/$defs/agent"
+		}
+	},
+	"allOf": [
+		{
+			"if": {
+				"properties": {
+					"layout": {
+						"const": "separate"
+					}
+				}
+			},
+			"then": {
+				"required": [
+					"operations"
+				],
+				"properties": {
+					"operations": {
+						"items": {
+							"required": [
+								"slug"
+							]
+						}
+					}
+				}
+			}
+		}
+	],
+	"$defs": {
+		"agent": {
+			"type": "object",
+			"minProperties": 1,
+			"additionalProperties": false,
+			"description": "Coding-agent tooling the CLI sets up in the project after scaffolding. Nothing here is bundled: skills go through the skills CLI and MCP servers through the add-mcp CLI, both run with npx for the agents the user picked; npm CLIs are added as devDependencies with the project's package manager.",
+			"properties": {
+				"skills": {
+					"type": "array",
+					"minItems": 1,
+					"maxItems": 10,
+					"items": {
+						"$ref": "#/$defs/skillSource"
+					}
+				},
+				"mcp": {
+					"type": "array",
+					"minItems": 1,
+					"maxItems": 10,
+					"items": {
+						"$ref": "#/$defs/mcpServer"
+					}
+				},
+				"cli": {
+					"type": "array",
+					"minItems": 1,
+					"maxItems": 10,
+					"items": {
+						"$ref": "#/$defs/cliTool"
+					}
+				}
+			}
+		},
+		"skillSource": {
+			"type": "object",
+			"required": [
+				"source",
+				"skills"
+			],
+			"additionalProperties": false,
+			"properties": {
+				"source": {
+					"type": "string",
+					"maxLength": 255,
+					"pattern": "^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?/(?!\\.\\.?$)[A-Za-z0-9._-]{1,100}|https://[A-Za-z0-9.-]+(?::\\d{1,5})?(?:/[A-Za-z0-9._~-]+)+/?)$",
+					"description": "Passed to `skills add`: owner/repo or an https Git URL. Local paths are not allowed."
+				},
+				"skills": {
+					"type": "array",
+					"minItems": 1,
+					"uniqueItems": true,
+					"items": {
+						"type": "string",
+						"pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+					},
+					"description": "Skill names inside source, each passed as --skill.",
+					"maxItems": 20
+				},
+				"recommended": {
+					"type": "boolean",
+					"default": true,
+					"description": "false leaves it unchecked in the picker and skips it under -y."
+				}
+			}
+		},
+		"mcpServer": {
+			"type": "object",
+			"required": [
+				"name"
+			],
+			"additionalProperties": false,
+			"description": "A remote server (url) or a local stdio server (command), never both.",
+			"properties": {
+				"name": {
+					"type": "string",
+					"pattern": "^(?![Nn][Ee][Oo][Nn]$)[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+					"description": "Key written into each agent's MCP config. neon is reserved: neon init and neon mcp own that entry."
+				},
+				"description": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 200
+				},
+				"recommended": {
+					"type": "boolean",
+					"default": true,
+					"description": "false leaves it unchecked in the picker and skips it under -y."
+				},
+				"url": {
+					"type": "string",
+					"format": "uri",
+					"pattern": "^https://[^\\s$/@]+(?:/[^\\s$]*)?$",
+					"maxLength": 2048,
+					"description": "Remote server endpoint. No credentials in the URL and no $: agents expand ${...} in their configs."
+				},
+				"transport": {
+					"enum": [
+						"http",
+						"sse"
+					],
+					"default": "http",
+					"description": "Remote servers only."
+				},
+				"headers": {
+					"$ref": "#/$defs/headerMap",
+					"description": "Remote servers only. Each is passed as --header 'Key: Value'."
+				},
+				"command": {
+					"type": "array",
+					"minItems": 2,
+					"maxItems": 32,
+					"prefixItems": [
+						{
+							"pattern": "^[a-z][a-z0-9._-]{0,63}$",
+							"description": "A bare executable on PATH, such as npx or uvx."
+						},
+						{
+							"pattern": "^[^\\s]+$",
+							"description": "add-mcp splits its target on spaces, so the first argument cannot contain one."
+						}
+					],
+					"items": {
+						"type": "string",
+						"minLength": 1,
+						"maxLength": 1024,
+						"pattern": "^[^$\\x00-\\x1f\\x7f]+$"
+					},
+					"description": "Local stdio server, as argv: an executable and its arguments, none containing $. A command runs on the user's machine whenever their agent starts, so third-party templates need explicit consent for it."
+				},
+				"env": {
+					"$ref": "#/$defs/envMap",
+					"description": "Local stdio servers only. Each is passed as --env KEY=VALUE."
+				}
+			},
+			"oneOf": [
+				{
+					"required": [
+						"url"
+					],
+					"not": {
+						"anyOf": [
+							{
+								"required": [
+									"command"
+								]
+							},
+							{
+								"required": [
+									"env"
+								]
+							}
+						]
+					}
+				},
+				{
+					"required": [
+						"command"
+					],
+					"not": {
+						"anyOf": [
+							{
+								"required": [
+									"url"
+								]
+							},
+							{
+								"required": [
+									"transport"
+								]
+							},
+							{
+								"required": [
+									"headers"
+								]
+							}
+						]
+					}
+				}
+			]
+		},
+		"cliTool": {
+			"type": "object",
+			"required": [
+				"name"
+			],
+			"additionalProperties": false,
+			"description": "A command-line tool the project's agents should be able to run: an npm package the CLI installs into the project (npm), or a system tool the CLI only checks for (install), never both.",
+			"properties": {
+				"name": {
+					"type": "string",
+					"pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+					"description": "The executable, e.g. inngest or stripe. For npm, a bin of that package."
+				},
+				"description": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 200,
+					"description": "What an agent uses it for. Shown in the consent summary and the completion output."
+				},
+				"recommended": {
+					"type": "boolean",
+					"default": true,
+					"description": "false leaves it unchecked in the picker and skips it under -y."
+				},
+				"npm": {
+					"type": "string",
+					"pattern": "^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*@\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+					"description": "An exact name@version pin, added as a devDependency with the project's package manager. Agents run it through the project's local runner (pnpm exec, npx --no), never a fetching one."
+				},
+				"minVersion": {
+					"type": "string",
+					"pattern": "^\\d+\\.\\d+\\.\\d+$",
+					"description": "System tools only: the oldest version that works. The CLI runs `<name> --version` and compares the first x.y.z it prints."
+				},
+				"install": {
+					"type": "object",
+					"minProperties": 1,
+					"additionalProperties": false,
+					"description": "System tools only: how to install it, printed when it is missing or too old. The CLI never runs these.",
+					"properties": {
+						"brew": {
+							"type": "string",
+							"pattern": "^[a-z0-9][a-z0-9@._/+-]{0,127}$"
+						},
+						"winget": {
+							"type": "string",
+							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+						},
+						"url": {
+							"type": "string",
+							"format": "uri",
+							"pattern": "^https://[A-Za-z0-9.-]+(?::\\d{1,5})?(?:/[A-Za-z0-9._~%/#-]*)?$",
+							"maxLength": 2048
+						}
+					}
+				}
+			},
+			"oneOf": [
+				{
+					"required": [
+						"npm"
+					],
+					"not": {
+						"anyOf": [
+							{
+								"required": [
+									"install"
+								]
+							},
+							{
+								"required": [
+									"minVersion"
+								]
+							}
+						]
+					}
+				},
+				{
+					"required": [
+						"install"
+					],
+					"not": {
+						"required": [
+							"npm"
+						]
+					}
+				}
+			]
+		},
+		"headerMap": {
+			"type": "object",
+			"maxProperties": 20,
+			"propertyNames": {
+				"pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+			},
+			"additionalProperties": {
+				"type": "string",
+				"maxLength": 2048,
+				"pattern": "^(?:[^$\\x00-\\x1f\\x7f]|\\$\\{[A-Z_][A-Z0-9_]*\\})*$"
+			},
+			"description": "A literal, or literals mixed with ${NAME} placeholders. Any other $ is rejected. Neon's own templates fill placeholders from the environment or the project's .env (never NEON_*, cloud, or VCS credentials); third-party templates only from a prompt."
+		},
+		"envMap": {
+			"type": "object",
+			"maxProperties": 20,
+			"propertyNames": {
+				"pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+			},
+			"additionalProperties": {
+				"type": "string",
+				"maxLength": 2048,
+				"pattern": "^(?:[^$\\x00-\\x1f\\x7f]|\\$\\{[A-Z_][A-Z0-9_]*\\})*$"
+			},
+			"description": "A literal, or literals mixed with ${NAME} placeholders. Any other $ is rejected. Neon's own templates fill placeholders from the environment or the project's .env (never NEON_*, cloud, or VCS credentials); third-party templates only from a prompt."
+		}
+	}
+}

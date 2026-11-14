@@ -256,6 +256,70 @@ export function existingNeonApiKey(options: {
 	return undefined;
 }
 
+/** The project file add-mcp writes for `agent`, when the agent has project-level MCP config. */
+export function projectMcpConfigPath(options: {
+	agent: AgentType;
+	cwd: string;
+	selected: readonly AgentType[];
+}): string | undefined {
+	return configPathFor(
+		options.agent,
+		"project",
+		options.cwd,
+		options.selected,
+	);
+}
+
+const escapeRegExp = (value: string): string =>
+	value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Whether the agent's project config already has a server called `name` (any case). A
+ * file this cannot parse counts as having it when the name appears as a key, so an entry
+ * is never replaced on a guess.
+ */
+export function projectMcpServerExists(options: {
+	agent: AgentType;
+	name: string;
+	cwd: string;
+	selected: readonly AgentType[];
+}): boolean {
+	const path = projectMcpConfigPath(options);
+	if (!path) {
+		return false;
+	}
+	let raw: string;
+	try {
+		raw = readFileSync(path, "utf8");
+	} catch {
+		return false;
+	}
+	const wanted = options.name.toLowerCase();
+	const errors: ParseError[] = [];
+	const parsed: unknown = parseJsonc(raw, errors, {
+		allowTrailingComma: true,
+	});
+	if (errors.length === 0) {
+		return configKeysFor(options.agent, "project").some((configKey) => {
+			const servers = recordOf(nestedValue(parsed, configKey));
+			return (
+				servers !== undefined &&
+				Object.keys(servers).some((key) => key.toLowerCase() === wanted)
+			);
+		});
+	}
+	const name = escapeRegExp(options.name);
+	return new RegExp(
+		`(?:^|[\\s"'\\[.])${name}["']?\\s*(?:[:=\\]]|$)`,
+		"im",
+	).test(raw);
+}
+
+/** chmod 600 and gitignore a project MCP config that now holds a secret. */
+export function protectProjectMcpConfig(path: string): string | undefined {
+	return protectWrittenConfig(path, "project");
+}
+
 function isTrackedByGit(cwd: string, relativePath: string): boolean {
 	try {
 		execFileSync(
