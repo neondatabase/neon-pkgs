@@ -1199,3 +1199,40 @@ describe("openRegistry reads neondatabase/registry from one tarball", () => {
 		);
 	});
 });
+
+describe("openRegistry request scheduling", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("requests both published schemas and the index before any answers", async () => {
+		vi.resetModules();
+		const fresh = await import("./source");
+		const started: string[] = [];
+		let releaseAll = () => {};
+		const allStarted = new Promise<void>((resolve) => {
+			releaseAll = resolve;
+		});
+		vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+			const url = String(input instanceof Request ? input.url : input);
+			started.push(url);
+			if (started.length === 3) releaseAll();
+			await allStarted;
+			return new Response(
+				url.endsWith("/registry.json")
+					? JSON.stringify({ templates: [] })
+					: "{}",
+			);
+		});
+		const registry = await fresh.openRegistry(undefined, {
+			neonRegistry: false,
+			env: {},
+		});
+		expect(registry.entries).toEqual([]);
+		expect(started.sort()).toEqual([
+			fresh.DEFAULT_REGISTRY_URL,
+			"https://neon.com/functions/registry/schemas/registry.schema.json",
+			"https://neon.com/functions/registry/schemas/template.schema.json",
+		]);
+	});
+});
