@@ -26,6 +26,7 @@ import {
 } from "../functions_api.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
+import { coerceAgentFlag } from "../utils/agent_flag.js";
 import { getCliName } from "../utils/cli_name.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
 import { bundleEntry } from "../utils/esbuild.js";
@@ -203,6 +204,19 @@ export const builder = (argv: yargs.Argv) =>
 						"add-to-config": {
 							describe:
 								"Declare the function in neon.ts, creating it when missing. On by default; use --no-add-to-config to skip.",
+							type: "boolean",
+						},
+						agent: {
+							alias: "a",
+							describe:
+								"Coding agent for the template's suggested skills and MCP servers (repeatable). Defaults to the agents detected in the project and the one running this command.",
+							type: "array",
+							string: true,
+							coerce: coerceAgentFlag,
+						},
+						"template-tooling": {
+							describe:
+								"Install the skills, MCP servers, and CLIs the template suggests for coding agents, without asking. A TTY asks when omitted, and --yes installs them only for Neon's own templates. Use --no-template-tooling to skip.",
 							type: "boolean",
 						},
 						config: {

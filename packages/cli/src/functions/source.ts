@@ -4,6 +4,7 @@ import type { TemplateFile } from "../init/bootstrap.js";
 import { log } from "../log.js";
 import {
 	allowGithubTemplateSources,
+	allowTemplateAgentTooling,
 	type FunctionTemplate,
 	type GithubTemplateSource,
 	isContainedRelativePath,
@@ -382,7 +383,9 @@ const compileSchemas = async (
 		registry: wrap<RegistryIndexDocument>(
 			allowGithubTemplateSources(registrySchema),
 		),
-		template: wrap<TemplateDocument>(templateSchema),
+		template: wrap<TemplateDocument>(
+			allowTemplateAgentTooling(templateSchema),
+		),
 	};
 };
 

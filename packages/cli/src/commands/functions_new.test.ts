@@ -14,9 +14,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { takeCommandSuccessExtras } from "../analytics";
 import { renderNeonConfig } from "../config_template";
 import { openRegistry, type Registry } from "../functions/source";
+import { log } from "../log";
+import { parseTemplateAgentTooling } from "../templates/agent_tooling";
 import { FIXTURE_REGISTRY_DIR } from "../test_utils/registry";
 import {
 	formatNewFunctionDone,
+	functionTemplateTrust,
 	type ScaffoldFromTemplateOptions,
 	scaffoldFromTemplate,
 } from "./functions_new";
@@ -415,5 +418,113 @@ describe("functions new", () => {
 		await expect(run({ template: "nope" })).rejects.toThrow(
 			/Available templates: hello, notes, mailer/,
 		);
+	});
+
+	describe("template agent tooling", () => {
+		const agent = parseTemplateAgentTooling({
+			mcp: [{ name: "docs", url: "https://mcp.example.com/mcp" }],
+		});
+		const withAgent = (): Registry => ({
+			...registry,
+			load: async (entry) => {
+				const loaded = await registry.load(entry);
+				return { ...loaded, template: { ...loaded.template, agent } };
+			},
+		});
+		const ops = () => ({
+			runAddMcp: vi.fn(async () => ({ ok: true as const })),
+			pick: vi.fn(async () => undefined),
+		});
+
+		it("installs a Neon template's recommended tooling with --yes into the named agents", async () => {
+			const templateToolingOperations = ops();
+			const result = await scaffoldFromTemplate({
+				cwd: workspace,
+				registry: withAgent(),
+				interactive: false,
+				install: false,
+				template: "hello",
+				yes: true,
+				agents: ["cursor"],
+				env: {},
+				templateToolingOperations,
+			});
+			const call = templateToolingOperations.runAddMcp.mock.calls[0] as
+				| unknown[]
+				| undefined;
+			expect(call?.[0]).toMatchObject({
+				cwd: workspace,
+				args: expect.arrayContaining([
+					"https://mcp.example.com/mcp",
+					"-a",
+					"cursor",
+				]),
+			});
+			expect(
+				result.cancelled === false && result.agentTooling?.rows,
+			).toEqual([
+				{
+					kind: "mcp",
+					name: "docs",
+					agents: "Cursor",
+					status: "installed",
+				},
+			]);
+			expect(
+				result.cancelled === false && formatNewFunctionDone(result),
+			).toContain("1 of 1 ready");
+		});
+
+		it("installs nothing without --yes or --template-tooling outside a terminal", async () => {
+			vi.spyOn(log, "info").mockImplementation(() => {});
+			const templateToolingOperations = ops();
+			const result = await scaffoldFromTemplate({
+				cwd: workspace,
+				registry: withAgent(),
+				interactive: false,
+				install: false,
+				template: "hello",
+				agents: ["cursor"],
+				env: {},
+				templateToolingOperations,
+			});
+			expect(templateToolingOperations.runAddMcp).not.toHaveBeenCalled();
+			expect(result).not.toHaveProperty("agentTooling");
+			expect(log.info).toHaveBeenCalledWith(
+				expect.stringContaining("Pass --template-tooling"),
+				"docs",
+			);
+			vi.restoreAllMocks();
+		});
+
+		it("treats remote entries and overridden registries as third-party", () => {
+			const entry = {
+				id: "x",
+				title: "X",
+				description: "d",
+				path: "x.json",
+			};
+			expect(functionTemplateTrust(entry, {})).toBe("neon");
+			expect(
+				functionTemplateTrust(
+					{
+						...entry,
+						source: {
+							github: { owner: "acme", repo: "fns", ref: "HEAD" },
+						},
+					},
+					{},
+				),
+			).toBe("third-party");
+			for (const name of [
+				"NEON_FUNCTION_REGISTRY_DIR",
+				"NEON_FUNCTION_REGISTRY_URL",
+				"NEON_FUNCTION_REGISTRY_GITHUB",
+			]) {
+				expect(functionTemplateTrust(entry, { [name]: "x" })).toBe(
+					"third-party",
+				);
+			}
+		});
 	});
 });

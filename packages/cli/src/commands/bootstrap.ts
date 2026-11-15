@@ -27,6 +27,7 @@ import {
 	shouldPrintInitBanner,
 } from "../init/chrome.js";
 import type { InitDeployOptions } from "../init/deploy.js";
+import { detectAgent } from "../init/detect_host.js";
 import {
 	type InitLinkInputs,
 	type InitLinkProps,
@@ -50,8 +51,20 @@ import {
 	pickInitLinkInteractively,
 } from "../init/wizard.js";
 import { log } from "../log.js";
-import type { AgentType } from "../mcp/agents.js";
+import {
+	type AgentType,
+	detectProjectAgents as detectMcpProjectAgents,
+	uniqueAgentIds,
+} from "../mcp/agents.js";
 import { bootstrapPluginAgents } from "../plugins/targets.js";
+import {
+	reportTemplateTooling,
+	runTemplateTooling,
+	selectTemplateTooling,
+	type TemplateToolingEntry,
+	type TemplateToolingOperations,
+	type TemplateToolingTrust,
+} from "../templates/agent_tooling_run.js";
 import type { CommonProps } from "../types.js";
 import { coerceAgentFlag } from "../utils/agent_flag.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -80,6 +93,8 @@ export type BootstrapProps = CommonProps & {
 	git: boolean;
 	link: boolean;
 	agentSetup?: boolean;
+	/** `--template-tooling`: install the template's suggested agent tooling without asking (false skips it). */
+	templateTooling?: boolean;
 	analytics?: boolean;
 	/** Keeps re-executed children on the same account. */
 	configDir?: string;
@@ -90,6 +105,8 @@ export type BootstrapProps = CommonProps & {
 	allowUnsafeTls?: boolean;
 	/** Overrides the plugins/skills/mcp install functions (tests). Production calls the real ones in-process — see `packages/cli/AGENTS.md`. */
 	operations?: Partial<ToolingOperations>;
+	/** Overrides the template agent tooling children and prompts (tests). */
+	templateToolingOperations?: Partial<TemplateToolingOperations>;
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
 	pickLink?: () => Promise<boolean>;
 	linkProject?: RunLink;
@@ -206,6 +223,11 @@ export const builder = (argv: yargs.Argv) =>
 				describe:
 					"Coding agent to install into (repeatable). Forwarded to plugins, or to skills and mcp. Skips agent selection. Values listed below",
 				coerce: coerceAgentFlag,
+			},
+			"template-tooling": {
+				type: "boolean",
+				describe:
+					"Install the skills, MCP servers, and CLIs the template suggests for coding agents, without asking. A terminal asks when omitted, and --default installs them only for Neon's own templates. Use --no-template-tooling to skip",
 			},
 			deploy: {
 				describe:
@@ -528,6 +550,11 @@ const runPostScaffoldSteps = async (
 				? chooseYesAgentTooling(named).setup
 				: await (props.pickAgentSetup ?? pickAgentSetupInteractively)();
 
+	const templateTooling = await chooseTemplateTooling(props, template, {
+		yes: false,
+		interactive: true,
+	});
+
 	const canLink = props.link && !(neonConfig && !wantInstall);
 	if (props.link && !canLink) {
 		logSkippedLink(pm);
@@ -543,6 +570,7 @@ const runPostScaffoldSteps = async (
 		link: canLink,
 		hasNeonConfig: neonConfig,
 		named,
+		templateTooling,
 	});
 	finishPostScaffold({
 		heading: "Project scaffolded.",
@@ -580,6 +608,10 @@ const runDefaultSteps = async (
 			: named.length > 0
 				? chooseYesAgentTooling(named).setup
 				: "skills-mcp";
+	const templateTooling = await chooseTemplateTooling(props, template, {
+		yes: true,
+		interactive: false,
+	});
 	const outcome = await executePostScaffold(props, targetDir, {
 		yes: true,
 		lockAgentSetup: false,
@@ -590,6 +622,7 @@ const runDefaultSteps = async (
 		link: props.link,
 		hasNeonConfig: neonConfig,
 		named,
+		templateTooling,
 	});
 	finishPostScaffold({
 		heading: "Project scaffolded.",
@@ -617,6 +650,7 @@ const executePostScaffold = async (
 		link: boolean;
 		hasNeonConfig: boolean;
 		named: readonly AgentType[];
+		templateTooling?: ChosenTemplateTooling;
 	},
 ): Promise<{
 	installed: boolean;
@@ -648,6 +682,7 @@ const executePostScaffold = async (
 	let skippedLinkForDeps = false;
 	let agentSetup: InitAgentSetupResult = choices.agentSetup;
 	let agentsRan = false;
+	const toolingAgents: AgentType[] = [...choices.named];
 	const actions = postScaffoldActions({
 		git: choices.git,
 		agentSetup: choices.agentSetup,
@@ -686,6 +721,9 @@ const executePostScaffold = async (
 					? { detectAgent: props.detectAgent }
 					: {}),
 				command: "bootstrap",
+				onAgents: (agents) => {
+					toolingAgents.push(...agents);
+				},
 			});
 			agentsRan = true;
 			continue;
@@ -746,6 +784,31 @@ const executePostScaffold = async (
 		await linkProject(linkProps);
 		linked = true;
 	}
+	if (
+		choices.templateTooling !== undefined &&
+		choices.templateTooling.entries.length > 0 &&
+		!gitFailed
+	) {
+		const agents =
+			toolingAgents.length > 0
+				? toolingAgents
+				: await detectToolingAgents(props, targetDir);
+		reportTemplateTooling(
+			"table",
+			await runTemplateTooling({
+				entries: choices.templateTooling.entries,
+				trust: choices.templateTooling.trust,
+				cwd: targetDir,
+				agents: uniqueAgentIds(agents),
+				interactive: !choices.yes,
+				installGlobal: choices.templateTooling.installGlobal,
+				envFile: join(targetDir, ".env"),
+				...(props.templateToolingOperations
+					? { operations: props.templateToolingOperations }
+					: {}),
+			}),
+		);
+	}
 	const deploy =
 		installFailed || gitFailed
 			? { deployed: false }
@@ -765,6 +828,65 @@ const executePostScaffold = async (
 		agentsRan,
 		...deploy,
 	};
+};
+
+type ChosenTemplateTooling = {
+	trust: TemplateToolingTrust;
+	entries: TemplateToolingEntry[];
+	installGlobal: boolean;
+};
+
+/**
+ * Templates from the Neon manifest pulled from Neon's own repository are Neon's. A manifest
+ * override (`NEON_BOOTSTRAP_MANIFEST_URL`) can claim any owner, so nothing it lists is.
+ */
+export const bootstrapTemplateTrust = (
+	template: BootstrapTemplate,
+	env: NodeJS.ProcessEnv = process.env,
+): TemplateToolingTrust =>
+	template.source.owner === "neondatabase" && !env.NEON_BOOTSTRAP_MANIFEST_URL
+		? "neon"
+		: "third-party";
+
+const chooseTemplateTooling = async (
+	props: BootstrapProps,
+	template: BootstrapTemplate,
+	mode: { yes: boolean; interactive: boolean },
+): Promise<ChosenTemplateTooling | undefined> => {
+	if (template.agent === undefined) return undefined;
+	const trust = bootstrapTemplateTrust(template);
+	const entries = await selectTemplateTooling({
+		tooling: template.agent,
+		trust,
+		origin: `${template.source.owner}/${template.source.repo}`,
+		...(props.templateTooling !== undefined
+			? { flag: props.templateTooling }
+			: {}),
+		yes: mode.yes,
+		interactive: mode.interactive,
+		...(props.templateToolingOperations?.pick
+			? { pick: props.templateToolingOperations.pick }
+			: {}),
+	});
+	return {
+		trust,
+		entries,
+		installGlobal: props.templateTooling === true || mode.interactive,
+	};
+};
+
+/** Agents for the template's tooling when the Neon step installed into none. */
+const detectToolingAgents = async (
+	props: BootstrapProps,
+	targetDir: string,
+): Promise<AgentType[]> => {
+	const host = (props.detectAgent ?? detectAgent)();
+	return [
+		...(await (props.detectProjectAgents ?? detectMcpProjectAgents)(
+			targetDir,
+		)),
+		...(host ? [host] : []),
+	];
 };
 
 /**

@@ -12,6 +12,10 @@ import {
 import { dirname, join } from "node:path";
 import { gunzipSync } from "fflate";
 import YAML from "yaml";
+import {
+	parseTemplateAgentTooling,
+	type TemplateAgentTooling,
+} from "../templates/agent_tooling.js";
 import { githubRequestHeaders } from "../utils/github_headers.js";
 
 /**
@@ -63,6 +67,8 @@ export type BootstrapTemplate = {
 	services?: string[];
 	/** Neon features this template needs (defaults to ["database"]). */
 	requires: NeonFeature[];
+	/** Skills, MCP servers, and CLIs the template suggests for coding agents. */
+	agent?: TemplateAgentTooling;
 	source: {
 		owner: string;
 		repo: string;
@@ -174,6 +180,19 @@ const parseStringList = (value: unknown): string[] | undefined => {
 	return items.length > 0 ? items : undefined;
 };
 
+/**
+ * A malformed `agent` block drops only the block, like a malformed `tools` list: the
+ * template still scaffolds, it just suggests no agent tooling.
+ */
+const parseAgentBlock = (value: unknown): TemplateAgentTooling | undefined => {
+	if (value === undefined) return undefined;
+	try {
+		return parseTemplateAgentTooling(value);
+	} catch {
+		return undefined;
+	}
+};
+
 // ---------------------------------------------------------------------------
 // Remote template manifest
 // ---------------------------------------------------------------------------
@@ -221,6 +240,7 @@ export function parseManifest(text: string): BootstrapTemplate[] {
 				: DEFAULT_REQUIRES;
 		const tools = parseStringList(item.tools);
 		const services = parseStringList(item.services);
+		const agent = parseAgentBlock(item.agent);
 		templates.push({
 			id: item.id,
 			title: item.title,
@@ -228,6 +248,7 @@ export function parseManifest(text: string): BootstrapTemplate[] {
 			...(tools ? { tools } : {}),
 			...(services ? { services } : {}),
 			requires,
+			...(agent ? { agent } : {}),
 			source: {
 				owner: item.source.owner,
 				repo: item.source.repo,

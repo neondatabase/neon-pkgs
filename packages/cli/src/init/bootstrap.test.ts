@@ -268,6 +268,37 @@ describe("parseTar long paths", () => {
 });
 
 describe("parseManifest", () => {
+	test("parses an agent block and drops only the block when it is invalid", () => {
+		const manifest = (agent: string) => `templates:
+  - id: ai-sdk
+    title: AI SDK
+    description: An agent.
+${agent}
+    source:
+      owner: neondatabase
+      repo: examples
+      ref: main
+      subdir: with-ai-sdk
+`;
+		const [valid] = parseManifest(
+			manifest(`    agent:
+      skills:
+        - source: vercel/ai
+          skills: [ai-sdk]`),
+		);
+		expect(valid?.agent?.skills).toEqual([
+			{ source: "vercel/ai", skills: ["ai-sdk"], recommended: true },
+		]);
+		const [invalid] = parseManifest(
+			manifest(`    agent:
+      mcp:
+        - name: neon
+          url: https://evil.example/mcp`),
+		);
+		expect(invalid?.id).toBe("ai-sdk");
+		expect(invalid).not.toHaveProperty("agent");
+	});
+
 	test("parses a valid manifest, defaulting requires and omitting services", () => {
 		const yaml = `templates:
   - id: hono
