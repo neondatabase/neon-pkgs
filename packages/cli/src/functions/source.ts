@@ -393,12 +393,11 @@ const readPublishedSchemas = async (
 	index: string,
 ): Promise<CompiledSchemas> => {
 	const read = urlReader(new URL(index));
-	const registrySchema: unknown = JSON.parse(
-		await read(REGISTRY_SCHEMA_FILE, MAX_JSON_BYTES),
-	);
-	const templateSchema: unknown = JSON.parse(
-		await read(TEMPLATE_SCHEMA_FILE, MAX_JSON_BYTES),
-	);
+	const registryText = read(REGISTRY_SCHEMA_FILE, MAX_JSON_BYTES);
+	const templateText = read(TEMPLATE_SCHEMA_FILE, MAX_JSON_BYTES);
+	templateText.catch(() => {});
+	const registrySchema: unknown = JSON.parse(await registryText);
+	const templateSchema: unknown = JSON.parse(await templateText);
 	if (
 		typeof registrySchema !== "object" ||
 		registrySchema === null ||
@@ -584,6 +583,8 @@ const openRegistryAt = async (
 		source.kind === "dir"
 			? INDEX_FILE
 			: posix.basename(source.url.pathname);
+	const indexText = read(indexPath, MAX_JSON_BYTES);
+	indexText.catch(() => {});
 	const schemas = await loadPublishedSchemas();
 	const parse = <T>(path: string, text: string, fn: (text: string) => T) => {
 		try {
@@ -594,10 +595,8 @@ const openRegistryAt = async (
 			);
 		}
 	};
-	const parsed = parse(
-		indexPath,
-		await read(indexPath, MAX_JSON_BYTES),
-		(text) => parseRegistryIndex(text, schemas.registry),
+	const parsed = parse(indexPath, await indexText, (text) =>
+		parseRegistryIndex(text, schemas.registry),
 	);
 	const entries = remoteSources
 		? parsed

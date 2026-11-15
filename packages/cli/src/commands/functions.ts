@@ -1,13 +1,5 @@
 import { statSync } from "node:fs";
 import { dirname } from "node:path";
-import { FUNCTION_SOURCE_ENTRIES } from "@neon/config";
-import {
-	bundleAsIs,
-	describeNativeFinding,
-	findUndeclaredNativePackages,
-	resolveEsbuildEntry,
-	zipFunctionBundle,
-} from "@neon/config-runtime";
 import type yargs from "yargs";
 import { isNeonApiError, retryOnLock } from "../api.js";
 import {
@@ -29,15 +21,12 @@ import type { BranchScopeProps } from "../types.js";
 import { coerceAgentFlag } from "../utils/agent_flag.js";
 import { getCliName } from "../utils/cli_name.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
-import { bundleEntry } from "../utils/esbuild.js";
 import {
 	FUNCTION_SLUG_HELP,
 	FUNCTION_SLUG_PATTERN,
 } from "../utils/function_slug.js";
-import { zipBundle } from "../utils/zip.js";
 import { writer } from "../writer.js";
 import { DEPLOY_COMMANDS_EPILOGUE } from "./deploy_help.js";
-import { handleNew, listTemplates } from "./functions_new.js";
 
 const FUNCTION_FIELDS = [
 	"slug",
@@ -225,7 +214,10 @@ export const builder = (argv: yargs.Argv) =>
 							type: "string",
 						},
 					}),
-			(args) => handleNew(args as any),
+			async (args) => {
+				const { handleNew } = await import("./functions_new.js");
+				await handleNew(args as any);
+			},
 		)
 		.command("templates", "Browse Function Registry templates", (yargs) =>
 			yargs.command(
@@ -236,7 +228,12 @@ export const builder = (argv: yargs.Argv) =>
 						"project-id": { hidden: true },
 						branch: { hidden: true },
 					}),
-				(args) => listTemplates(args as any),
+				async (args) => {
+					const { listTemplates } = await import(
+						"./functions_new.js"
+					);
+					await listTemplates(args as any);
+				},
 			),
 		)
 		.command(
@@ -445,6 +442,7 @@ const isTransient = (err: unknown): boolean =>
 
 const deploy = async (props: DeployProps) => {
 	if (props.path !== undefined || props.entry !== undefined) {
+		const { FUNCTION_SOURCE_ENTRIES } = await import("@neon/config");
 		throw new Error(
 			"--path and --entry were removed. Use --src <dir>; the entry point " +
 				`is discovered as ${FUNCTION_SOURCE_ENTRIES.join(", ")} in that directory.`,
@@ -480,6 +478,13 @@ const deploy = async (props: DeployProps) => {
 		throw new Error(`--src path not found: ${src}.`);
 	}
 
+	const {
+		bundleAsIs,
+		describeNativeFinding,
+		findUndeclaredNativePackages,
+		resolveEsbuildEntry,
+		zipFunctionBundle,
+	} = await import("@neon/config-runtime");
 	let zip: Uint8Array;
 	if (!props.bundle) {
 		zip = await zipFunctionBundle(
@@ -497,6 +502,10 @@ const deploy = async (props: DeployProps) => {
 			),
 		);
 	} else {
+		const [{ bundleEntry }, { zipBundle }] = await Promise.all([
+			import("../utils/esbuild.js"),
+			import("../utils/zip.js"),
+		]);
 		const source = await resolveEsbuildEntry(src);
 		const bundled = await bundleEntry(source);
 		for (const warning of bundled.warnings) log.warning(warning);

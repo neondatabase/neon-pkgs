@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { execa } from "execa";
 import prompts from "prompts";
 import which from "which";
@@ -314,9 +316,56 @@ export const templateToolingChildEnv = (
 	return env;
 };
 
+/**
+ * The installed `add-mcp` dependency's bin, when it is the pinned version. npx spends
+ * most of a second resolving the package before it runs. A packaged binary cannot
+ * spawn a script from its snapshot, so it keeps using npx.
+ */
+const installedAddMcpBin = (): string | undefined => {
+	if ("pkg" in process) return undefined;
+	try {
+		const manifestPath = createRequire(import.meta.url).resolve(
+			"add-mcp/package.json",
+		);
+		const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+			version?: unknown;
+			bin?: unknown;
+		};
+		if (`add-mcp@${String(manifest.version)}` !== ADD_MCP_PACKAGE) {
+			return undefined;
+		}
+		const bin =
+			typeof manifest.bin === "string"
+				? manifest.bin
+				: (manifest.bin as Record<string, unknown> | undefined)?.[
+						"add-mcp"
+					];
+		if (typeof bin !== "string") return undefined;
+		const path = join(dirname(manifestPath), bin);
+		return existsSync(path) ? path : undefined;
+	} catch {
+		return undefined;
+	}
+};
+
+/** `npx -y add-mcp@<pinned> …` as the command and argv that run it. */
+export const addMcpCommand = (
+	args: readonly string[],
+	resolveBin: () => string | undefined = installedAddMcpBin,
+): { file: string; args: readonly string[] } => {
+	const bin =
+		args[0] === "-y" && args[1] === ADD_MCP_PACKAGE
+			? resolveBin()
+			: undefined;
+	return bin === undefined
+		? { file: "npx", args }
+		: { file: process.execPath, args: [bin, ...args.slice(2)] };
+};
+
 const runAddMcp: TemplateToolingOperations["runAddMcp"] = async (options) => {
 	try {
-		await execa("npx", options.args, {
+		const command = addMcpCommand(options.args);
+		await execa(command.file, command.args, {
 			cwd: options.cwd,
 			env: options.env,
 			extendEnv: false,
