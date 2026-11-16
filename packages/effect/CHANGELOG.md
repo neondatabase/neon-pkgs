@@ -1,5 +1,11 @@
 # @neon/effect
 
+## 0.5.0
+
+### Minor Changes
+
+- e1d1541: Export `toNeonEffectError`, the mapping from `@neon/sdk` errors to tagged errors, for use as the `catch` of `Effect.tryPromise` around promise-based SDK calls.
+
 ## 0.4.1
 
 ### Patch Changes
