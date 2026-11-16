@@ -123,7 +123,7 @@ Custom tools combine several requests into one call, or call Postgres or neon.co
 | `sql.runTransaction` | `run_transaction_sql` | One `{ rows, totalRowCount, truncated, note? }` per statement, run in one transaction. |
 | `sql.explain` | `explain_sql` | The `EXPLAIN (FORMAT JSON)` rows. `analyze: true` executes the statement. |
 | `schema.listTables` | `list_tables_schema` | `{ table_schema, table_name, table_type }` for every table outside `pg_catalog` and `information_schema`. |
-| `schema.describeTable` | `describe_table_schema` | `{ raw, formatted }`: columns, indexes, constraints, and sizes. A missing table throws `NeonClientError`. |
+| `schema.describeTable` | `describe_table_schema` | `{ raw, formatted }`: columns, indexes, constraints, and sizes. A missing table, or a name that matches two tables, throws `NeonClientError`. |
 | `branches.describe` | `describe_branches` | `{ branch, console_url, text, database_structure }`, where `database_structure` is `[[], rows]`: one `{ tree_structure }` row per database, then the connected database's schemas and objects, read from the system catalogs in a `READ ONLY` transaction. When that query fails it is `null` and `database_structure_error` says why. |
 | `queries.listSlow` | `list_slow_queries` | `{ slow_queries, total_queries_found }` from `pg_stat_statements`, slowest mean time first. Without the extension it throws `NeonClientError`. |
 | `database.inspect` | `inspect_database` | One `neon inspect db` check: `{ check, describe, projectId, branchId, databases, fields, totalRowCount, rows, truncated, note? }`. |

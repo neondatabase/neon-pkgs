@@ -355,6 +355,164 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		);
 	});
 
+	it("schema.describeTable lists every constraint, including EXCLUDE and no NOT NULL rows, for the owner and a SELECT-only role", async () => {
+		await run("CREATE TABLE rooms (id int PRIMARY KEY)");
+		await run(`CREATE TABLE bookings (
+			id int PRIMARY KEY,
+			room_id int NOT NULL REFERENCES rooms (id),
+			code text UNIQUE,
+			guests int CHECK (guests > 0),
+			during tsrange,
+			CONSTRAINT bookings_no_overlap EXCLUDE USING gist (during WITH &&)
+		)`);
+		try {
+			for (const context of [{}, { postgresRole: READ_ONLY_ROLE }]) {
+				const { data } = await tools["schema.describeTable"].execute(
+					{ project_id: projectId, table_name: "bookings" },
+					context,
+				);
+				expect(data.raw.constraints).toEqual([
+					{
+						name: "bookings_code_key",
+						type: "UNIQUE",
+						definition: "UNIQUE (code)",
+					},
+					{
+						name: "bookings_guests_check",
+						type: "CHECK",
+						definition: "CHECK ((guests > 0))",
+					},
+					{
+						name: "bookings_no_overlap",
+						type: "EXCLUDE",
+						definition: "EXCLUDE USING gist (during WITH &&)",
+					},
+					{
+						name: "bookings_pkey",
+						type: "PRIMARY KEY",
+						definition: "PRIMARY KEY (id)",
+					},
+					{
+						name: "bookings_room_id_fkey",
+						type: "FOREIGN KEY",
+						definition:
+							"FOREIGN KEY (room_id) REFERENCES rooms(id)",
+					},
+				]);
+				expect(data.formatted).toContain("room_id integer NOT NULL");
+				expect(data.formatted).toContain(
+					"bookings_no_overlap (EXCLUDE)\n    EXCLUDE USING gist (during WITH &&)",
+				);
+			}
+		} finally {
+			await run("DROP TABLE bookings, rooms");
+		}
+	});
+
+	it("schema.describeTable resolves a qualified name longer than 63 bytes", async () => {
+		const longName = `long_${"a".repeat(58)}`;
+		await run(`CREATE TABLE ${longName} (id int)`);
+		try {
+			for (const tableName of [
+				`public.${longName}`,
+				`"public"."${longName}"`,
+			]) {
+				const { data } = await tools["schema.describeTable"].execute({
+					project_id: projectId,
+					table_name: tableName,
+				});
+				expect(data.raw.columns.map((column) => column.name)).toEqual([
+					"id",
+				]);
+			}
+		} finally {
+			await run(`DROP TABLE ${longName}`);
+		}
+	});
+
+	it("schema.describeTable resolves mixed-case names as schema.listTables returns them, and refuses a name two tables match", async () => {
+		await run('CREATE TABLE "User" (id int PRIMARY KEY, email text)');
+		await run('CREATE SCHEMA "Auth"');
+		await run(
+			'CREATE TABLE "Auth"."User" (id int PRIMARY KEY, token text)',
+		);
+		const describedColumns = async (tableName: string) => {
+			const { data } = await tools["schema.describeTable"].execute({
+				project_id: projectId,
+				table_name: tableName,
+			});
+			return data.raw.columns.map((column) => column.name);
+		};
+		try {
+			const { data: tables } = await tools["schema.listTables"].execute({
+				project_id: projectId,
+			});
+			expect(tables).toContainEqual({
+				table_schema: "Auth",
+				table_name: "User",
+				table_type: "BASE TABLE",
+			});
+			for (const tableName of ["User", "public.User", '"User"']) {
+				expect(await describedColumns(tableName)).toEqual([
+					"id",
+					"email",
+				]);
+			}
+			for (const tableName of ["Auth.User", '"Auth"."User"']) {
+				expect(await describedColumns(tableName)).toEqual([
+					"id",
+					"token",
+				]);
+			}
+
+			await run('CREATE TABLE "user" (id int, name text)');
+			for (const tableName of ["User", "public.User"]) {
+				const ambiguous = tools["schema.describeTable"].execute({
+					project_id: projectId,
+					table_name: tableName,
+				});
+				await expect(ambiguous).rejects.toBeInstanceOf(NeonClientError);
+				await expect(ambiguous).rejects.toThrow(
+					`Table name ${tableName} matches 2 tables. Pass one of these quoted names: public."User", public."user"`,
+				);
+			}
+			expect(await describedColumns('public."User"')).toEqual([
+				"id",
+				"email",
+			]);
+			expect(await describedColumns("user")).toEqual(["id", "name"]);
+
+			const { data: tuning } = await tools["queryTuning.prepare"].execute(
+				{
+					project_id: projectId,
+					database_name: "neondb",
+					sql: 'SELECT count(*) FROM "User"',
+				},
+			);
+			try {
+				expect(
+					tuning.table_schemas.map((table) => ({
+						tableName: table.tableName,
+						columns: table.schema.columns.map(
+							(column) => column.name,
+						),
+					})),
+				).toEqual([
+					{ tableName: "public.User", columns: ["id", "email"] },
+				]);
+			} finally {
+				await tools["queryTuning.complete"].execute({
+					...tuning.complete,
+					suggested_sql_statements: [],
+					apply_changes: false,
+				});
+			}
+		} finally {
+			await run('DROP TABLE IF EXISTS "User", "user", "Auth"."User"');
+			await run('DROP SCHEMA "Auth"');
+		}
+	});
+
 	it("branches.describe returns branch details and the database tree", async () => {
 		const { data } = await tools["branches.describe"].execute({
 			project_id: projectId,
