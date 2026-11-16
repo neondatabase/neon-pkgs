@@ -12,7 +12,7 @@
    pnpm --filter @neon/tools generate
    ```
 
-   `pnpm generate` writes four files, all committed and checked by `pnpm generate:check`:
+   `pnpm generate` writes five files, all committed and checked by `pnpm generate:check`:
 
    | File | Holds |
    | --- | --- |
@@ -20,12 +20,15 @@
    | `src/operations.gen.ts` | One factory per `operationId`: flattened input schema with `input-descriptions.json` applied, annotations, approval, and `metadata` |
    | `src/schemas.ts` | The request schemas `@neon/tools/schemas` exports |
    | `src/descriptions.gen.ts` | `scripts/tool-descriptions.json` and the `*` entries of `scripts/input-descriptions.json` |
+   | `src/generated/output.gen.ts` | One result schema per OpenAPI component, shaped like `data`: loose objects, nullish optional fields, enums as strings, no descriptions |
 
 2. Add the selector (the SDK path, such as `"branches.list"`) to `toolIds` in `src/lib/ergonomic/ids.ts`. A tool that is not a `NeonClient` method also goes in `customToolIds`.
 3. Add its factory to `toolFactories` in `src/lib/ergonomic/catalog.ts`:
    - `fromGenerated` when the tool is one operation whose generated input the SDK method takes as is. It reuses the generated schema, title, annotations, and approval. For a paginated method, omit `cursor`, set `list: true`, and collect pages in `run` with `collectPages`.
    - A composed tool (`bindTool` in `src/lib/ergonomic/composed.ts`) when the tool needs its own input schema, for example renamed or nested fields, or an SDK method that makes several requests.
    - A custom tool (`src/lib/custom/`) when it calls Postgres, neon.com, or several SDK methods.
+
+   Every tool declares the shape of its `data`: `output` for `fromGenerated` (an `output.gen.ts` component, `z.array(...)` for a list, `z.null()` for an empty response), `outputSchema` for `bindTool` and `bindPublicTool`. Use loose objects and `.nullish()` for fields that may be absent. `tsc` fails on `outputSchemasHoldResults` in `catalog.test-d.ts` when a schema does not accept the type `execute()` returns, and names the tool.
 4. Write its description (below), and add `"<mcp name>": "<selector>"` to `scripts/mcp-tool-names.json` if the Neon MCP server publishes it.
 5. Run the checks:
 
@@ -91,7 +94,8 @@ A description names another tool as `{{selector}}`. `createNeonTools` and `creat
 | Every public tool has a description | at most 500 characters | `src/generation.test.ts` |
 | Generated OpenAPI tool descriptions | under 220 characters | `src/generation.test.ts` |
 | Every top-level input has a description | at most 240 characters, no markdown links | `src/generation.test.ts` |
-| `listTools` for every public tool | under 43,800 estimated tokens (characters / 4) | `src/mcp.test.ts` |
+| `listTools` for every public tool, without output schemas | under 43,800 estimated tokens (characters / 4) | `src/mcp.test.ts` |
+| Output schemas for every public tool | under 22,000 estimated tokens | `src/mcp.test.ts` |
 
 Never raise a budget or exclude a tool to make a test pass. These also fail when something is missing or stale:
 

@@ -1,6 +1,7 @@
 import type { Branch, NeonClient } from "@neon/sdk";
 import * as z from "zod";
 import { pathInputDescriptions } from "../../../descriptions.gen.js";
+import * as output from "../../../generated/output.gen.js";
 import {
 	bindTool,
 	publishedId,
@@ -198,6 +199,17 @@ export const describeBranch = async (
 	}
 };
 
+const describeBranchOutputSchema = z.looseObject({
+	branch: output.Branch,
+	console_url: z.string(),
+	text: z.string().describe("The branch details and database tree as text."),
+	database_structure: z
+		.array(z.array(z.record(z.string(), z.unknown())))
+		.nullable()
+		.describe("`[[], treeRows]`, or null when the tree query failed."),
+	database_structure_error: z.string().nullish(),
+});
+
 export const describeBranchTool = (options: ToolClientOptions) => {
 	const consoleUrl = consoleBaseUrl(options.baseUrl ?? DEFAULT_API_BASE_URL);
 	return bindTool(
@@ -209,6 +221,7 @@ export const describeBranchTool = (options: ToolClientOptions) => {
 			description:
 				"Returns a branch summary, its database names, and a tree of one database's schemas, tables, views, indexes, sequences, and functions. Starts a suspended compute. Branch record only: {{branches.get}}; table names: {{schema.listTables}}; columns: {{schema.describeTable}}.",
 			inputSchema: describeBranchInputSchema,
+			outputSchema: describeBranchOutputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
 			metadata: SQL_METADATA,

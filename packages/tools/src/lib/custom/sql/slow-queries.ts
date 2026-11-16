@@ -59,6 +59,15 @@ const SLOW_QUERIES_SQL = `
 	LIMIT $1;
 `;
 
+const listSlowQueriesOutputSchema = z.looseObject({
+	slow_queries: z
+		.array(z.looseObject({ query: z.unknown(), calls: z.unknown() }))
+		.describe(
+			"pg_stat_statements entries: query, calls, timings in ms, rows, and block and WAL counters.",
+		),
+	total_queries_found: z.number(),
+});
+
 export const listSlowQueriesTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -69,6 +78,7 @@ export const listSlowQueriesTool = (options: ToolClientOptions) =>
 			description:
 				"Lists queries from pg_stat_statements, slowest mean execution time first. For sizes, indexes, locks, cache, bloat, or replication, use {{database.inspect}}.",
 			inputSchema: listSlowQueriesInputSchema,
+			outputSchema: listSlowQueriesOutputSchema,
 			annotations: {
 				readOnlyHint: true,
 				destructiveHint: false,

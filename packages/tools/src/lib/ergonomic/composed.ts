@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { pathInputDescriptions } from "../../descriptions.gen.js";
+import * as output from "../../generated/output.gen.js";
 import * as zod from "../../generated/zod.gen.js";
 import {
 	COMPUTE_ID_DESCRIPTION,
@@ -188,6 +189,24 @@ export const lokiQueryRangeInputSchema = z.strictObject({
 		.optional(),
 });
 
+const lokiQueryRangeOutputSchema = z.looseObject({
+	status: z.string().describe("Loki's response status, `success`."),
+	data: z
+		.looseObject({
+			resultType: z.string(),
+			result: z.array(
+				z.looseObject({
+					stream: z.record(z.string(), z.string()),
+					values: z.array(z.array(z.string())),
+				}),
+			),
+		})
+		.describe(
+			"Log streams: each has its labels and `[timestamp_ns, line]` pairs.",
+		),
+	warnings: z.array(z.string()).nullish().describe("Loki query warnings."),
+});
+
 export const lokiQueryRangeTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -198,6 +217,7 @@ export const lokiQueryRangeTool = (options: ToolClientOptions) =>
 			description:
 				"Runs a LogQL range query on a branch's logs and returns Loki's response: data.result groups lines by stream label as [nanosecond timestamp, line]. {{logs.query}} has structured filters; {{logs.fields}} and {{logs.fieldValues}} list labels. No cursor: limit lines, or the silent 10,000 cap, may mean more exist; narrow the window.",
 			inputSchema: lokiQueryRangeInputSchema,
+			outputSchema: lokiQueryRangeOutputSchema,
 			annotations: {
 				readOnlyHint: true,
 				destructiveHint: false,
@@ -345,6 +365,7 @@ export const createBranchTool = (options: ToolClientOptions) =>
 			description:
 				"Creates a branch from its parent's current data, with a read-write compute unless no_compute, and waits until it is ready. Returns no connection string; use {{postgres.connectionString}}.",
 			inputSchema: createBranchInputSchema,
+			outputSchema: output.Branch,
 			annotations: writeAnnotations,
 			requiresApproval: true,
 			metadata: {
@@ -379,6 +400,14 @@ export const createBranchTool = (options: ToolClientOptions) =>
 		},
 	);
 
+const branchConnectionOutputSchema = z.looseObject({
+	branch: output.Branch.describe("The created branch."),
+	endpoint: output.Endpoint.describe("The branch's read-write compute."),
+	connectionString: z
+		.string()
+		.describe("Connection string for the branch's database."),
+});
+
 export const createBranchAndConnectTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -389,6 +418,7 @@ export const createBranchAndConnectTool = (options: ToolClientOptions) =>
 			description:
 				"Creates a branch with a read-write compute, waits until it is ready, and returns its connection string.",
 			inputSchema: createBranchAndConnectInputSchema,
+			outputSchema: branchConnectionOutputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
 			metadata: {
@@ -424,6 +454,7 @@ export const createProjectTool = (options: ToolClientOptions) =>
 			description:
 				"Creates a project with a default branch and read-write compute and waits until it is ready. Returns no connection string; use {{postgres.connectionString}}.",
 			inputSchema: createProjectInputSchema,
+			outputSchema: output.Project,
 			annotations: writeAnnotations,
 			requiresApproval: true,
 			metadata: {
@@ -437,6 +468,13 @@ export const createProjectTool = (options: ToolClientOptions) =>
 		(neon, input, signal) => neon.projects.create(input, { signal }),
 	);
 
+const projectConnectionOutputSchema = z.looseObject({
+	project: output.Project.describe("The created project."),
+	connectionString: z
+		.string()
+		.describe("Connection string for the default branch's database."),
+});
+
 export const createProjectAndConnectTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -447,6 +485,7 @@ export const createProjectAndConnectTool = (options: ToolClientOptions) =>
 			description:
 				"Creates a project, waits until its default branch is ready, and returns a connection string to it.",
 			inputSchema: createProjectAndConnectInputSchema,
+			outputSchema: projectConnectionOutputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
 			metadata: {
@@ -471,6 +510,7 @@ export const getDefaultTool = (options: ToolClientOptions) =>
 			description:
 				"Gets the project's default branch by its default flag, not its name.",
 			inputSchema: getDefaultInputSchema,
+			outputSchema: output.Branch,
 			annotations: readAnnotations,
 			requiresApproval: false,
 			metadata: {
@@ -498,6 +538,7 @@ export const resetFromParentTool = (options: ToolClientOptions) =>
 			description:
 				"Resets a branch to its parent's current state, discarding the branch's own changes. NEVER run autonomously; always ask the user first. preserve_under_name first saves the current state as a new branch. To restore a snapshot, use {{snapshots.restore}}.",
 			inputSchema: resetFromParentInputSchema,
+			outputSchema: output.Branch,
 			annotations: writeAnnotations,
 			requiresApproval: true,
 			metadata: {
@@ -531,6 +572,7 @@ export const compareSchemaTool = (options: ToolClientOptions) =>
 			description:
 				"Diffs one database's SQL schema on a branch against another branch, by default its parent. lsn, timestamp, base_lsn, and base_timestamp are only for point-in-time comparisons.",
 			inputSchema: compareSchemaInputSchema,
+			outputSchema: output.BranchSchemaCompareResponse,
 			annotations: readAnnotations,
 			requiresApproval: false,
 			metadata: {
@@ -565,6 +607,10 @@ export const compareSchemaTool = (options: ToolClientOptions) =>
 			),
 	);
 
+const connectionStringOutputSchema = z
+	.string()
+	.describe("A postgresql:// connection string.");
+
 export const connectionStringTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -575,6 +621,7 @@ export const connectionStringTool = (options: ToolClientOptions) =>
 			description:
 				"Returns a Postgres connection string with a role password; the branch needs a compute. Omitted inputs resolve like the SQL tools: default branch, neondb or the first database, and its owner. Call it after {{projects.create}} or {{branches.create}}, which return none.",
 			inputSchema: connectionStringInputSchema,
+			outputSchema: connectionStringOutputSchema,
 			annotations: readAnnotations,
 			requiresApproval: true,
 			metadata: {
@@ -609,6 +656,7 @@ export const createRoleTool = (options: ToolClientOptions) =>
 			description:
 				"Creates a Postgres role on a branch and returns its password. The default access, admin, joins neon_superuser: every database, creating databases and roles, bypassing row-level security, and it cannot be narrowed later. For least privilege pass read_only or read_write with database_name and schemas, covering the tables the database owner owns, now and later.",
 			inputSchema: createRoleInputSchema,
+			outputSchema: output.Role,
 			annotations: writeAnnotations,
 			requiresApproval: true,
 			metadata: {
@@ -657,6 +705,7 @@ export const restoreSnapshotTool = (options: ToolClientOptions) =>
 			description:
 				"Restores a snapshot into a new branch and waits until it is ready. finalize true replaces target_branch_id (default: the snapshot's source branch) with it. NEVER finalize autonomously; ask the user first. Swap in later with {{branches.finalizeRestore}}.",
 			inputSchema: restoreSnapshotInputSchema,
+			outputSchema: output.Branch,
 			annotations: writeAnnotations,
 			requiresApproval: true,
 			metadata: {
@@ -689,6 +738,7 @@ export const setScheduleTool = (options: ToolClientOptions) =>
 			title: "Set snapshot schedule",
 			description: "Replaces a branch's automatic snapshot schedule.",
 			inputSchema: setScheduleInputSchema,
+			outputSchema: z.null(),
 			annotations: writeAnnotations,
 			requiresApproval: true,
 			metadata: {

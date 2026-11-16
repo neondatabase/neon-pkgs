@@ -24,6 +24,8 @@ export const sendFeedbackInputSchema = z.strictObject({
 });
 
 /** Sends only the message and `source` to the Neon feedback service: no account, project, or credential. */
+const sendFeedbackOutputSchema = z.looseObject({ message: z.string() });
+
 export const sendFeedbackTool = (options: ToolClientOptions) => {
 	const url = options.feedbackUrl ?? DEFAULT_FEEDBACK_URL;
 	const source = options.feedbackSource ?? DEFAULT_FEEDBACK_SOURCE;
@@ -36,6 +38,7 @@ export const sendFeedbackTool = (options: ToolClientOptions) => {
 			description:
 				"Sends anonymous feedback text to the Neon team, with no account, project, or connection details. Only call it when the user asks to give feedback.",
 			inputSchema: sendFeedbackInputSchema,
+			outputSchema: sendFeedbackOutputSchema,
 			annotations: {
 				readOnlyHint: false,
 				destructiveHint: false,

@@ -238,16 +238,22 @@ export const bindTool = <
 	const InputSchema extends z.ZodType,
 	const Id extends string,
 	Output,
+	OutputSchema extends z.ZodType,
 >(
 	options: ToolClientOptions,
-	tool: Omit<NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>>, "execute">,
+	tool: Omit<
+		NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>, OutputSchema>,
+		"execute"
+	> & { outputSchema: OutputSchema },
 	run: (
 		neon: NeonClient<true>,
 		input: z.output<InputSchema>,
 		signal: AbortSignal | undefined,
 		context: NeonToolExecutionContext,
 	) => Promise<Output>,
-): NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>> => ({
+): NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>, OutputSchema> & {
+	outputSchema: OutputSchema;
+} => ({
 	...tool,
 	async execute(input, context) {
 		const parsed = await tool.inputSchema.parseAsync(input);
@@ -266,13 +272,19 @@ export const bindPublicTool = <
 	const InputSchema extends z.ZodType,
 	const Id extends string,
 	Output,
+	OutputSchema extends z.ZodType,
 >(
-	tool: Omit<NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>>, "execute">,
+	tool: Omit<
+		NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>, OutputSchema>,
+		"execute"
+	> & { outputSchema: OutputSchema },
 	run: (
 		input: z.output<InputSchema>,
 		context: NeonToolExecutionContext,
 	) => Promise<Output>,
-): NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>> => ({
+): NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>, OutputSchema> & {
+	outputSchema: OutputSchema;
+} => ({
 	...tool,
 	async execute(input, context) {
 		const parsed = await tool.inputSchema.parseAsync(input);
@@ -307,29 +319,38 @@ export function fromGenerated<
 	const Id extends NeonToolId,
 	const G extends NeonOperationId,
 	Output,
+	OutputSchema extends z.ZodType,
 >(
 	options: ToolClientOptions,
 	spec: FromGeneratedMeta & {
 		id: Id;
 		generated: G;
+		output: OutputSchema;
 		run: (
 			neon: NeonClient<true>,
 			input: GeneratedInput<G>,
 			signal?: AbortSignal,
 		) => Promise<Output>;
 	},
-): NeonTool<GeneratedSchema<G>, PublishedId<Id>, JsonSafe<Awaited<Output>>>;
+): NeonTool<
+	GeneratedSchema<G>,
+	PublishedId<Id>,
+	JsonSafe<Awaited<Output>>,
+	OutputSchema
+> & { outputSchema: OutputSchema };
 export function fromGenerated<
 	const Id extends NeonToolId,
 	const G extends NeonOperationId,
 	const Keys extends keyof GeneratedInput<G> & string,
 	Output,
+	OutputSchema extends z.ZodType,
 >(
 	options: ToolClientOptions,
 	spec: FromGeneratedMeta & {
 		id: Id;
 		generated: G;
 		omit: readonly Keys[];
+		output: OutputSchema;
 		run: (
 			neon: NeonClient<true>,
 			input: OmittedInput<G, Keys>,
@@ -339,14 +360,16 @@ export function fromGenerated<
 ): NeonTool<
 	z.ZodType<OmittedInput<G, Keys>, OmittedArg<G, Keys>>,
 	PublishedId<Id>,
-	JsonSafe<Awaited<Output>>
->;
+	JsonSafe<Awaited<Output>>,
+	OutputSchema
+> & { outputSchema: OutputSchema };
 export function fromGenerated(
 	options: ToolClientOptions,
 	spec: FromGeneratedMeta & {
 		id: NeonToolId;
 		generated: NeonOperationId;
 		omit?: readonly string[];
+		output: z.ZodType;
 		run: (
 			neon: NeonClient<true>,
 			input: never,
@@ -369,6 +392,7 @@ export function fromGenerated(
 			? `${description.trimEnd()}${ALL_PAGES}`
 			: description,
 		inputSchema,
+		outputSchema: spec.output,
 		annotations: spec.annotations ?? generated.annotations,
 		requiresApproval: spec.requiresApproval ?? generated.requiresApproval,
 		metadata: generated.metadata,

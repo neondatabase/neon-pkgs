@@ -10,6 +10,7 @@ import {
 } from "@neon/sdk";
 import * as z from "zod";
 import { pathInputDescriptions } from "../../descriptions.gen.js";
+import * as output from "../../generated/output.gen.js";
 import * as zod from "../../generated/zod.gen.js";
 import {
 	bindTool,
@@ -228,6 +229,36 @@ export const readAuthConfig = async (
 	};
 };
 
+const authConfigOutputSchema = z.looseObject({
+	project_id: z.string(),
+	branch_id: z.string(),
+	branch_name: z.string(),
+	base_url: z.string().nullable().describe("Neon Auth API base URL."),
+	jwks_url: z.string().describe("JWKS URL for verifying session tokens."),
+	db_name: z.string().describe("Database that holds the auth schema."),
+	integration: output.NeonAuthIntegration.describe(
+		"The branch's Neon Auth integration.",
+	),
+	trusted_origins: z
+		.array(z.string())
+		.describe("Domains allowed as redirect targets."),
+	allow_localhost: z.boolean(),
+	auth_methods: z
+		.looseObject({ email_password: z.looseObject({}) })
+		.describe("Email and password settings."),
+	oauth_providers: z
+		.array(z.looseObject({}))
+		.describe("OAuth providers, secrets redacted."),
+	email_provider: z.unknown().describe("Email server, secrets redacted."),
+	plugins: z.unknown().describe("Plugin settings."),
+	webhook: z.unknown().describe("Webhook settings, secrets redacted."),
+	logs_export: z.unknown().describe("Logs export settings."),
+	_errors: z
+		.record(z.string(), z.string())
+		.nullish()
+		.describe("Settings that failed to read, by key."),
+});
+
 export const getAuthConfigTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -238,6 +269,7 @@ export const getAuthConfigTool = (options: ToolClientOptions) =>
 			description:
 				"Returns a branch's Neon Auth integration and settings: trusted origins, localhost, email and password, OAuth and email providers, plugins, webhook, and logs export, with secrets redacted. Needs Neon Auth on the branch ({{auth.create}}).",
 			inputSchema: getAuthConfigInputSchema,
+			outputSchema: authConfigOutputSchema,
 			annotations: {
 				readOnlyHint: true,
 				destructiveHint: false,
