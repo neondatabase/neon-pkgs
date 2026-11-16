@@ -17,6 +17,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createNeonTools } from "../src/index.js";
 import { registerNeonTools } from "../src/mcp.js";
+import { checkOutput } from "./check-output.js";
 
 const OAUTH_SECRET = "e2e-oauth-client-secret-value";
 const SMTP_PASSWORD = "e2e-smtp-password-value";
@@ -33,6 +34,7 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 		throwOnError: true,
 	});
 	const tools = createNeonTools({
+		onExecute: checkOutput,
 		apiKey: requireApiKey(),
 		baseUrl: configuredBaseUrl(),
 		tools: [

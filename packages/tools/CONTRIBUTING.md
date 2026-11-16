@@ -12,20 +12,23 @@
    pnpm --filter @neon/tools generate
    ```
 
-   `pnpm generate` writes four files, all committed and checked by `pnpm generate:check`:
+   `pnpm generate` writes five files, all committed and checked by `pnpm generate:check`:
 
    | File | Holds |
    | --- | --- |
    | `src/generated/zod.gen.ts` | Request schemas per operation, descriptions cut to their first sentence |
-   | `src/operations.gen.ts` | One factory per `operationId`: flattened input schema with `input-descriptions.json` applied, annotations, approval, and `metadata` |
+   | `src/generated/output.gen.ts` | Result schemas per operation, from the success response (see [Output schemas](#output-schemas)) |
+   | `src/operations.gen.ts` | One factory per `operationId`: flattened input schema with `input-descriptions.json` applied, output schema, annotations, approval, and `metadata` |
    | `src/schemas.ts` | The request schemas `@neon/tools/schemas` exports |
    | `src/descriptions.gen.ts` | `scripts/tool-descriptions.json` and the `*` entries of `scripts/input-descriptions.json` |
 
 2. Add the selector (the SDK path, such as `"branches.list"`) to `toolIds` in `src/lib/ergonomic/ids.ts`. A tool that is not a `NeonClient` method also goes in `customToolIds`.
 3. Add its factory to `toolFactories` in `src/lib/ergonomic/catalog.ts`:
-   - `fromGenerated` when the tool is one operation whose generated input the SDK method takes as is. It reuses the generated schema, title, annotations, and approval. For a paginated method, omit `cursor`, set `list: true`, and collect pages in `run` with `collectPages`.
+   - `fromGenerated` when the tool is one operation whose generated input the SDK method takes as is. It reuses the generated schema, title, annotations, and approval. For a paginated method, omit `cursor`, set `list: true`, and collect pages in `run` with `collectPages`. `output` maps the generated response schema to what `run` returns: `(response) => response.shape.branches` for a method that unwraps `{ branches }`, `(response) => response` when it returns the body, `() => noContent` when it returns nothing.
    - A composed tool (`bindTool` in `src/lib/ergonomic/composed.ts`) when the tool needs its own input schema, for example renamed or nested fields, or an SDK method that makes several requests.
    - A custom tool (`src/lib/custom/`) when it calls Postgres, neon.com, or several SDK methods.
+
+   Composed and custom tools declare `outputSchema: outputSchemaFor(schema)` themselves. Build `schema` from the generated `output.*` schemas where the result holds API objects, and derive the result type with `z.infer` where you can.
 4. Write its description (below), and add `"<mcp name>": "<selector>"` to `scripts/mcp-tool-names.json` if the Neon MCP server publishes it.
 5. Run the checks:
 
@@ -34,6 +37,19 @@
    pnpm --filter @neon/tools exec tsc --noEmit
    pnpm --filter @neon/tools test:ci
    ```
+
+## Output schemas
+
+A tool's `outputSchema` must accept every result `execute` can return. Two checks enforce that:
+
+- **At compile time.** `bindTool`, `bindPublicTool`, and `fromGenerated` compare the `JsonSafe` result type with the schema's input type. On a mismatch, the factory's return type becomes `OutputSchemaRejectsResult<Result>`, and the `toolFactories` entry fails to compile with the rejected result type in the message. Results typed `unknown`, such as raw rows from `@neondatabase/serverless`, cannot be checked. Type them, as `schema.listTables` and `queries.listSlow` do.
+- **At run time.** `src/output-schemas.test.ts` parses a fixture of every hand-written tool's result, typed as that tool's `data`, and the live e2e suites parse every result through `outputSchema` (`e2e/check-output.ts`).
+
+Result schemas are lenient. Generated objects are `z.looseObject`, enums are `z.string()`, optional fields are `.nullish()`, and range and pattern constraints are dropped. Hand-written results that this package builds itself can be strict.
+
+Mark a field that carries a credential, so hosts can strip it with `withoutCredentials`. In a generated schema, add it under its component to `credentialFields` in `scripts/output-schemas.mjs`. Generation fails if a listed field never appears in a response. In a hand-written schema, use `credential(z.string())`. Either way the field becomes optional, so a result with the field stripped still validates.
+
+`src/mcp.test.ts` bounds the MCP catalog's output schemas separately from inputs and descriptions. Most of that size is API objects such as `Project` repeated across the tools that return them.
 
 ## Descriptions
 

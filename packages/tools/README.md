@@ -94,7 +94,7 @@ await tools["projects.list"].execute(
 );
 ```
 
-Each tool includes its Zod 4 `inputSchema`, published `id`, title, description, safety annotations, stability metadata, and `execute()`. Inputs are snake_case at the tool boundary. `execute()` strictly validates the input, rejects unknown fields, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
+Each tool includes its Zod 4 `inputSchema` and `outputSchema`, published `id`, title, description, safety annotations, stability metadata, and `execute()`. Inputs are snake_case at the tool boundary. `execute()` strictly validates the input, rejects unknown fields, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller. See [Output schemas](#output-schemas) for what `outputSchema` describes.
 
 Paginated lists call `.all()` and return the item array. Do not pass a cursor; those fields are omitted from the input schema.
 
@@ -400,6 +400,49 @@ These are the raw OpenAPI request shapes, not the tool input. `zCreateProjectBod
 
 These schemas are strict. If a newly added API field is not recognized, upgrade `@neon/tools`; use `@neon/sdk` directly until a matching tools release is available.
 
+## Output schemas
+
+Every tool's `outputSchema` is a Zod object that describes its `data` as a JSON object, for MCP `structuredContent` and any host that publishes a result schema. MCP requires an object, so `toStructuredContent(data)` wraps everything else the same way the schema does:
+
+| `data` | Structured content | Tools |
+| --- | --- | --- |
+| An object | The object | Most tools |
+| An array | `{ items }` | Lists, `sql.runTransaction`, `sql.explain`, `schema.listTables` |
+| `null` | `{}` | Calls whose response has no body, such as deletes |
+| A string or number | `{ value }` | `projects.count`, `postgres.connectionString` |
+
+`execute()` still returns `data` unwrapped. `outputDataSchema(tool.outputSchema)` returns the schema of `data` itself.
+
+```ts
+import { createNeonTool, outputDataSchema, toStructuredContent } from "@neon/tools";
+
+const count = createNeonTool("projects.count", { apiKey });
+const { data } = await count.execute({});
+count.outputSchema.parse(toStructuredContent(data)); // { value: 3 }
+outputDataSchema(count.outputSchema).parse(data); // 3
+```
+
+Generated tools take their schema from the OpenAPI success response, and hand-written tools from their result types. A schema that does not accept the result type is a compile error in this package. Result schemas are lenient where requests are strict:
+
+- Objects from the API accept fields this release does not know, and enums accept any string, so a new API field or value does not fail validation.
+- An optional field also accepts `null`, as the `JsonSafe` result type already declares.
+- A call whose response can have no body (HTTP 204) returns `data: null`. Its schema accepts that, or whatever object the API sent instead.
+
+### Credentials in results
+
+Fields that carry a credential are optional and individually marked. That includes role passwords, connection URIs and strings, API keys, branch credential tokens and S3 secret keys, OAuth client secrets, and the Neon Auth server key. A host that strips them from results can publish a schema without them:
+
+```ts
+import { createNeonTool, withoutCredentials, withoutOutputFields } from "@neon/tools";
+
+const tool = createNeonTool("projects.createAndConnect", { apiKey });
+const published = withoutCredentials(tool.outputSchema);
+// Or by field name, at any depth, to match a host that strips by name:
+const byName = withoutOutputFields(tool.outputSchema, ["connectionString"]);
+```
+
+`isCredential(field)` tells whether a single field schema is a marked credential.
+
 ## MCP
 
 Use `@neon/tools/mcp` with MCP 2.x:
@@ -423,10 +466,12 @@ registerNeonTools(server, tools);
 
 `registerNeonTools` publishes that catalog. MCP 2 `inputSchema` is JSON Schema without `$schema`. Generated fields have types, enums, `required`, and constraints, and no OpenAPI property docs. Fields this package described with `.describe()` (`pooled`, `finalize`, `zip`) keep that copy.
 
+Each tool's `outputSchema` is `{ data }` around the tool's data schema, which matches the `structuredContent` it returns. MCP validates successful results against it. Error results are not validated.
+
 Hosts that convert Zod themselves:
 
 ```ts
-import { compactJsonSchema } from "@neon/tools/mcp";
+import { compactJsonSchema, toMcpOutputSchema } from "@neon/tools/mcp";
 import * as z from "zod";
 import { createNeonTool } from "@neon/tools";
 
@@ -434,6 +479,8 @@ const tool = createNeonTool("projects.update", { apiKey });
 const inputSchema = compactJsonSchema(
 	z.toJSONSchema(tool.inputSchema, { io: "input" }),
 );
+// For structuredContent built with toStructuredContent(data):
+const outputSchema = toMcpOutputSchema(tool.outputSchema);
 ```
 
 For a remote MCP server that already authenticated the client, omit `apiKey` at construction. `registerNeonTools` sends `authInfo.token` as the Bearer credential: MCP 2.x `http.authInfo.token`, MCP 1.x `authInfo.token`. The host must put a Neon API key or Neon OAuth access token there. A present `authInfo` with an empty token is an error, not a fall back to a constructor key.
@@ -453,7 +500,7 @@ Existing MCP 1.x servers can use the version-specific entry point:
 import { registerNeonTools } from "@neon/tools/mcp-v1";
 ```
 
-MCP 1.x still receives Zod input schemas, including their `.describe()` copy. Generated Zod carries only the first sentence of each OpenAPI field description. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
+MCP 1.x still receives Zod input and output schemas, including their `.describe()` copy. Generated Zod carries only the first sentence of each OpenAPI field description. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
 
 The adapter returns both text content and object-valued `structuredContent`. Execution failures use `isError: true` with `{ error: { message, name, kind, status, code, source, timeoutMs, requestId, reason, operationId } }` when those fields exist on the thrown error. A wait timeout has `kind: "timeout"` and `source: "wait"`.
 

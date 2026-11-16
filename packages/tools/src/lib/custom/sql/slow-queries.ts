@@ -5,6 +5,7 @@ import {
 	publishedId,
 	type ToolClientOptions,
 } from "../../ergonomic/bind.js";
+import { outputSchemaFor } from "../../output.js";
 import {
 	branchIdField,
 	computeIdField,
@@ -59,6 +60,37 @@ const SLOW_QUERIES_SQL = `
 	LIMIT $1;
 `;
 
+// The serverless driver returns int8 and numeric columns as strings.
+const statistic = z.union([z.number(), z.string()]);
+
+const slowQuerySchema = z.strictObject({
+	query: z.string().nullable(),
+	calls: statistic,
+	total_exec_time_ms: statistic,
+	mean_exec_time_ms: statistic,
+	rows: statistic,
+	shared_blocks: z.strictObject({
+		hit: statistic,
+		read: statistic,
+		written: statistic,
+		dirtied: statistic,
+	}),
+	temp_blocks: z.strictObject({
+		read: statistic,
+		written: statistic,
+	}),
+	wal: z.strictObject({
+		records: statistic,
+		full_page_images: statistic,
+		bytes: statistic,
+	}),
+});
+
+const slowQueriesSchema = z.strictObject({
+	slow_queries: z.array(slowQuerySchema),
+	total_queries_found: z.number(),
+});
+
 export const listSlowQueriesTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -69,6 +101,7 @@ export const listSlowQueriesTool = (options: ToolClientOptions) =>
 			description:
 				"Lists queries from pg_stat_statements, slowest mean execution time first. For sizes, indexes, locks, cache, bloat, or replication, use {{database.inspect}}.",
 			inputSchema: listSlowQueriesInputSchema,
+			outputSchema: outputSchemaFor(slowQueriesSchema),
 			annotations: {
 				readOnlyHint: true,
 				destructiveHint: false,
@@ -95,28 +128,30 @@ export const listSlowQueriesTool = (options: ToolClientOptions) =>
 			const slowQueries = await sql.query(SLOW_QUERIES_SQL, [
 				input.limit,
 			]);
-			const formatted = slowQueries.map((query) => ({
-				query: query.query,
-				calls: query.calls,
-				total_exec_time_ms: query.total_exec_time,
-				mean_exec_time_ms: query.mean_exec_time,
-				rows: query.rows,
-				shared_blocks: {
-					hit: query.shared_blks_hit,
-					read: query.shared_blks_read,
-					written: query.shared_blks_written,
-					dirtied: query.shared_blks_dirtied,
-				},
-				temp_blocks: {
-					read: query.temp_blks_read,
-					written: query.temp_blks_written,
-				},
-				wal: {
-					records: query.wal_records,
-					full_page_images: query.wal_fpi,
-					bytes: query.wal_bytes,
-				},
-			}));
+			const formatted = slowQueries.map(
+				(query): z.infer<typeof slowQuerySchema> => ({
+					query: query.query,
+					calls: query.calls,
+					total_exec_time_ms: query.total_exec_time,
+					mean_exec_time_ms: query.mean_exec_time,
+					rows: query.rows,
+					shared_blocks: {
+						hit: query.shared_blks_hit,
+						read: query.shared_blks_read,
+						written: query.shared_blks_written,
+						dirtied: query.shared_blks_dirtied,
+					},
+					temp_blocks: {
+						read: query.temp_blks_read,
+						written: query.temp_blks_written,
+					},
+					wal: {
+						records: query.wal_records,
+						full_page_images: query.wal_fpi,
+						bytes: query.wal_bytes,
+					},
+				}),
+			);
 			return {
 				slow_queries: formatted,
 				total_queries_found: formatted.length,

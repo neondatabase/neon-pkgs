@@ -6,6 +6,7 @@ import {
 	publishedId,
 	type ToolClientOptions,
 } from "../ergonomic/bind.js";
+import { outputSchemaFor } from "../output.js";
 import { matchesNameOrId } from "./organizations.js";
 
 export const DEFAULT_API_BASE_URL = "https://console.neon.tech/api/v2";
@@ -20,11 +21,13 @@ export const searchResourcesInputSchema = z.strictObject({
 		),
 });
 
-type SearchResult = {
-	id: string;
-	title: string;
-	url: string;
-};
+const searchResultsSchema = z.strictObject({
+	results: z.array(
+		z.strictObject({ id: z.string(), title: z.string(), url: z.string() }),
+	),
+});
+
+type SearchResult = z.infer<typeof searchResultsSchema>["results"][number];
 
 export const consoleBaseUrl = (apiBaseUrl: string) =>
 	apiBaseUrl.replace(/\/api\/v2\/?$/, "");
@@ -168,6 +171,7 @@ export const searchResourcesTool = (options: ToolClientOptions) => {
 			description:
 				"Finds organizations, projects (including shared ones), branches, computes, and snapshots whose name or id contains query, with ids for {{resources.fetch}}. To list projects, use {{projects.list}}; for docs, {{docs.search}}.",
 			inputSchema: searchResourcesInputSchema,
+			outputSchema: outputSchemaFor(searchResultsSchema),
 			annotations: {
 				readOnlyHint: true,
 				destructiveHint: false,

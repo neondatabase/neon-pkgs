@@ -1,6 +1,7 @@
 import {
 	type McpToolResult,
 	type McpToolServer,
+	mcpResultSchema,
 	registerNeonToolsWithSchema,
 } from "./lib/mcp-register.js";
 import type { NeonTool } from "./lib/operation.js";
@@ -11,5 +12,10 @@ export const registerNeonTools = (
 	server: McpToolServer,
 	tools: Readonly<Record<string, NeonTool>>,
 ): void => {
-	registerNeonToolsWithSchema(server, tools, (tool) => tool.inputSchema);
+	registerNeonToolsWithSchema(
+		server,
+		tools,
+		(tool) => tool.inputSchema,
+		mcpResultSchema,
+	);
 };

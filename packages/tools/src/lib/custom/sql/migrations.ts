@@ -7,6 +7,7 @@ import {
 	publishedId,
 	type ToolClientOptions,
 } from "../../ergonomic/bind.js";
+import { outputSchemaFor } from "../../output.js";
 import {
 	DATABASE_NAME_DESCRIPTION,
 	defaultDatabase,
@@ -14,6 +15,7 @@ import {
 	refuseInReadOnly,
 	SQL_METADATA,
 } from "./connection.js";
+import { rowSchema } from "./rows.js";
 import { runTransaction, sqlWriteAnnotations } from "./run.js";
 
 /** Splits on every `;`, including one inside a string literal or function body. */
@@ -132,6 +134,34 @@ export const completeMigrationInputSchema = z.strictObject({
 		),
 });
 
+const statementResults = z.array(z.array(rowSchema));
+
+const preparedMigrationSchema = z.strictObject({
+	complete: z.strictObject({
+		migration_id: z.string(),
+		migration_sql: z.string(),
+		database_name: z.string(),
+		project_id: z.string(),
+		temporary_branch_id: z.string(),
+		parent_branch_id: z.string(),
+	}),
+	temporary_branch: z.strictObject({
+		id: z.string(),
+		name: z.string(),
+		parent_id: z.string(),
+	}),
+	migration_result: statementResults,
+});
+
+const completedMigrationSchema = z.strictObject({
+	applied: z.boolean(),
+	/** Set when the temporary branch was deleted. */
+	deletedBranchId: z.string().nullish(),
+	/** Set instead when deleting the temporary branch failed. */
+	cleanupError: z.string().nullish(),
+	migrationResult: statementResults.nullish(),
+});
+
 export const prepareMigrationTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -142,6 +172,7 @@ export const prepareMigrationTool = (options: ToolClientOptions) =>
 			description:
 				"Applies a schema change on a new temporary branch and returns a migration_id. Test it there with {{sql.run}}, ask the user, then always call {{migrations.complete}} with the response's complete object so the branch is deleted.",
 			inputSchema: prepareMigrationInputSchema,
+			outputSchema: outputSchemaFor(preparedMigrationSchema),
 			annotations: {
 				readOnlyHint: false,
 				destructiveHint: false,
@@ -217,6 +248,7 @@ export const completeMigrationTool = (options: ToolClientOptions) =>
 			description:
 				"Applies or discards a prepared migration and deletes the temporary branch. NEVER run autonomously; always ask the user first. Pass the complete object from {{migrations.prepare}}; apply_changes false discards.",
 			inputSchema: completeMigrationInputSchema,
+			outputSchema: outputSchemaFor(completedMigrationSchema),
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,

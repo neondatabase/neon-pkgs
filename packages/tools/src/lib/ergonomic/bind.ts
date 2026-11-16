@@ -8,6 +8,7 @@ import {
 } from "@neon/sdk";
 import * as z from "zod";
 import { toolDescriptions } from "../../descriptions.gen.js";
+import { operationOutputs } from "../../generated/output.gen.js";
 import {
 	type NeonOperationId,
 	operationFactories,
@@ -18,11 +19,13 @@ import {
 	requireBearerCredential,
 } from "../auth.js";
 import type {
+	CheckedOutput,
 	JsonSafe,
 	NeonTool,
 	NeonToolAnnotations,
 	NeonToolExecutionContext,
 } from "../operation.js";
+import { type NeonOutputSchema, outputSchemaFor } from "../output.js";
 import { toToolResult } from "../result.js";
 import type { NeonToolId } from "./ids.js";
 
@@ -234,51 +237,80 @@ export const collectPages = async <T>(
 	return items;
 };
 
+/** A tool definition before `execute` is bound, with a checkable `outputSchema`. */
+export type ToolDefinition<
+	InputSchema extends z.ZodType,
+	Id extends string,
+	OutputData extends z.ZodType,
+> = Omit<NeonTool<InputSchema, Id>, "execute" | "outputSchema"> & {
+	outputSchema: NeonOutputSchema<OutputData>;
+};
+
 export const bindTool = <
 	const InputSchema extends z.ZodType,
 	const Id extends string,
 	Output,
+	OutputData extends z.ZodType,
 >(
 	options: ToolClientOptions,
-	tool: Omit<NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>>, "execute">,
+	tool: ToolDefinition<InputSchema, Id, OutputData>,
 	run: (
 		neon: NeonClient<true>,
 		input: z.output<InputSchema>,
 		signal: AbortSignal | undefined,
 		context: NeonToolExecutionContext,
 	) => Promise<Output>,
-): NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>> => ({
-	...tool,
-	async execute(input, context) {
-		const parsed = await tool.inputSchema.parseAsync(input);
-		const result = await run(
-			toolClient(options, context),
-			parsed,
-			context?.signal,
-			context ?? {},
-		);
-		return toToolResult(result);
-	},
-});
+) =>
+	({
+		...tool,
+		async execute(input, context) {
+			const parsed = await tool.inputSchema.parseAsync(input);
+			const result = await run(
+				toolClient(options, context),
+				parsed,
+				context?.signal,
+				context ?? {},
+			);
+			return toToolResult(result);
+		},
+	}) satisfies NeonTool<
+		InputSchema,
+		Id,
+		JsonSafe<Awaited<Output>>
+	> as CheckedOutput<
+		NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>>,
+		Output,
+		OutputData
+	>;
 
 /** A tool that calls no Neon API and so needs no credential. */
 export const bindPublicTool = <
 	const InputSchema extends z.ZodType,
 	const Id extends string,
 	Output,
+	OutputData extends z.ZodType,
 >(
-	tool: Omit<NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>>, "execute">,
+	tool: ToolDefinition<InputSchema, Id, OutputData>,
 	run: (
 		input: z.output<InputSchema>,
 		context: NeonToolExecutionContext,
 	) => Promise<Output>,
-): NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>> => ({
-	...tool,
-	async execute(input, context) {
-		const parsed = await tool.inputSchema.parseAsync(input);
-		return toToolResult(await run(parsed, context ?? {}));
-	},
-});
+) =>
+	({
+		...tool,
+		async execute(input, context) {
+			const parsed = await tool.inputSchema.parseAsync(input);
+			return toToolResult(await run(parsed, context ?? {}));
+		},
+	}) satisfies NeonTool<
+		InputSchema,
+		Id,
+		JsonSafe<Awaited<Output>>
+	> as CheckedOutput<
+		NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>>,
+		Output,
+		OutputData
+	>;
 
 type GeneratedTool<G extends NeonOperationId> = ReturnType<
 	(typeof operationFactories)[G]
@@ -287,6 +319,7 @@ type GeneratedSchema<G extends NeonOperationId> =
 	GeneratedTool<G>["inputSchema"];
 type GeneratedInput<G extends NeonOperationId> = z.output<GeneratedSchema<G>>;
 type GeneratedArg<G extends NeonOperationId> = z.input<GeneratedSchema<G>>;
+type GeneratedOutput<G extends NeonOperationId> = (typeof operationOutputs)[G];
 
 type FromGeneratedMeta = {
 	list?: boolean;
@@ -303,43 +336,60 @@ type OmittedArg<G extends NeonOperationId, Keys extends string> = Omit<
 	Keys
 >;
 
+/**
+ * `output` maps the operation's response schema to the schema of what `run`
+ * resolves to, such as `(response) => response.shape.project` when the SDK
+ * returns `data.project`.
+ */
 export function fromGenerated<
 	const Id extends NeonToolId,
 	const G extends NeonOperationId,
 	Output,
+	OutputData extends z.ZodType,
 >(
 	options: ToolClientOptions,
 	spec: FromGeneratedMeta & {
 		id: Id;
 		generated: G;
+		output: (response: GeneratedOutput<G>) => OutputData;
 		run: (
 			neon: NeonClient<true>,
 			input: GeneratedInput<G>,
 			signal?: AbortSignal,
 		) => Promise<Output>;
 	},
-): NeonTool<GeneratedSchema<G>, PublishedId<Id>, JsonSafe<Awaited<Output>>>;
+): CheckedOutput<
+	NeonTool<GeneratedSchema<G>, PublishedId<Id>, JsonSafe<Awaited<Output>>>,
+	Output,
+	OutputData
+>;
 export function fromGenerated<
 	const Id extends NeonToolId,
 	const G extends NeonOperationId,
 	const Keys extends keyof GeneratedInput<G> & string,
 	Output,
+	OutputData extends z.ZodType,
 >(
 	options: ToolClientOptions,
 	spec: FromGeneratedMeta & {
 		id: Id;
 		generated: G;
 		omit: readonly Keys[];
+		output: (response: GeneratedOutput<G>) => OutputData;
 		run: (
 			neon: NeonClient<true>,
 			input: OmittedInput<G, Keys>,
 			signal?: AbortSignal,
 		) => Promise<Output>;
 	},
-): NeonTool<
-	z.ZodType<OmittedInput<G, Keys>, OmittedArg<G, Keys>>,
-	PublishedId<Id>,
-	JsonSafe<Awaited<Output>>
+): CheckedOutput<
+	NeonTool<
+		z.ZodType<OmittedInput<G, Keys>, OmittedArg<G, Keys>>,
+		PublishedId<Id>,
+		JsonSafe<Awaited<Output>>
+	>,
+	Output,
+	OutputData
 >;
 export function fromGenerated(
 	options: ToolClientOptions,
@@ -347,6 +397,7 @@ export function fromGenerated(
 		id: NeonToolId;
 		generated: NeonOperationId;
 		omit?: readonly string[];
+		output: (response: never) => z.ZodType;
 		run: (
 			neon: NeonClient<true>,
 			input: never,
@@ -369,6 +420,9 @@ export function fromGenerated(
 			? `${description.trimEnd()}${ALL_PAGES}`
 			: description,
 		inputSchema,
+		outputSchema: outputSchemaFor(
+			spec.output(operationOutputs[spec.generated] as never),
+		),
 		annotations: spec.annotations ?? generated.annotations,
 		requiresApproval: spec.requiresApproval ?? generated.requiresApproval,
 		metadata: generated.metadata,

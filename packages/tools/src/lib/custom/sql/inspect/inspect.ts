@@ -6,6 +6,7 @@ import {
 	publishedId,
 	type ToolClientOptions,
 } from "../../../ergonomic/bind.js";
+import { outputSchemaFor } from "../../../output.js";
 import {
 	branchIdField,
 	computeIdField,
@@ -22,7 +23,11 @@ import {
 	INSPECT_QUERIES,
 	type InspectCheck,
 } from "./queries.js";
-import { assembleInspectReport, type InspectDatabaseBatch } from "./report.js";
+import {
+	assembleInspectReport,
+	type InspectDatabaseBatch,
+	inspectDatabaseResultSchema,
+} from "./report.js";
 import { formatInspectQueryError, selectInspectTargets } from "./targets.js";
 
 /**
@@ -145,6 +150,7 @@ export const inspectDatabaseTool = (options: ToolClientOptions) =>
 			description:
 				"Runs one read-only neon inspect db check; some are compute-wide. outliers ranks queries by total time and calls by count, both via pg_stat_statements; lfc-hit-rate and working-set need the neon extension. If one is missing, the error gives the CREATE EXTENSION; ask before running it. Other SQL: {{sql.run}}; one plan: {{sql.explain}}; new indexes: {{queryTuning.prepare}}.",
 			inputSchema: inspectDatabaseInputSchema,
+			outputSchema: outputSchemaFor(inspectDatabaseResultSchema),
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
 			metadata: SQL_METADATA,

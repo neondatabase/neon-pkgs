@@ -19,6 +19,7 @@ import { NeonDbError } from "@neondatabase/serverless";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createNeonTools, customToolIds, publishedId } from "../src/index.js";
 import { registerNeonTools } from "../src/mcp.js";
+import { checkOutput } from "./check-output.js";
 
 const sqlToolIds = [
 	"postgres.connectionString",
@@ -61,6 +62,7 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		throwOnError: true,
 	});
 	const tools = createNeonTools({
+		onExecute: checkOutput,
 		apiKey: requireApiKey(),
 		baseUrl: configuredBaseUrl(),
 		tools: sqlToolIds,
@@ -606,6 +608,7 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 
 	it("a readiness timeout in the prepare tools deletes the temporary branch", async () => {
 		const impatient = createNeonTools({
+			onExecute: checkOutput,
 			apiKey: requireApiKey(),
 			baseUrl: configuredBaseUrl(),
 			wait: { timeoutMs: 1 },
@@ -636,6 +639,7 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 
 	it("every new tool is listed over MCP and sql.run is callable", async () => {
 		const allTools = createNeonTools({
+			onExecute: checkOutput,
 			apiKey: requireApiKey(),
 			baseUrl: configuredBaseUrl(),
 			tools: customToolIds,
@@ -674,6 +678,7 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 
 describe("e2e — @neon/tools docs and feedback tools", () => {
 	const tools = createNeonTools({
+		onExecute: checkOutput,
 		tools: ["docs.search", "docs.get", "feedback.send"],
 	});
 
@@ -739,6 +744,7 @@ describe("e2e — @neon/tools docs and feedback tools", () => {
 		try {
 			const feedbackUrl = `http://127.0.0.1:${port}/`;
 			const local = createNeonTools({
+				onExecute: checkOutput,
 				tools: ["feedback.send"],
 				feedbackUrl,
 			});
@@ -747,6 +753,7 @@ describe("e2e — @neon/tools docs and feedback tools", () => {
 			});
 			expect(data).toEqual({ message: "Feedback received. Thank you!" });
 			const fromMcp = createNeonTools({
+				onExecute: checkOutput,
 				tools: ["feedback.send"],
 				feedbackUrl,
 				feedbackSource: "neon_mcp",

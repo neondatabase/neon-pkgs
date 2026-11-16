@@ -10,12 +10,14 @@ import {
 } from "@neon/sdk";
 import * as z from "zod";
 import { pathInputDescriptions } from "../../descriptions.gen.js";
+import * as output from "../../generated/output.gen.js";
 import * as zod from "../../generated/zod.gen.js";
 import {
 	bindTool,
 	publishedId,
 	type ToolClientOptions,
 } from "../ergonomic/bind.js";
+import { credential, outputSchemaFor } from "../output.js";
 
 export const REDACTED_SECRET = "***redacted***";
 
@@ -134,6 +136,82 @@ const optionalRead = async <T>(
 	}
 };
 
+const authConfigSchema = z.strictObject({
+	project_id: z.string(),
+	branch_id: z.string(),
+	branch_name: z.string(),
+	base_url: z.string().nullable(),
+	jwks_url: z.string(),
+	db_name: z.string(),
+	integration: z.strictObject({
+		auth_provider: z.string(),
+		auth_provider_project_id: z.string(),
+		branch_id: z.string(),
+		db_name: z.string(),
+		created_at: z.string(),
+		owned_by: z.string(),
+		jwks_url: z.string(),
+		base_url: z.string().nullish(),
+		transfer_status: z.string().nullish(),
+	}),
+	trusted_origins: z.array(z.string()),
+	allow_localhost: z.boolean(),
+	auth_methods: z.strictObject({
+		email_password: z.strictObject({
+			enabled: z.boolean(),
+			allow_sign_up: z.boolean(),
+			verify_email_on_sign_up: z.boolean(),
+			verify_email_on_sign_in: z.boolean(),
+			email_verification_method: z.string(),
+			require_email_verification: z.boolean(),
+			auto_sign_in_after_verification: z.boolean(),
+			revoke_sessions_on_password_reset: z.boolean(),
+		}),
+	}),
+	/** `client_secret` is `REDACTED_SECRET` when one is set. */
+	oauth_providers: z.array(
+		z.strictObject({
+			id: z.string(),
+			type: z.string(),
+			client_id: z.string().nullable(),
+			client_secret: credential(z.string()),
+			microsoft_tenant_id: z.string().nullish(),
+			apple_team_id: z.string().nullish(),
+			apple_key_id: z.string().nullish(),
+		}),
+	),
+	/** `password` is always `REDACTED_SECRET`. */
+	email_provider: z
+		.union([
+			z.strictObject({
+				type: z.literal("standard"),
+				host: z.string(),
+				port: z.number(),
+				username: z.string(),
+				password: credential(z.string()),
+				sender_email: z.string().nullish(),
+				sender_name: z.string().nullish(),
+			}),
+			z.strictObject({
+				type: z.literal("shared"),
+				sender_email: z.string().nullable(),
+				sender_name: z.string().nullable(),
+			}),
+		])
+		.nullable(),
+	plugins: z
+		.strictObject({
+			organization: output.zNeonAuthPluginConfigs.shape.organization,
+			magic_link: output.zNeonAuthPluginConfigs.shape.magic_link,
+			phone_number: output.zNeonAuthPluginConfigs.shape.phone_number,
+		})
+		.nullable(),
+	webhook: output.zNeonAuthWebhookConfig.nullable(),
+	logs_export: output.zNeonAuthPluginConfigs.shape.logs_export,
+	/** Settings that could not be read, by name, with the API's reason. */
+	_errors: z.record(z.string(), z.string()).nullish(),
+});
+
 export const readAuthConfig = async (
 	neon: NeonClient<true>,
 	input: z.output<typeof getAuthConfigInputSchema>,
@@ -238,6 +316,7 @@ export const getAuthConfigTool = (options: ToolClientOptions) =>
 			description:
 				"Returns a branch's Neon Auth integration and settings: trusted origins, localhost, email and password, OAuth and email providers, plugins, webhook, and logs export, with secrets redacted. Needs Neon Auth on the branch ({{auth.create}}).",
 			inputSchema: getAuthConfigInputSchema,
+			outputSchema: outputSchemaFor(authConfigSchema),
 			annotations: {
 				readOnlyHint: true,
 				destructiveHint: false,

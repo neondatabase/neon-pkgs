@@ -1,14 +1,19 @@
+import * as z from "zod";
+
 export const SQL_DEFAULT_MAX_ROWS = 100;
 export const SQL_MAX_ROWS_LIMIT = 10_000;
 
-export type Row = Record<string, unknown>;
+/** A result row by column name. Postgres types JSON has no form for, such as int8, arrive as strings. */
+export const rowSchema = z.record(z.string(), z.unknown());
+export type Row = z.infer<typeof rowSchema>;
 
-export interface StatementRows {
-	rows: Row[];
-	totalRowCount: number;
-	truncated: boolean;
-	note?: string;
-}
+export const statementRowsSchema = z.strictObject({
+	rows: z.array(rowSchema),
+	totalRowCount: z.number(),
+	truncated: z.boolean(),
+	note: z.string().nullish(),
+});
+export type StatementRows = z.infer<typeof statementRowsSchema>;
 
 // Whether a rerun is safe can't be read from the result: a data-modifying CTE
 // or a function call with side effects still reports a SELECT command tag.

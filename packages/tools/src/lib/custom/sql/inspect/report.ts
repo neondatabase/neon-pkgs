@@ -1,4 +1,6 @@
+import * as z from "zod";
 import {
+	INSPECT_CHECKS,
 	INSPECT_MAX_LIMIT,
 	type InspectCheck,
 	type InspectQuery,
@@ -18,19 +20,21 @@ export type InspectDatabaseBatch = {
 	rows: Record<string, unknown>[];
 };
 
-export type InspectDatabaseResult = {
-	check: InspectCheck;
-	describe: string;
-	projectId: string;
-	branchId: string;
-	databaseName?: string;
-	databases: string[];
-	fields: readonly string[];
-	totalRowCount: number;
-	rows: Record<string, unknown>[];
-	truncated: boolean;
-	note?: string;
-};
+export const inspectDatabaseResultSchema = z.strictObject({
+	check: z.enum(INSPECT_CHECKS),
+	describe: z.string(),
+	projectId: z.string(),
+	branchId: z.string(),
+	databaseName: z.string().nullish(),
+	databases: z.array(z.string()),
+	fields: z.array(z.string()).readonly(),
+	totalRowCount: z.number(),
+	rows: z.array(z.record(z.string(), z.unknown())),
+	truncated: z.boolean(),
+	note: z.string().nullish(),
+});
+
+export type InspectDatabaseResult = z.infer<typeof inspectDatabaseResultSchema>;
 
 type AssembleInspectReportInput = {
 	check: InspectCheck;

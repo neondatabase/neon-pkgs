@@ -1,12 +1,14 @@
 import type { Branch, NeonClient } from "@neon/sdk";
 import * as z from "zod";
 import { pathInputDescriptions } from "../../../descriptions.gen.js";
+import { zBranch } from "../../../generated/output.gen.js";
 import {
 	bindTool,
 	publishedId,
 	type ToolClientOptions,
 } from "../../ergonomic/bind.js";
 import type { NeonToolExecutionContext } from "../../operation.js";
+import { outputSchemaFor } from "../../output.js";
 import { consoleBaseUrl, DEFAULT_API_BASE_URL } from "../resources.js";
 import {
 	databaseNameField,
@@ -15,7 +17,7 @@ import {
 	SQL_METADATA,
 	sqlClient,
 } from "./connection.js";
-import type { Row } from "./rows.js";
+import { type Row, rowSchema } from "./rows.js";
 import { sqlReadAnnotations } from "./schema.js";
 
 export const describeBranchInputSchema = z.strictObject({
@@ -145,6 +147,14 @@ export interface BranchDescription {
 	database_structure_error?: string;
 }
 
+export const branchDescriptionSchema = z.strictObject({
+	branch: zBranch,
+	console_url: z.string(),
+	text: z.string(),
+	database_structure: z.array(z.array(rowSchema)).nullable(),
+	database_structure_error: z.string().nullish(),
+});
+
 export const describeBranch = async (
 	neonClient: NeonClient<true>,
 	input: { project_id: string; branch_id: string; database_name?: string },
@@ -209,6 +219,7 @@ export const describeBranchTool = (options: ToolClientOptions) => {
 			description:
 				"Returns a branch summary, its database names, and a tree of one database's schemas, tables, views, indexes, sequences, and functions. Starts a suspended compute. Branch record only: {{branches.get}}; table names: {{schema.listTables}}; columns: {{schema.describeTable}}.",
 			inputSchema: describeBranchInputSchema,
+			outputSchema: outputSchemaFor(branchDescriptionSchema),
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
 			metadata: SQL_METADATA,

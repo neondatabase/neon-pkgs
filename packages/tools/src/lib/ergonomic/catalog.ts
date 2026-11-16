@@ -5,6 +5,7 @@ import {
 	type NeonAuthPluginConfigs,
 } from "@neon/sdk";
 import * as z from "zod";
+import { operationOutputs } from "../../generated/output.gen.js";
 import { decodeBase64 } from "../binary.js";
 import { getAuthConfigTool } from "../custom/auth-config.js";
 import { getDocTool, searchDocsTool } from "../custom/docs.js";
@@ -29,9 +30,10 @@ import {
 } from "../custom/sql/run.js";
 import { describeTableTool, listTablesTool } from "../custom/sql/schema.js";
 import { listSlowQueriesTool } from "../custom/sql/slow-queries.js";
-import type { NeonTool, NeonToolExecutionContext } from "../operation.js";
-import { toToolResult } from "../result.js";
+import type { NeonTool } from "../operation.js";
+import { noContent, outputSchemaFor } from "../output.js";
 import {
+	bindPublicTool,
 	bindTool,
 	collectObjectList,
 	collectPages,
@@ -85,45 +87,96 @@ const withoutPluginSecrets = (
 	}),
 });
 
-const listIncidentsInputSchema = z.strictObject({});
+const serviceStatus = z.enum([
+	"operational",
+	"maintenance",
+	"degraded_performance",
+	"partial_disruption",
+	"disruption",
+	"security_event",
+]);
+
+const incidentsReport = z.strictObject({
+	status: serviceStatus,
+	updated_at: z.string(),
+	status_page_url: z.string(),
+	incidents: z.array(
+		z.strictObject({
+			id: z.string(),
+			name: z.string(),
+			state: z.enum([
+				"investigating",
+				"identified",
+				"monitoring",
+				"resolved",
+			]),
+			status: serviceStatus,
+			started_at: z.string(),
+			updated_at: z.string(),
+			latest_update: z.string(),
+			components: z.array(z.string()),
+			regions: z.array(z.string()),
+			url: z.string(),
+		}),
+	),
+	maintenance: z.array(
+		z.strictObject({
+			id: z.string(),
+			name: z.string(),
+			state: z.enum(["active", "pending"]),
+			planned_start: z.string(),
+			planned_end: z.string(),
+			latest_update: z.string(),
+			components: z.array(z.string()),
+			regions: z.array(z.string()),
+			url: z.string(),
+		}),
+	),
+	affected_components: z.array(
+		z.strictObject({
+			name: z.string(),
+			status: serviceStatus,
+			regions: z.array(z.string()),
+		}),
+	),
+});
 
 // Reads a public status page, so it takes no credential and ignores one if passed.
 const listIncidentsTool = (options: ToolClientOptions) =>
-	({
-		operationId: "incidents.list",
-		id: publishedId("incidents.list"),
-		title: "List Neon incidents",
-		description:
-			"Lists open Neon incidents and maintenance from neonstatus.com and the affected components and regions. Needs no credentials. Call it when Neon requests fail unexpectedly or the user asks whether Neon is down.",
-		inputSchema: listIncidentsInputSchema,
-		annotations: {
-			readOnlyHint: true,
-			destructiveHint: false,
-			idempotentHint: true,
-			openWorldHint: true,
+	bindPublicTool(
+		{
+			operationId: "incidents.list",
+			id: publishedId("incidents.list"),
+			title: "List Neon incidents",
+			description:
+				"Lists open Neon incidents and maintenance from neonstatus.com and the affected components and regions. Needs no credentials. Call it when Neon requests fail unexpectedly or the user asks whether Neon is down.",
+			inputSchema: z.strictObject({}),
+			outputSchema: outputSchemaFor(incidentsReport),
+			annotations: {
+				readOnlyHint: true,
+				destructiveHint: false,
+				idempotentHint: true,
+				openWorldHint: true,
+			},
+			requiresApproval: false,
+			metadata: {
+				method: "GET",
+				path: NEON_STATUS_API_URL,
+				stability: "stable",
+				deprecated: false,
+				tags: ["Status"],
+			},
 		},
-		requiresApproval: false,
-		metadata: {
-			method: "GET",
-			path: NEON_STATUS_API_URL,
-			stability: "stable",
-			deprecated: false,
-			tags: ["Status"],
-		},
-		async execute(input: unknown, context?: NeonToolExecutionContext) {
-			await listIncidentsInputSchema.parseAsync(input);
-			return toToolResult(
-				await listNeonIncidents({
-					...(options.fetch === undefined
-						? {}
-						: { fetch: options.fetch }),
-					...(context?.signal === undefined
-						? {}
-						: { signal: context.signal }),
-				}),
-			);
-		},
-	}) satisfies NeonTool<typeof listIncidentsInputSchema, "list_incidents">;
+		(_input, context) =>
+			listNeonIncidents({
+				...(options.fetch === undefined
+					? {}
+					: { fetch: options.fetch }),
+				...(context.signal === undefined
+					? {}
+					: { signal: context.signal }),
+			}),
+	);
 
 export type ToolFactory = (typeof toolFactories)[NeonToolId];
 
@@ -132,6 +185,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.list",
 			generated: "listProjects",
+			output: (response) => response.shape.projects,
 			omit: ["cursor"],
 			list: true,
 			run: (neon, input, signal) =>
@@ -153,6 +207,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.count",
 			generated: "countProjects",
+			output: (response) => response.shape.count,
 			run: (neon, input, signal) =>
 				neon.projects.count({ org_id: input.org_id }, { signal }),
 		}),
@@ -160,6 +215,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.get",
 			generated: "getProject",
+			output: (response) => response.shape.project,
 			run: (neon, input, signal) =>
 				neon.projects.get({ projectId: input.project_id }, { signal }),
 		}),
@@ -169,6 +225,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.update",
 			generated: "updateProject",
+			output: (response) => response.shape.project,
 			run: (neon, input, signal) =>
 				neon.projects.update(
 					{
@@ -187,6 +244,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.delete",
 			generated: "deleteProject",
+			output: (response) => response.shape.project,
 			run: (neon, input, signal) =>
 				neon.projects.delete(
 					{ projectId: input.project_id },
@@ -197,6 +255,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.recover",
 			generated: "recoverProject",
+			output: (response) => response.shape.project,
 			run: (neon, input, signal) =>
 				neon.projects.recover(
 					{ projectId: input.project_id },
@@ -207,6 +266,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.transfer",
 			generated: "transferProjectsFromOrgToOrg",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.projects.transfer(
 					{
@@ -221,6 +281,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.transferFromUser",
 			generated: "transferProjectsFromUserToOrg",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.projects.transferFromUser(
 					{
@@ -234,6 +295,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.permissions.list",
 			generated: "listProjectPermissions",
+			output: (response) => response.shape.project_permissions,
 			run: (neon, input, signal) =>
 				neon.projects.permissions.list(
 					{ projectId: input.project_id },
@@ -244,6 +306,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.permissions.grant",
 			generated: "grantPermissionToProject",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.projects.permissions.grant(
 					{ projectId: input.project_id, email: input.email },
@@ -256,6 +319,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.permissions.revoke",
 			generated: "revokePermissionFromProject",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.projects.permissions.revoke(
 					{
@@ -269,6 +333,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.members.list",
 			generated: "listProjectMembers",
+			output: (response) => response.shape.project_members,
 			omit: ["cursor"],
 			list: true,
 			run: (neon, input, signal) =>
@@ -284,6 +349,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.members.setRole",
 			generated: "setProjectMemberRole",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.projects.members.setRole(
 					{
@@ -301,6 +367,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "projects.members.removeRole",
 			generated: "removeProjectMemberRole",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.projects.members.removeRole(
 					{
@@ -317,6 +384,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "branches.list",
 			generated: "listProjectBranches",
+			output: (response) => response.shape.branches,
 			omit: ["cursor"],
 			list: true,
 			run: (neon, input, signal) =>
@@ -339,6 +407,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "branches.get",
 			generated: "getProjectBranch",
+			output: (response) => response.shape.branch,
 			run: (neon, input, signal) =>
 				neon.branches.get(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -353,6 +422,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "branches.update",
 			generated: "updateProjectBranch",
+			output: (response) => response.shape.branch,
 			run: (neon, input, signal) =>
 				neon.branches.update(
 					{
@@ -369,6 +439,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "branches.delete",
 			generated: "deleteProjectBranch",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.branches.delete(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -382,6 +453,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "branches.setDefault",
 			generated: "setDefaultProjectBranch",
+			output: (response) => response.shape.branch,
 			run: (neon, input, signal) =>
 				neon.branches.setDefault(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -396,6 +468,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "branches.finalizeRestore",
 			generated: "finalizeRestoreBranch",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.branches.finalizeRestore(
 					{
@@ -411,6 +484,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.endpoints.list",
 			generated: "listProjectEndpoints",
+			output: (response) => response.shape.endpoints,
 			run: (neon, input, signal) =>
 				neon.postgres.endpoints.list(
 					{ projectId: input.project_id },
@@ -421,6 +495,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.endpoints.listByBranch",
 			generated: "listProjectBranchEndpoints",
+			output: (response) => response.shape.endpoints,
 			run: (neon, input, signal) =>
 				neon.postgres.endpoints.listByBranch(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -431,6 +506,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.endpoints.get",
 			generated: "getProjectEndpoint",
+			output: (response) => response.shape.endpoint,
 			run: (neon, input, signal) =>
 				neon.postgres.endpoints.get(
 					{
@@ -444,6 +520,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.endpoints.create",
 			generated: "createProjectEndpoint",
+			output: (response) => response.shape.endpoint,
 			run: (neon, input, signal) =>
 				neon.postgres.endpoints.create(
 					{
@@ -471,6 +548,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.endpoints.update",
 			generated: "updateProjectEndpoint",
+			output: (response) => response.shape.endpoint,
 			run: (neon, input, signal) =>
 				neon.postgres.endpoints.update(
 					{
@@ -497,6 +575,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.endpoints.delete",
 			generated: "deleteProjectEndpoint",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.postgres.endpoints.delete(
 					{
@@ -510,6 +589,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.endpoints.start",
 			generated: "startProjectEndpoint",
+			output: (response) => response.shape.endpoint,
 			run: (neon, input, signal) =>
 				neon.postgres.endpoints.start(
 					{
@@ -523,6 +603,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.endpoints.suspend",
 			generated: "suspendProjectEndpoint",
+			output: (response) => response.shape.endpoint,
 			run: (neon, input, signal) =>
 				neon.postgres.endpoints.suspend(
 					{
@@ -536,6 +617,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.endpoints.restart",
 			generated: "restartProjectEndpoint",
+			output: (response) => response.shape.endpoint,
 			run: (neon, input, signal) =>
 				neon.postgres.endpoints.restart(
 					{
@@ -549,6 +631,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.roles.list",
 			generated: "listProjectBranchRoles",
+			output: (response) => response.shape.roles,
 			run: (neon, input, signal) =>
 				neon.postgres.roles.list(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -561,6 +644,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.roles.get",
 			generated: "getProjectBranchRole",
+			output: (response) => response.shape.role,
 			run: (neon, input, signal) =>
 				neon.postgres.roles.get(
 					{
@@ -576,6 +660,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.roles.delete",
 			generated: "deleteProjectBranchRole",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.postgres.roles.delete(
 					{
@@ -590,6 +675,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.roles.resetPassword",
 			generated: "resetProjectBranchRolePassword",
+			output: (response) => response.shape.role,
 			run: (neon, input, signal) =>
 				neon.postgres.roles.resetPassword(
 					{
@@ -604,6 +690,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.databases.list",
 			generated: "listProjectBranchDatabases",
+			output: (response) => response.shape.databases,
 			run: (neon, input, signal) =>
 				neon.postgres.databases.list(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -616,6 +703,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.databases.get",
 			generated: "getProjectBranchDatabase",
+			output: (response) => response.shape.database,
 			run: (neon, input, signal) =>
 				neon.postgres.databases.get(
 					{
@@ -630,6 +718,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.databases.create",
 			generated: "createProjectBranchDatabase",
+			output: (response) => response.shape.database,
 			run: (neon, input, signal) =>
 				neon.postgres.databases.create(
 					{
@@ -645,6 +734,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.databases.update",
 			generated: "updateProjectBranchDatabase",
+			output: (response) => response.shape.database,
 			run: (neon, input, signal) =>
 				neon.postgres.databases.update(
 					{
@@ -661,6 +751,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.databases.delete",
 			generated: "deleteProjectBranchDatabase",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.postgres.databases.delete(
 					{
@@ -675,6 +766,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.dataApi.get",
 			generated: "getProjectBranchDataAPI",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.postgres.dataApi.get(
 					{
@@ -689,6 +781,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.dataApi.create",
 			generated: "createProjectBranchDataAPI",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.postgres.dataApi.create(
 					{
@@ -710,6 +803,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.dataApi.update",
 			generated: "updateProjectBranchDataAPI",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.postgres.dataApi.update(
 					{
@@ -738,6 +832,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.dataApi.delete",
 			generated: "deleteProjectBranchDataAPI",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.postgres.dataApi.delete(
 					{
@@ -752,6 +847,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "storage.get",
 			generated: "getProjectBranchStorage",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.storage.get(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -762,6 +858,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "storage.buckets.list",
 			generated: "listProjectBranchBuckets",
+			output: (response) => response.shape.buckets,
 			run: (neon, input, signal) =>
 				neon.storage.buckets.list(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -774,6 +871,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "storage.buckets.create",
 			generated: "createProjectBranchBucket",
+			output: (response) => response.shape.bucket,
 			run: (neon, input, signal) =>
 				neon.storage.buckets.create(
 					{
@@ -789,6 +887,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "storage.buckets.delete",
 			generated: "deleteProjectBranchBucket",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.storage.buckets.delete(
 					{
@@ -803,6 +902,12 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "storage.objects.list",
 			generated: "listProjectBranchBucketObjects",
+			output: (response) =>
+				z.strictObject({
+					folders: z.array(z.string()),
+					objects: response.shape.objects,
+					prefix: z.string(),
+				}),
 			omit: ["cursor"],
 			list: true,
 			run: (neon, input, signal) =>
@@ -823,6 +928,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "storage.objects.delete",
 			generated: "deleteProjectBranchBucketObject",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.storage.objects.delete(
 					{
@@ -838,6 +944,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "storage.objects.deleteByPrefix",
 			generated: "deleteProjectBranchBucketObjectsByPrefix",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.storage.objects.deleteByPrefix(
 					{
@@ -853,6 +960,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "storage.objects.presign",
 			generated: "presignProjectBranchBucketObject",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.storage.objects.presign(
 					{
@@ -871,6 +979,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "functions.list",
 			generated: "listProjectBranchFunctions",
+			output: (response) => response.shape.functions,
 			omit: ["cursor"],
 			list: true,
 			run: (neon, input, signal) =>
@@ -890,6 +999,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "functions.get",
 			generated: "getProjectBranchFunction",
+			output: (response) => response.shape.function,
 			run: (neon, input, signal) =>
 				neon.functions.get(
 					{
@@ -904,6 +1014,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "functions.update",
 			generated: "updateProjectBranchFunction",
+			output: (response) => response.shape.function,
 			run: (neon, input, signal) =>
 				neon.functions.update(
 					{
@@ -919,6 +1030,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "functions.delete",
 			generated: "deleteProjectBranchFunction",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.functions.delete(
 					{
@@ -933,6 +1045,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "functions.deploy",
 			generated: "createProjectBranchFunctionDeployment",
+			output: (response) => response.shape.deployment,
 			run: (neon, input, signal) =>
 				neon.functions.deploy(
 					{
@@ -953,6 +1066,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "functions.customDomains.list",
 			generated: "listProjectBranchCustomDomains",
+			output: (response) => response.shape.custom_domains,
 			omit: ["cursor"],
 			list: true,
 			run: (neon, input, signal) =>
@@ -972,6 +1086,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "functions.customDomains.register",
 			generated: "registerProjectBranchCustomDomain",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.functions.customDomains.register(
 					{
@@ -988,6 +1103,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "functions.customDomains.delete",
 			generated: "deleteProjectBranchCustomDomain",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.functions.customDomains.delete(
 					{
@@ -1002,6 +1118,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "triggers.list",
 			generated: "listProjectBranchTriggers",
+			output: (response) => response.shape.triggers,
 			run: (neon, input, signal) =>
 				neon.triggers.list(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1014,6 +1131,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "triggers.get",
 			generated: "getProjectBranchTrigger",
+			output: (response) => response.shape.trigger,
 			run: (neon, input, signal) =>
 				neon.triggers.get(
 					{
@@ -1028,6 +1146,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "triggers.create",
 			generated: "createProjectBranchTrigger",
+			output: (response) => response.shape.trigger,
 			run: (neon, input, signal) =>
 				neon.triggers.create(
 					{
@@ -1042,6 +1161,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "triggers.update",
 			generated: "updateProjectBranchTrigger",
+			output: (response) => response.shape.trigger,
 			run: (neon, input, signal) =>
 				neon.triggers.update(
 					{
@@ -1057,6 +1177,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "triggers.delete",
 			generated: "deleteProjectBranchTrigger",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.triggers.delete(
 					{
@@ -1071,6 +1192,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "credentials.list",
 			generated: "listCredentials",
+			output: (response) => response.shape.credentials,
 			run: (neon, input, signal) =>
 				neon.credentials.list(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1083,6 +1205,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "credentials.create",
 			generated: "createCredential",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.credentials.create(
 					{
@@ -1099,6 +1222,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "credentials.revoke",
 			generated: "revokeCredential",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.credentials.revoke(
 					{
@@ -1113,6 +1237,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "credentials.rotate",
 			generated: "rotateCredential",
+			output: (response) => response,
 			annotations: {
 				readOnlyHint: false,
 				destructiveHint: true,
@@ -1133,6 +1258,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "aiGateway.get",
 			generated: "getProjectBranchAiGateway",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.aiGateway.get(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1145,6 +1271,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "realtime.get",
 			generated: "getProjectBranchRealtime",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.realtime.get(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1155,6 +1282,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "realtime.enable",
 			generated: "enableProjectBranchRealtime",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.realtime.enable(
 					{
@@ -1169,6 +1297,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "realtime.disable",
 			generated: "disableProjectBranchRealtime",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.realtime.disable(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1179,6 +1308,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "realtime.secret",
 			generated: "getProjectBranchRealtimeSecret",
+			output: (response) => response,
 			requiresApproval: true,
 			run: (neon, input, signal) =>
 				neon.realtime.secret(
@@ -1190,6 +1320,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "realtime.rotateSecret",
 			generated: "rotateProjectBranchRealtimeSecret",
+			output: () => noContent,
 			annotations: {
 				readOnlyHint: false,
 				destructiveHint: true,
@@ -1206,6 +1337,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "logs.query",
 			generated: "queryProjectBranchLogs",
+			output: (response) => response.shape.logs,
 			omit: ["cursor"],
 			list: true,
 			annotations: logReadAnnotations,
@@ -1239,6 +1371,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "logs.fields",
 			generated: "listProjectBranchLogFields",
+			output: (response) => response.shape.fields,
 			run: (neon, input, signal) =>
 				neon.logs.fields(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1249,6 +1382,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "logs.fieldValues",
 			generated: "listProjectBranchLogFieldValues",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.logs.fieldValues(
 					{
@@ -1269,6 +1403,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "snapshots.list",
 			generated: "listSnapshots",
+			output: (response) => response.shape.snapshots,
 			run: (neon, input, signal) =>
 				neon.snapshots.list(
 					{ projectId: input.project_id },
@@ -1279,6 +1414,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "snapshots.create",
 			generated: "createSnapshot",
+			output: (response) => response.shape.snapshot,
 			run: (neon, input, signal) =>
 				neon.snapshots.create(
 					{
@@ -1296,6 +1432,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "snapshots.update",
 			generated: "updateSnapshot",
+			output: (response) => response.shape.snapshot,
 			run: (neon, input, signal) =>
 				neon.snapshots.update(
 					{
@@ -1311,6 +1448,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "snapshots.delete",
 			generated: "deleteSnapshot",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.snapshots.delete(
 					{
@@ -1327,6 +1465,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "snapshots.getSchedule",
 			generated: "getSnapshotSchedule",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.snapshots.getSchedule(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1340,6 +1479,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "operations.list",
 			generated: "listProjectOperations",
+			output: (response) => response.shape.operations,
 			omit: ["cursor"],
 			list: true,
 			run: (neon, input, signal) =>
@@ -1355,6 +1495,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "operations.get",
 			generated: "getProjectOperation",
+			output: (response) => response.shape.operation,
 			run: (neon, input, signal) =>
 				neon.operations.get(
 					{
@@ -1370,6 +1511,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.get",
 			generated: "getNeonAuth",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.get(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1380,6 +1522,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.create",
 			generated: "createNeonAuth",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.create(
 					{
@@ -1395,6 +1538,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.disable",
 			generated: "disableNeonAuth",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.auth.disable(
 					{
@@ -1409,6 +1553,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.updateConfig",
 			generated: "updateNeonAuthConfig",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.updateConfig(
 					{
@@ -1423,6 +1568,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthProviders.list",
 			generated: "listBranchNeonAuthOauthProviders",
+			output: (response) => response.shape.providers,
 			run: (neon, input, signal) =>
 				neon.auth.oauthProviders.list(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1435,6 +1581,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthProviders.add",
 			generated: "addBranchNeonAuthOauthProvider",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.oauthProviders.add(
 					{
@@ -1454,6 +1601,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthProviders.update",
 			generated: "updateBranchNeonAuthOauthProvider",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.oauthProviders.update(
 					{
@@ -1473,6 +1621,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthProviders.delete",
 			generated: "deleteBranchNeonAuthOauthProvider",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.auth.oauthProviders.delete(
 					{
@@ -1487,6 +1636,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthServer.get",
 			generated: "getNeonAuthOAuthProviderPlugin",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.oauthServer.get(
 					{
@@ -1500,6 +1650,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthServer.update",
 			generated: "updateNeonAuthOAuthProviderPlugin",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.oauthServer.update(
 					{
@@ -1518,6 +1669,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthClients.list",
 			generated: "listNeonAuthOAuthClients",
+			output: (response) => response.shape.clients,
 			run: (neon, input, signal) =>
 				neon.auth.oauthClients.list(
 					{
@@ -1531,6 +1683,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthClients.get",
 			generated: "getNeonAuthOAuthClient",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.oauthClients.get(
 					{
@@ -1545,6 +1698,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthClients.create",
 			generated: "createNeonAuthOAuthClient",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.oauthClients.create(
 					{
@@ -1563,6 +1717,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthClients.update",
 			generated: "updateNeonAuthOAuthClient",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.oauthClients.update(
 					{
@@ -1582,6 +1737,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthClients.delete",
 			generated: "deleteNeonAuthOAuthClient",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.auth.oauthClients.delete(
 					{
@@ -1596,6 +1752,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthClients.rotateSecret",
 			generated: "rotateNeonAuthOAuthClientSecret",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.oauthClients.rotateSecret(
 					{
@@ -1610,6 +1767,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.trustedDomains.list",
 			generated: "listBranchNeonAuthTrustedDomains",
+			output: (response) => response.shape.domains,
 			run: (neon, input, signal) =>
 				neon.auth.trustedDomains.list(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1622,6 +1780,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.trustedDomains.add",
 			generated: "addBranchNeonAuthTrustedDomain",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.auth.trustedDomains.add(
 					{
@@ -1637,6 +1796,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.trustedDomains.delete",
 			generated: "deleteBranchNeonAuthTrustedDomain",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.auth.trustedDomains.delete(
 					{
@@ -1652,6 +1812,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.users.create",
 			generated: "createBranchNeonAuthNewUser",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.users.create(
 					{
@@ -1667,6 +1828,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.users.delete",
 			generated: "deleteBranchNeonAuthUser",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.auth.users.delete(
 					{
@@ -1681,6 +1843,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.users.updateRole",
 			generated: "updateNeonAuthUserRole",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.users.updateRole(
 					{
@@ -1696,6 +1859,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.allowLocalhost.get",
 			generated: "getNeonAuthAllowLocalhost",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.allowLocalhost.get(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1706,6 +1870,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.allowLocalhost.update",
 			generated: "updateNeonAuthAllowLocalhost",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.allowLocalhost.update(
 					{
@@ -1720,6 +1885,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.emailAndPassword.get",
 			generated: "getNeonAuthEmailAndPasswordConfig",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.emailAndPassword.get(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1730,6 +1896,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.emailAndPassword.update",
 			generated: "updateNeonAuthEmailAndPasswordConfig",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.emailAndPassword.update(
 					{
@@ -1757,6 +1924,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.emailProvider.get",
 			generated: "getNeonAuthEmailProvider",
+			output: (response) => response,
 			requiresApproval: false,
 			run: async (neon, input, signal) =>
 				withoutSmtpPassword(
@@ -1773,6 +1941,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.emailProvider.update",
 			generated: "updateNeonAuthEmailProvider",
+			output: (response) => response,
 			run: async (neon, input, signal) =>
 				withoutSmtpPassword(
 					await neon.auth.emailProvider.update(
@@ -1789,6 +1958,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.emailProvider.sendTest",
 			generated: "sendNeonAuthEmailProviderTest",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.emailProvider.sendTest(
 					{
@@ -1803,6 +1973,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.plugins.get",
 			generated: "getNeonAuthPluginConfigs",
+			output: (response) => response,
 			requiresApproval: false,
 			run: async (neon, input, signal) =>
 				withoutPluginSecrets(
@@ -1819,6 +1990,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.plugins.magicLink.update",
 			generated: "updateNeonAuthMagicLinkPlugin",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.plugins.magicLink.update(
 					{
@@ -1835,6 +2007,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.plugins.organization.update",
 			generated: "updateNeonAuthOrganizationPlugin",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.plugins.organization.update(
 					{
@@ -1853,6 +2026,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.plugins.phoneNumber.get",
 			generated: "getNeonAuthPhoneNumberPlugin",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.plugins.phoneNumber.get(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1863,6 +2037,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.plugins.phoneNumber.update",
 			generated: "updateNeonAuthPhoneNumberPlugin",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.plugins.phoneNumber.update(
 					{
@@ -1878,6 +2053,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.webhooks.get",
 			generated: "getNeonAuthWebhookConfig",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.webhooks.get(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1888,6 +2064,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.webhooks.update",
 			generated: "updateNeonAuthWebhookConfig",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.webhooks.update(
 					{
@@ -1905,6 +2082,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.logsExport.update",
 			generated: "updateNeonAuthLogsExport",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.auth.logsExport.update(
 					{
@@ -1919,6 +2097,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "consumption.perProject",
 			generated: "getConsumptionHistoryPerProject",
+			output: (response) => response.shape.projects,
 			omit: ["cursor"],
 			list: true,
 			run: (neon, input, signal) =>
@@ -1943,6 +2122,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "consumption.perProjectV2",
 			generated: "getConsumptionHistoryPerProjectV2",
+			output: (response) => response.shape.projects,
 			omit: ["cursor"],
 			list: true,
 			run: (neon, input, signal) =>
@@ -1966,6 +2146,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "consumption.perBranchV2",
 			generated: "getConsumptionHistoryPerBranchV2",
+			output: (response) => response.shape.branches,
 			omit: ["cursor"],
 			list: true,
 			run: (neon, input, signal) =>
@@ -1990,12 +2171,14 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "apiKeys.list",
 			generated: "listApiKeys",
+			output: (response) => response,
 			run: (neon, _input, signal) => neon.apiKeys.list({ signal }),
 		}),
 	"apiKeys.create": (options) =>
 		fromGenerated(options, {
 			id: "apiKeys.create",
 			generated: "createApiKey",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.apiKeys.create({ keyName: input.key_name }, { signal }),
 		}),
@@ -2003,6 +2186,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "apiKeys.revoke",
 			generated: "revokeApiKey",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.apiKeys.revoke({ keyId: input.key_id }, { signal }),
 		}),
@@ -2010,6 +2194,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.get",
 			generated: "getOrganization",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.organizations.get({ orgId: input.org_id }, { signal }),
 		}),
@@ -2017,6 +2202,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.members.list",
 			generated: "getOrganizationMembers",
+			output: (response) => response.shape.members,
 			omit: ["cursor"],
 			list: true,
 			run: (neon, input, signal) =>
@@ -2037,6 +2223,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.members.get",
 			generated: "getOrganizationMember",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.organizations.members.get(
 					{ orgId: input.org_id, memberId: input.member_id },
@@ -2047,6 +2234,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.members.update",
 			generated: "updateOrganizationMember",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.organizations.members.update(
 					{
@@ -2061,6 +2249,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.members.remove",
 			generated: "removeOrganizationMember",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.organizations.members.remove(
 					{ orgId: input.org_id, memberId: input.member_id },
@@ -2071,6 +2260,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.invitations.list",
 			generated: "getOrganizationInvitations",
+			output: (response) => response.shape.invitations,
 			run: (neon, input, signal) =>
 				neon.organizations.invitations.list(
 					{ orgId: input.org_id },
@@ -2081,6 +2271,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.invitations.create",
 			generated: "createOrganizationInvitations",
+			output: (response) => response.shape.invitations,
 			run: (neon, input, signal) =>
 				neon.organizations.invitations.create(
 					{ orgId: input.org_id, invitations: input.invitations },
@@ -2091,6 +2282,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.spendingLimit.get",
 			generated: "getOrganizationSpendingLimit",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.organizations.spendingLimit.get(
 					{ orgId: input.org_id },
@@ -2101,6 +2293,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.spendingLimit.set",
 			generated: "setOrganizationSpendingLimit",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.organizations.spendingLimit.set(
 					{
@@ -2114,6 +2307,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.spendingLimit.delete",
 			generated: "deleteOrganizationSpendingLimit",
+			output: () => noContent,
 			run: (neon, input, signal) =>
 				neon.organizations.spendingLimit.delete(
 					{ orgId: input.org_id },
@@ -2124,6 +2318,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.apiKeys.list",
 			generated: "listOrgApiKeys",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.organizations.apiKeys.list(
 					{ orgId: input.org_id },
@@ -2134,6 +2329,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.apiKeys.create",
 			generated: "createOrgApiKey",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.organizations.apiKeys.create(
 					{
@@ -2148,6 +2344,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "organizations.apiKeys.revoke",
 			generated: "revokeOrgApiKey",
+			output: (response) => response,
 			run: (neon, input, signal) =>
 				neon.organizations.apiKeys.revoke(
 					{ orgId: input.org_id, keyId: input.key_id },
@@ -2164,6 +2361,9 @@ export const toolFactories = {
 				description:
 					"Lists the regions you can create projects in. An organization API key gets 404.",
 				inputSchema: z.strictObject({}),
+				outputSchema: outputSchemaFor(
+					operationOutputs.getActiveRegions.shape.regions,
+				),
 				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
@@ -2180,6 +2380,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "user.me",
 			generated: "getCurrentUserInfo",
+			output: (response) => response,
 			run: (neon, _input, signal) => neon.user.me({ signal }),
 		}),
 	"incidents.list": listIncidentsTool,
@@ -2202,4 +2403,4 @@ export const toolFactories = {
 	"docs.search": searchDocsTool,
 	"docs.get": getDocTool,
 	"feedback.send": sendFeedbackTool,
-} satisfies Record<NeonToolId, (options: ToolClientOptions) => unknown>;
+} satisfies Record<NeonToolId, (options: ToolClientOptions) => NeonTool>;

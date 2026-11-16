@@ -9,6 +9,7 @@ import type {
 	NeonToolAnnotations,
 	NeonToolExecutionContext,
 } from "../../operation.js";
+import { outputSchemaFor } from "../../output.js";
 import {
 	branchIdField,
 	type ConnectionTarget,
@@ -24,8 +25,10 @@ import {
 import {
 	capRows,
 	type Row,
+	rowSchema,
 	SQL_DEFAULT_MAX_ROWS,
 	SQL_MAX_ROWS_LIMIT,
+	statementRowsSchema,
 } from "./rows.js";
 
 export const sqlWriteAnnotations: NeonToolAnnotations = {
@@ -154,6 +157,7 @@ export const runSqlTool = (options: ToolClientOptions) =>
 			description:
 				"Runs one SQL statement on a branch's database and returns its rows. After a prepare step, pass its temporary branch_id. NEVER run destructive SQL autonomously; always ask the user first.",
 			inputSchema: runSqlInputSchema,
+			outputSchema: outputSchemaFor(statementRowsSchema),
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,
@@ -181,6 +185,7 @@ export const runSqlTransactionTool = (options: ToolClientOptions) =>
 			description:
 				"Runs several SQL statements in one transaction and returns each one's rows. After a prepare step, pass its temporary branch_id. NEVER run destructive SQL autonomously; always ask the user first.",
 			inputSchema: runSqlTransactionInputSchema,
+			outputSchema: outputSchemaFor(z.array(statementRowsSchema)),
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,
@@ -208,6 +213,7 @@ export const explainSqlTool = (options: ToolClientOptions) =>
 			description:
 				"Returns a statement's execution plan as JSON. analyze true executes it, side effects included, so never analyze potentially destructive SQL autonomously. For rows, use {{sql.run}}.",
 			inputSchema: explainSqlInputSchema,
+			outputSchema: outputSchemaFor(z.array(rowSchema)),
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,

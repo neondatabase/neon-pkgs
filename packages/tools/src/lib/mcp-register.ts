@@ -1,4 +1,6 @@
+import * as z from "zod";
 import type { NeonTool } from "./operation.js";
+import { outputDataSchema } from "./output.js";
 
 export interface McpToolResult {
 	content: Array<{ type: "text"; text: string }>;
@@ -141,10 +143,18 @@ const createToolHandler =
 		}
 	};
 
+/**
+ * The schema of the `structuredContent` a registered tool returns on success:
+ * `{ data }`, wrapping the tool's `data` unchanged.
+ */
+export const mcpResultSchema = (tool: NeonTool): z.ZodObject =>
+	z.object({ data: outputDataSchema(tool.outputSchema) });
+
 export const registerNeonToolsWithSchema = (
 	server: McpToolServer,
 	tools: Readonly<Record<string, NeonTool>>,
 	inputSchema: (tool: NeonTool) => unknown,
+	outputSchema: (tool: NeonTool) => unknown,
 ): void => {
 	if (typeof server.registerTool !== "function") {
 		throw new TypeError("Expected an MCP server with registerTool().");
@@ -157,6 +167,9 @@ export const registerNeonToolsWithSchema = (
 				title: tool.title,
 				description: tool.description,
 				inputSchema: inputSchema(tool),
+				...(tool.outputSchema === undefined
+					? {}
+					: { outputSchema: outputSchema(tool) }),
 				annotations: tool.annotations,
 				_meta: { "neon/requiresApproval": tool.requiresApproval },
 			},

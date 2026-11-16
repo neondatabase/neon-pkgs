@@ -4,6 +4,7 @@ import {
 	publishedId,
 	type ToolClientOptions,
 } from "../ergonomic/bind.js";
+import { outputSchemaFor } from "../output.js";
 import { upstreamSignal } from "./docs.js";
 
 export const DEFAULT_FEEDBACK_URL = "https://feedback.neon.tech/";
@@ -36,6 +37,9 @@ export const sendFeedbackTool = (options: ToolClientOptions) => {
 			description:
 				"Sends anonymous feedback text to the Neon team, with no account, project, or connection details. Only call it when the user asks to give feedback.",
 			inputSchema: sendFeedbackInputSchema,
+			outputSchema: outputSchemaFor(
+				z.strictObject({ message: z.string() }),
+			),
 			annotations: {
 				readOnlyHint: false,
 				destructiveHint: false,

@@ -1,9 +1,11 @@
 import * as z from "zod";
+import { operationOutputs } from "../../generated/output.gen.js";
 import {
 	bindTool,
 	publishedId,
 	type ToolClientOptions,
 } from "../ergonomic/bind.js";
+import { outputSchemaFor } from "../output.js";
 
 export const userOrganizationsInputSchema = z.strictObject({
 	search: z
@@ -33,6 +35,10 @@ export const userOrganizationsTool = (options: ToolClientOptions) =>
 			description:
 				"Lists the organizations the user belongs to; an organization API key gets its own organization. search filters by name or id.",
 			inputSchema: userOrganizationsInputSchema,
+			outputSchema: outputSchemaFor(
+				operationOutputs.getCurrentUserOrganizations.shape
+					.organizations,
+			),
 			annotations: { readOnlyHint: true, openWorldHint: false },
 			requiresApproval: false,
 			metadata: {

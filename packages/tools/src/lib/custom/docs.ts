@@ -6,6 +6,7 @@ import {
 	type ToolClientOptions,
 } from "../ergonomic/bind.js";
 import type { NeonToolAnnotations, NeonToolCaller } from "../operation.js";
+import { outputSchemaFor } from "../output.js";
 
 export const DEFAULT_SITE_SEARCH_URL =
 	"https://br-frosty-cell-a5smzg39-assistant.compute.c-1.us-east-2.aws.neon.tech/site-search";
@@ -159,6 +160,7 @@ export const searchDocsTool = (options: ToolClientOptions) => {
 			description:
 				"Searches neon.com docs, API reference, PostgreSQL tutorial, guides, FAQs, changelog, and blog for ranked pages with the slug {{docs.get}} reads.",
 			inputSchema: searchDocsInputSchema,
+			outputSchema: outputSchemaFor(searchDocsResponseSchema),
 			annotations: docsAnnotations,
 			requiresApproval: false,
 			metadata: {
@@ -219,6 +221,9 @@ export const getDocTool = (options: ToolClientOptions) => {
 			description:
 				"Returns one neon.com page as markdown, by the slug of a {{docs.search}} hit.",
 			inputSchema: getDocInputSchema,
+			outputSchema: outputSchemaFor(
+				z.strictObject({ url: z.string(), markdown: z.string() }),
+			),
 			annotations: docsAnnotations,
 			requiresApproval: false,
 			metadata: {

@@ -6,6 +6,7 @@ import {
 	type ToolClientOptions,
 } from "../../ergonomic/bind.js";
 import type { NeonToolAnnotations } from "../../operation.js";
+import { outputSchemaFor } from "../../output.js";
 import {
 	branchIdField,
 	databaseNameField,
@@ -123,34 +124,51 @@ const DESCRIBE_SIZES_SQL = `
 		) as index_size;
 `;
 
-interface ColumnDescription {
-	name: string;
-	type: string;
-	nullable: boolean;
-	default: string | null;
-	description: string | null;
-}
+export const tableDescriptionSchema = z.strictObject({
+	columns: z.array(
+		z.strictObject({
+			name: z.string(),
+			type: z.string(),
+			nullable: z.boolean(),
+			default: z.string().nullable(),
+			description: z.string().nullable(),
+		}),
+	),
+	indexes: z.array(
+		z.strictObject({
+			name: z.string(),
+			definition: z.string(),
+			size: z.string(),
+		}),
+	),
+	constraints: z.array(
+		z.strictObject({
+			name: z.string(),
+			type: z.string(),
+			definition: z.string(),
+		}),
+	),
+	tableSize: z.string(),
+	indexSize: z.string(),
+	totalSize: z.string(),
+});
 
-interface IndexDescription {
-	name: string;
-	definition: string;
-	size: string;
-}
+export type TableDescription = z.infer<typeof tableDescriptionSchema>;
 
-interface ConstraintDescription {
-	name: string;
-	type: string;
-	definition: string;
-}
+export const describedTableSchema = z.strictObject({
+	raw: tableDescriptionSchema,
+	formatted: z.string(),
+});
 
-export interface TableDescription {
-	columns: ColumnDescription[];
-	indexes: IndexDescription[];
-	constraints: ConstraintDescription[];
-	tableSize: string;
-	indexSize: string;
-	totalSize: string;
-}
+const tablesSchema = z.array(
+	z.looseObject({
+		table_schema: z.string(),
+		table_name: z.string(),
+		table_type: z.string(),
+	}),
+);
+
+type Tables = z.infer<typeof tablesSchema>;
 
 const describeTable = async (
 	uri: string,
@@ -260,6 +278,7 @@ export const listTablesTool = (options: ToolClientOptions) =>
 			description:
 				"Lists a database's tables and views outside the system schemas. For one table's columns, use {{schema.describeTable}}.",
 			inputSchema: listTablesInputSchema,
+			outputSchema: outputSchemaFor(tablesSchema),
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
 			metadata: SQL_METADATA,
@@ -271,7 +290,10 @@ export const listTablesTool = (options: ToolClientOptions) =>
 				context,
 				signal,
 			);
-			return sqlClient(connection.uri, signal).query(LIST_TABLES_SQL);
+			const tables = await sqlClient(connection.uri, signal).query(
+				LIST_TABLES_SQL,
+			);
+			return tables as Tables;
 		},
 	);
 
@@ -285,6 +307,7 @@ export const describeTableTool = (options: ToolClientOptions) =>
 			description:
 				"Returns a table's columns, indexes, constraints, and sizes. For every table, use {{schema.listTables}}.",
 			inputSchema: describeTableInputSchema,
+			outputSchema: outputSchemaFor(describedTableSchema),
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
 			metadata: SQL_METADATA,

@@ -7,6 +7,7 @@ import {
 	publishedId,
 	type ToolClientOptions,
 } from "../../ergonomic/bind.js";
+import { outputSchemaFor } from "../../output.js";
 import {
 	projectIdField,
 	refuseInReadOnly,
@@ -14,13 +15,18 @@ import {
 	SQL_METADATA,
 } from "./connection.js";
 import { withTemporaryBranch } from "./migrations.js";
-import { extractExecutionMetrics, extractTableNamesFromPlan } from "./plan.js";
+import {
+	extractExecutionMetrics,
+	extractTableNamesFromPlan,
+	queryMetricsSchema,
+} from "./plan.js";
+import { rowSchema } from "./rows.js";
 import {
 	explainStatement,
 	runTransaction,
 	sqlWriteAnnotations,
 } from "./run.js";
-import { describeTableAt } from "./schema.js";
+import { describeTableAt, tableDescriptionSchema } from "./schema.js";
 
 export const prepareQueryTuningInputSchema = z.strictObject({
 	sql: z.string().describe("The slow SQL statement to analyze."),
@@ -72,6 +78,33 @@ export const completeQueryTuningInputSchema = z.strictObject({
 		),
 });
 
+const preparedQueryTuningSchema = z.strictObject({
+	complete: z.strictObject({
+		tuning_id: z.string(),
+		database_name: z.string(),
+		project_id: z.string(),
+		temporary_branch_id: z.string(),
+		role_name: z.string().nullish(),
+	}),
+	execution_plan: z.array(rowSchema),
+	table_schemas: z.array(
+		z.strictObject({
+			tableName: z.string(),
+			schema: tableDescriptionSchema,
+			formatted: z.string(),
+		}),
+	),
+	sql: z.string(),
+	baseline_metrics: queryMetricsSchema,
+});
+
+const completedQueryTuningSchema = z.strictObject({
+	appliedChanges: z.array(z.string()).nullish(),
+	results: z.array(z.array(rowSchema)).nullish(),
+	deletedBranches: z.array(z.string()).nullish(),
+	message: z.string(),
+});
+
 export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -82,6 +115,7 @@ export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 			description:
 				"Runs EXPLAIN ANALYZE for a slow query on a new temporary branch; returns the plan, table schemas, and a tuning_id. Try changes there with {{sql.run}} and {{sql.explain}}, then always call {{queryTuning.complete}} with the complete object so the branch is deleted. Not {{migrations.prepare}}.",
 			inputSchema: prepareQueryTuningInputSchema,
+			outputSchema: outputSchemaFor(preparedQueryTuningSchema),
 			annotations: {
 				readOnlyHint: false,
 				destructiveHint: false,
@@ -178,6 +212,7 @@ export const completeQueryTuningTool = (options: ToolClientOptions) =>
 			description:
 				"Applies or discards query-tuning changes and deletes the temporary branch. NEVER run autonomously. Pass the complete object from {{queryTuning.prepare}} and suggested_sql_statements; apply_changes true applies, omitted discards. Call it even when the user rejects.",
 			inputSchema: completeQueryTuningInputSchema,
+			outputSchema: outputSchemaFor(completedQueryTuningSchema),
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,

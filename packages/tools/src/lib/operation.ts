@@ -1,6 +1,7 @@
 import { type Client, createClient } from "@neon/sdk/raw";
 import type * as z from "zod";
 import { type NeonBearerCredential, requireBearerCredential } from "./auth.js";
+import type { NeonOutputSchema } from "./output.js";
 import { toToolResult } from "./result.js";
 
 export interface NeonToolAnnotations {
@@ -59,6 +60,24 @@ export type JsonSafe<Value> = unknown extends Value
 								? { [Key in keyof Value]: JsonSafe<Value[Key]> }
 								: unknown;
 
+/** What a definition returns when its output schema rejects its result. */
+export interface OutputSchemaRejectsResult<Result> {
+	readonly outputSchemaRejectsResult: Result;
+}
+
+/**
+ * `Definition` when the output schema `Data` accepts the `data` of a tool that
+ * resolves to `Output`. Otherwise a type no tool consumer accepts, naming that
+ * `data`. The check sits in the return type because a parameter that depends
+ * on `Output` fixes it before TypeScript reads an untyped callback's return.
+ */
+export type CheckedOutput<Definition, Output, Data extends z.ZodType> =
+	unknown extends Awaited<Output>
+		? Definition
+		: [JsonSafe<Awaited<Output>>] extends [z.input<Data>]
+			? Definition
+			: OutputSchemaRejectsResult<JsonSafe<Awaited<Output>>>;
+
 export interface NeonToolResult<Data = unknown> {
 	data: Data;
 }
@@ -73,6 +92,13 @@ export interface NeonTool<
 	title: string;
 	description: string;
 	inputSchema: InputSchema;
+	/**
+	 * The structured result, `toStructuredContent(data)`: a JSON object, as MCP
+	 * `structuredContent` requires. An object `data` is that object, an array is
+	 * `{ items }`, `null` (a call with no response body) is `{}`, and a string,
+	 * number, or boolean is `{ value }`.
+	 */
+	outputSchema: NeonOutputSchema;
 	annotations: NeonToolAnnotations;
 	requiresApproval: boolean;
 	metadata: NeonToolMetadata;
@@ -86,12 +112,14 @@ export interface NeonOperation<
 	InputSchema extends z.ZodType,
 	Id extends string = string,
 	Output = unknown,
+	OutputData extends z.ZodType = z.ZodType,
 > {
 	operationId: string;
 	id: Id;
 	title: string;
 	description: string;
 	inputSchema: InputSchema;
+	outputSchema: NeonOutputSchema<OutputData>;
 	annotations: NeonToolAnnotations;
 	requiresApproval: boolean;
 	metadata: NeonToolMetadata;
@@ -106,9 +134,15 @@ export const defineOperation = <
 	const InputSchema extends z.ZodType,
 	const Id extends string,
 	Output,
+	OutputData extends z.ZodType,
 >(
-	operation: NeonOperation<InputSchema, Id, Output>,
-) => operation;
+	operation: NeonOperation<InputSchema, Id, Output, OutputData>,
+) =>
+	operation as CheckedOutput<
+		NeonOperation<InputSchema, Id, Output, OutputData>,
+		Output,
+		OutputData
+	>;
 
 export const bindOperation = <
 	const InputSchema extends z.ZodType,
@@ -123,6 +157,7 @@ export const bindOperation = <
 	title: operation.title,
 	description: operation.description,
 	inputSchema: operation.inputSchema,
+	outputSchema: operation.outputSchema,
 	annotations: operation.annotations,
 	requiresApproval: operation.requiresApproval,
 	metadata: operation.metadata,

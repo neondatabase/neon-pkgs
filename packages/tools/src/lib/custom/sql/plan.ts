@@ -1,20 +1,24 @@
-interface BufferMetrics {
-	hit: number;
-	read: number;
-	written: number;
-	dirtied: number;
-}
+import * as z from "zod";
 
-export interface QueryMetrics {
-	executionTime: number;
-	planningTime: number;
-	totalCost: number;
-	actualRows: number;
-	bufferUsage: {
-		shared: BufferMetrics;
-		local: BufferMetrics;
-	};
-}
+const bufferMetricsSchema = z.strictObject({
+	hit: z.number(),
+	read: z.number(),
+	written: z.number(),
+	dirtied: z.number(),
+});
+
+export const queryMetricsSchema = z.strictObject({
+	executionTime: z.number(),
+	planningTime: z.number(),
+	totalCost: z.number(),
+	actualRows: z.number(),
+	bufferUsage: z.strictObject({
+		shared: bufferMetricsSchema,
+		local: bufferMetricsSchema,
+	}),
+});
+
+export type QueryMetrics = z.infer<typeof queryMetricsSchema>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);

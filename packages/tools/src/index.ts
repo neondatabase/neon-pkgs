@@ -48,6 +48,14 @@ export type {
 	NeonToolMetadata,
 	NeonToolResult,
 } from "./lib/operation.js";
+export type { NeonOutputSchema } from "./lib/output.js";
+export {
+	isCredential,
+	outputDataSchema,
+	toStructuredContent,
+	withoutCredentials,
+	withoutOutputFields,
+} from "./lib/output.js";
 export type { NeonToolId, PublishedId };
 export {
 	customToolIds,

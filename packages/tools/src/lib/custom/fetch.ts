@@ -1,17 +1,27 @@
 import { type NeonClient, NeonClientError, type Paginated } from "@neon/sdk";
 import * as z from "zod";
 import {
+	operationOutputs,
+	zBranch,
+	zEndpoint,
+	zProject,
+} from "../../generated/output.gen.js";
+import {
 	bindTool,
 	publishedId,
 	type ToolClientOptions,
 } from "../ergonomic/bind.js";
 import type { NeonToolExecutionContext } from "../operation.js";
+import { outputSchemaFor } from "../output.js";
 import {
 	consoleBaseUrl,
 	DEFAULT_API_BASE_URL,
 	isAccessRefusal,
 } from "./resources.js";
-import { describeBranch } from "./sql/describe-branch.js";
+import {
+	branchDescriptionSchema,
+	describeBranch,
+} from "./sql/describe-branch.js";
 
 export const fetchResourceInputSchema = z.strictObject({
 	id: z
@@ -20,6 +30,32 @@ export const fetchResourceInputSchema = z.strictObject({
 		.describe(
 			"An id from {{resources.search}}, such as project:<project_id>.",
 		),
+});
+
+const fetchedResourceSchema = z.strictObject({
+	id: z.string(),
+	title: z.string(),
+	text: z.string(),
+	url: z.string(),
+	/** The records behind `text`; which ones depends on the id's kind. */
+	metadata: z.union([
+		z.strictObject({
+			organization: operationOutputs.getOrganization,
+			members: operationOutputs.getOrganizationMembers.shape.members,
+			projects: operationOutputs.listProjects.shape.projects,
+		}),
+		z.strictObject({
+			project: zProject,
+			branches: operationOutputs.listProjectBranches.shape.branches,
+		}),
+		z.strictObject({ endpoint: zEndpoint }),
+		z.strictObject({
+			snapshot: operationOutputs.listSnapshots.shape.snapshots.element,
+		}),
+		branchDescriptionSchema
+			.omit({ text: true, console_url: true })
+			.extend({ branch: zBranch }),
+	]),
 });
 
 /** The first page only; a list the API refuses is empty. */
@@ -295,6 +331,7 @@ export const fetchResourceTool = (options: ToolClientOptions) => {
 			description:
 				"Returns an organization, project, branch, compute, or snapshot by an id from {{resources.search}}: markdown text, console URL, and records in metadata.",
 			inputSchema: fetchResourceInputSchema,
+			outputSchema: outputSchemaFor(fetchedResourceSchema),
 			annotations: {
 				readOnlyHint: true,
 				destructiveHint: false,
