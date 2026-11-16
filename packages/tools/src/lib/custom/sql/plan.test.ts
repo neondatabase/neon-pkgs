@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { extractExecutionMetrics, extractTableNamesFromPlan } from "./plan.js";
+import { extractExecutionMetrics, extractTablesFromPlan } from "./plan.js";
 
 // Shape of `EXPLAIN (ANALYZE, VERBOSE, BUFFERS, FORMAT JSON)` over the HTTP driver:
 // one row whose `QUERY PLAN` column holds the plan document. As in Postgres, the
@@ -48,16 +48,39 @@ const explainRows = [
 	},
 ];
 
-describe("extractTableNamesFromPlan", () => {
+describe("extractTablesFromPlan", () => {
 	test("finds every scanned relation, schema-qualified and deduplicated", () => {
+		expect(extractTablesFromPlan([...explainRows, ...explainRows])).toEqual(
+			[
+				{ name: "public.orders", quotedName: '"public"."orders"' },
+				{ name: "crm.customers", quotedName: '"crm"."customers"' },
+			],
+		);
+	});
+
+	test("quotes mixed case and escapes double quotes in the SQL name", () => {
 		expect(
-			extractTableNamesFromPlan([...explainRows, ...explainRows]),
-		).toEqual(["public.orders", "crm.customers"]);
+			extractTablesFromPlan([
+				{
+					"QUERY PLAN": [
+						{
+							Plan: {
+								"Node Type": "Seq Scan",
+								"Relation Name": 'Say "hi"',
+								Schema: "Auth",
+							},
+						},
+					],
+				},
+			]),
+		).toEqual([
+			{ name: 'Auth.Say "hi"', quotedName: '"Auth"."Say ""hi"""' },
+		]);
 	});
 
 	test("returns nothing for a plan without relations", () => {
 		expect(
-			extractTableNamesFromPlan([
+			extractTablesFromPlan([
 				{ "QUERY PLAN": [{ Plan: { "Node Type": "Result" } }] },
 			]),
 		).toEqual([]);

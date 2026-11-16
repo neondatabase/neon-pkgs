@@ -49,6 +49,32 @@ const LIST_TABLES_SQL = `
 	ORDER BY table_schema, table_name;
 `;
 
+// A name is read as a raw name the way schema.listTables returns it (User,
+// Auth.User), which to_regclass would fold to lowercase, and as SQL through
+// to_regclass, the only reading of a quoted name. More than one row means the
+// readings name different tables.
+const RESOLVE_TABLE_SQL = `
+	WITH candidates AS (
+		SELECT oid
+		FROM pg_catalog.pg_class
+		WHERE relname = $1 AND pg_catalog.pg_table_is_visible(oid)
+		UNION
+		SELECT cls.oid
+		FROM pg_catalog.pg_class cls
+		JOIN pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
+		WHERE ns.nspname || '.' || cls.relname = $1
+		UNION
+		SELECT to_regclass($1)::oid
+	)
+	SELECT
+		cls.oid::text AS oid,
+		format('%I.%I', ns.nspname, cls.relname) AS quoted_name
+	FROM candidates
+	JOIN pg_catalog.pg_class cls ON cls.oid = candidates.oid
+	JOIN pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
+	ORDER BY quoted_name;
+`;
+
 // Derived from @neondatabase/psql-describe (https://github.com/neondatabase/psql-describe).
 const DESCRIBE_COLUMNS_SQL = `
 	WITH target AS (
@@ -58,7 +84,7 @@ const DESCRIBE_COLUMNS_SQL = `
 			cls.relname AS table_name
 		FROM pg_catalog.pg_class cls
 		JOIN pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
-		WHERE cls.oid = to_regclass($1)
+		WHERE cls.oid = $1::oid
 	)
 	SELECT
 		c.column_name as name,
@@ -77,49 +103,41 @@ const DESCRIBE_COLUMNS_SQL = `
 `;
 
 const DESCRIBE_INDEXES_SQL = `
-	WITH target AS (
-		SELECT to_regclass($1) AS oid
-	)
 	SELECT
 		i.relname as name,
 		pg_get_indexdef(i.oid) as definition,
 		pg_size_pretty(pg_relation_size(i.oid)) as size
-	FROM target
-	JOIN pg_catalog.pg_class t ON t.oid = target.oid
+	FROM pg_catalog.pg_class t
 	JOIN pg_catalog.pg_index ix ON t.oid = ix.indrelid
 	JOIN pg_catalog.pg_class i ON i.oid = ix.indexrelid
-	WHERE t.relkind = 'r';
+	WHERE t.oid = $1::oid AND t.relkind = 'r';
 `;
 
+// information_schema.table_constraints hides constraints from a role that
+// only has SELECT on the table, and never lists EXCLUDE. Postgres 18 adds
+// NOT NULL rows (contype n), which the columns already show.
 const DESCRIBE_CONSTRAINTS_SQL = `
-	WITH target AS (
-		SELECT
-			cls.oid,
-			ns.nspname AS table_schema,
-			cls.relname AS table_name
-		FROM pg_catalog.pg_class cls
-		JOIN pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
-		WHERE cls.oid = to_regclass($1)
-	)
 	SELECT
-		tc.constraint_name as name,
-		tc.constraint_type as type,
-		pg_get_constraintdef(cc.oid) as definition
-	FROM target t
-	JOIN information_schema.table_constraints tc
-		ON tc.table_schema = t.table_schema
-		AND tc.table_name = t.table_name
-	JOIN pg_catalog.pg_constraint cc
-		ON cc.conrelid = t.oid
-		AND cc.conname = tc.constraint_name;
+		conname as name,
+		CASE contype
+			WHEN 'p' THEN 'PRIMARY KEY'
+			WHEN 'f' THEN 'FOREIGN KEY'
+			WHEN 'u' THEN 'UNIQUE'
+			WHEN 'c' THEN 'CHECK'
+			WHEN 'x' THEN 'EXCLUDE'
+		END as type,
+		pg_get_constraintdef(oid) as definition
+	FROM pg_catalog.pg_constraint
+	WHERE conrelid = $1::oid AND contype IN ('p', 'f', 'u', 'c', 'x')
+	ORDER BY conname;
 `;
 
 const DESCRIBE_SIZES_SQL = `
 	SELECT
-		pg_size_pretty(pg_total_relation_size(to_regclass($1))) as total_size,
-		pg_size_pretty(pg_relation_size(to_regclass($1))) as table_size,
+		pg_size_pretty(pg_total_relation_size($1::oid)) as total_size,
+		pg_size_pretty(pg_relation_size($1::oid)) as table_size,
 		pg_size_pretty(
-			pg_total_relation_size(to_regclass($1)) - pg_relation_size(to_regclass($1))
+			pg_total_relation_size($1::oid) - pg_relation_size($1::oid)
 		) as index_size;
 `;
 
@@ -158,17 +176,20 @@ const describeTable = async (
 	signal?: AbortSignal,
 ): Promise<TableDescription | null> => {
 	const sql = sqlClient(uri, signal);
-	const relations = await sql.query(
-		"SELECT to_regclass($1)::text AS relation_name",
-		[tableName],
-	);
-	if (typeof relations[0]?.relation_name !== "string") return null;
+	const candidates = await sql.query(RESOLVE_TABLE_SQL, [tableName]);
+	const [table, ...others] = candidates;
+	if (table === undefined) return null;
+	if (others.length > 0) {
+		throw new NeonClientError(
+			`Table name ${tableName} matches ${candidates.length} tables. Pass one of these quoted names: ${candidates.map((candidate) => candidate.quoted_name).join(", ")}`,
+		);
+	}
 
 	const [columns, indexes, constraints, sizes] = await Promise.all([
-		sql.query(DESCRIBE_COLUMNS_SQL, [tableName]),
-		sql.query(DESCRIBE_INDEXES_SQL, [tableName]),
-		sql.query(DESCRIBE_CONSTRAINTS_SQL, [tableName]),
-		sql.query(DESCRIBE_SIZES_SQL, [tableName]),
+		sql.query(DESCRIBE_COLUMNS_SQL, [table.oid]),
+		sql.query(DESCRIBE_INDEXES_SQL, [table.oid]),
+		sql.query(DESCRIBE_CONSTRAINTS_SQL, [table.oid]),
+		sql.query(DESCRIBE_SIZES_SQL, [table.oid]),
 	]);
 	const size = sizes[0];
 	if (size === undefined) {

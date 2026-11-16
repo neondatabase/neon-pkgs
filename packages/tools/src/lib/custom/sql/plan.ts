@@ -24,9 +24,19 @@ const numberAt = (node: Record<string, unknown>, key: string): number => {
 	return typeof value === "number" ? value : 0;
 };
 
-/** Every `schema.relation` an `EXPLAIN (FORMAT JSON)` result scans. */
-export const extractTableNamesFromPlan = (plan: unknown): string[] => {
-	const tableNames = new Set<string>();
+export interface PlanTable {
+	/** `schema.relation`, as the plan spells it. */
+	name: string;
+	/** The quoted SQL name, which resolves to exactly this relation. */
+	quotedName: string;
+}
+
+const quoteIdentifier = (identifier: string) =>
+	`"${identifier.replaceAll('"', '""')}"`;
+
+/** Every relation an `EXPLAIN (FORMAT JSON)` result scans. */
+export const extractTablesFromPlan = (plan: unknown): PlanTable[] => {
+	const tables = new Map<string, PlanTable>();
 	const visit = (node: unknown) => {
 		if (Array.isArray(node)) {
 			for (const item of node) visit(item);
@@ -36,12 +46,16 @@ export const extractTableNamesFromPlan = (plan: unknown): string[] => {
 		const relation = node["Relation Name"];
 		const schema = node.Schema;
 		if (typeof relation === "string" && typeof schema === "string") {
-			tableNames.add(`${schema}.${relation}`);
+			const quotedName = `${quoteIdentifier(schema)}.${quoteIdentifier(relation)}`;
+			tables.set(quotedName, {
+				name: `${schema}.${relation}`,
+				quotedName,
+			});
 		}
 		for (const value of Object.values(node)) visit(value);
 	};
 	visit(plan);
-	return [...tableNames];
+	return [...tables.values()];
 };
 
 const buffers = (

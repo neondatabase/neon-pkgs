@@ -14,7 +14,7 @@ import {
 	SQL_METADATA,
 } from "./connection.js";
 import { withTemporaryBranch } from "./migrations.js";
-import { extractExecutionMetrics, extractTableNamesFromPlan } from "./plan.js";
+import { extractExecutionMetrics, extractTablesFromPlan } from "./plan.js";
 import {
 	explainStatement,
 	runTransaction,
@@ -112,8 +112,8 @@ export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 						context,
 						signal,
 					);
-					const tableNames = extractTableNamesFromPlan(executionPlan);
-					if (tableNames.length === 0) {
+					const tables = extractTablesFromPlan(executionPlan);
+					if (tables.length === 0) {
 						throw new NeonClientError(
 							"No tables found in execution plan. Cannot proceed with optimization.",
 						);
@@ -125,11 +125,11 @@ export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 						signal,
 					);
 					const tableSchemas = await Promise.all(
-						tableNames.map(async (tableName) => {
+						tables.map(async ({ name: tableName, quotedName }) => {
 							try {
 								const schema = await describeTableAt(
 									connection.uri,
-									tableName,
+									quotedName,
 									signal,
 								);
 								return {
