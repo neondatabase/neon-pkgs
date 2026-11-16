@@ -1,4 +1,4 @@
-import { NeonClientError } from "@neon/sdk";
+import { NeonClientError, NeonNetworkError } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
 import { createNeonTool, createNeonTools, toolIds } from "./index.js";
 
@@ -79,16 +79,9 @@ const READ_ONLY_SAFE = [
 	"feedback.send",
 ];
 
-const recordingFetch = () => {
-	const requests: Request[] = [];
-	const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-		requests.push(new Request(input, init));
-		return new Response(JSON.stringify({ projects: [], pagination: {} }), {
-			headers: { "content-type": "application/json" },
-		});
-	};
-	return { requests, fetch };
-};
+// fetch refuses this port, so a call that gets past the policy fails with
+// NeonNetworkError and a refused one with NeonClientError.
+const NO_NEON_API = "http://127.0.0.1:1/api/v2";
 
 describe("readOnlySafe", () => {
 	test("is stated for every published tool", () => {
@@ -123,12 +116,11 @@ describe("readOnlySafe", () => {
 });
 
 describe("readOnly", () => {
-	test("refuses a write tool before any request", async () => {
-		const { requests, fetch } = recordingFetch();
+	test("refuses a write tool before any request and lets a read tool through", async () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: ["projects.delete", "projects.list"],
-			fetch,
+			baseUrl: NO_NEON_API,
 		});
 
 		const refused = tools["projects.delete"].execute(
@@ -139,31 +131,28 @@ describe("readOnly", () => {
 		await expect(refused).rejects.toThrow(
 			"delete_projects is unavailable in read-only mode",
 		);
-		expect(requests).toHaveLength(0);
-
-		await tools["projects.list"].execute({}, { readOnly: true });
-		expect(requests).toHaveLength(1);
+		await expect(
+			tools["projects.list"].execute({}, { readOnly: true }),
+		).rejects.toBeInstanceOf(NeonNetworkError);
 	});
 
 	test("takes its default from the factory and lets a call override it", async () => {
-		const { requests, fetch } = recordingFetch();
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: ["projects.delete"],
 			readOnly: true,
-			fetch,
+			baseUrl: NO_NEON_API,
 		});
 
 		await expect(
 			tools["projects.delete"].execute({ project_id: "project-id" }),
-		).rejects.toBeInstanceOf(NeonClientError);
-		expect(requests).toHaveLength(0);
-
-		await tools["projects.delete"]
-			.execute({ project_id: "project-id" }, { readOnly: false })
-			.catch(() => undefined);
-		expect(requests).toHaveLength(1);
-		expect(requests[0].method).toBe("DELETE");
+		).rejects.toThrow("delete_projects is unavailable in read-only mode");
+		await expect(
+			tools["projects.delete"].execute(
+				{ project_id: "project-id" },
+				{ readOnly: false },
+			),
+		).rejects.toBeInstanceOf(NeonNetworkError);
 	});
 
 	test("names the tool by its published name", async () => {
@@ -185,17 +174,15 @@ describe("readOnly", () => {
 	});
 
 	test("applies to createNeonTool", async () => {
-		const { requests, fetch } = recordingFetch();
 		const deleteProject = createNeonTool("projects.delete", {
 			apiKey: "test-key",
 			readOnly: true,
-			fetch,
+			baseUrl: NO_NEON_API,
 		});
 
 		await expect(
 			deleteProject.execute({ project_id: "project-id" }),
-		).rejects.toBeInstanceOf(NeonClientError);
-		expect(requests).toHaveLength(0);
+		).rejects.toThrow("delete_projects is unavailable in read-only mode");
 	});
 
 	test("refuses before an injected id resolves", async () => {
