@@ -29,10 +29,10 @@ export interface McpStandardSchema {
 }
 
 /**
- * Levels of `data` that keep their properties. Fields of `data` (or of each list
- * item) are fully typed; their nested objects list only property names and types;
- * anything deeper is `{ "type": "object" }`. The whole catalog's output schemas
- * stay near 11k tokens this way, against about 50k at full depth.
+ * Levels of `data` that keep their properties: the fields of `data`, or of each
+ * list item, are typed, and objects below them are `{ "type": "object" }`. Every
+ * listed level adds to `tools/list` for every tool and to what a validating
+ * client can reject.
  */
 const OUTPUT_PROPERTY_DEPTH = 1;
 /** Levels of `data` that keep their descriptions. */

@@ -166,7 +166,9 @@ const searchResourcesOutputSchema = z.looseObject({
 				url: z.string(),
 			}),
 		)
-		.describe("Matches; pass an id to {{resources.fetch}}."),
+		.describe(
+			"Organizations, projects, branches, computes, and snapshots that match.",
+		),
 });
 
 export const searchResourcesTool = (options: ToolClientOptions) => {

@@ -82,7 +82,7 @@ const prepareQueryTuningOutputSchema = z.looseObject({
 			temporary_branch_id: z.string(),
 			role_name: z.string().nullish(),
 		})
-		.describe("Pass this object to {{queryTuning.complete}}."),
+		.describe("The values that apply or discard the tuning."),
 	execution_plan: sqlRowsOutputSchema.describe("EXPLAIN ANALYZE output."),
 	table_schemas: z
 		.array(

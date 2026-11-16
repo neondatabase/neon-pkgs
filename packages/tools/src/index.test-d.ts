@@ -7,6 +7,7 @@ import {
 	publishedId,
 } from "./index.js";
 import { toMastraTools } from "./mastra.js";
+import { toMcpOutputSchema } from "./mcp.js";
 
 expectTypeOf(publishedId("projects.list")).toEqualTypeOf<"list_projects">();
 expectTypeOf(
@@ -343,3 +344,15 @@ createTrigger.execute({
 
 // @ts-expect-error tools is required
 createNeonTools({ apiKey: "test-key" });
+
+toMcpOutputSchema(
+	createNeonTool("branches.list", { apiKey: "test-key" }).outputSchema,
+);
+toMcpOutputSchema(
+	createNeonTools({
+		apiKey: "test-key",
+		tools: ["branches.get"] as const,
+		inject: { projectId: "proj-1" },
+		name: (id) => id,
+	})["branches.get"].outputSchema,
+);

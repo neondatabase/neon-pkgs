@@ -8,7 +8,9 @@ import { McpServer as McpServerV1 } from "@modelcontextprotocol/sdk-v1/server/mc
 import { McpServer as McpServerV2 } from "@modelcontextprotocol/server";
 import { NeonWaitTimeoutError } from "@neon/sdk";
 import { afterEach, describe, expect, test } from "vitest";
+import * as z from "zod";
 import { createNeonTools, publishedId, toolIds } from "./index.js";
+import type { NeonTool } from "./lib/operation.js";
 import {
 	type McpToolResult,
 	registerNeonTools as registerNeonToolsV2,
@@ -108,26 +110,44 @@ describe("MCP v2 compatibility", () => {
 	});
 
 	test("publishes the result shape and rejects a result that breaks it", async () => {
+		const handBuilt = (
+			id: string,
+			data: unknown,
+			outputSchema?: z.ZodType,
+		): NeonTool => ({
+			operationId: id,
+			id,
+			title: id,
+			description: "A hand-built tool.",
+			inputSchema: z.strictObject({}),
+			...(outputSchema === undefined ? {} : { outputSchema }),
+			annotations: { readOnlyHint: true, openWorldHint: false },
+			requiresApproval: false,
+			metadata: {
+				method: "GET",
+				path: "/",
+				stability: "stable",
+				deprecated: false,
+				tags: [],
+			},
+			execute: async () => ({ data }),
+		});
 		const server = new McpServerV2({
 			name: "test-server",
 			version: "1.0.0",
 		});
-		const { id: _id, ...withoutId } = projectListItem("project-id");
-		registerNeonToolsV2(
-			server,
-			createNeonTools({
+		registerNeonToolsV2(server, {
+			...createNeonTools({
 				apiKey: "test-key",
 				tools: ["projects.list"],
-				fetch: async () =>
-					new Response(
-						JSON.stringify({
-							projects: [withoutId],
-							pagination: {},
-						}),
-						{ headers: { "content-type": "application/json" } },
-					),
 			}),
-		);
+			broken: handBuilt(
+				"broken",
+				{ name: "no id" },
+				z.looseObject({ id: z.string() }),
+			),
+			unshaped: handBuilt("unshaped", { anything: true }),
+		});
 		const client = new ClientV2({ name: "test-client", version: "1.0.0" });
 		const [clientTransport, serverTransport] =
 			InMemoryTransportV2.createLinkedPair();
@@ -138,8 +158,10 @@ describe("MCP v2 compatibility", () => {
 		closeables.push(client, server);
 
 		const listed = await client.listTools();
-		const outputSchema = listed.tools[0]?.outputSchema;
-		expect(outputSchema).toMatchObject({
+		const schemas = Object.fromEntries(
+			listed.tools.map((tool) => [tool.name, tool.outputSchema]),
+		);
+		expect(schemas.list_projects).toMatchObject({
 			properties: {
 				data: {
 					type: "array",
@@ -150,16 +172,24 @@ describe("MCP v2 compatibility", () => {
 				},
 			},
 		});
-		expect(JSON.stringify(outputSchema)).not.toContain("description");
+		expect(JSON.stringify(schemas.list_projects)).not.toContain(
+			"description",
+		);
+		expect(schemas.unshaped).toBeUndefined();
 
-		const called = await client.callTool({
-			name: "list_projects",
-			arguments: {},
-		});
-		expect(called.isError).toBe(true);
-		expect(JSON.stringify(called.content)).toContain(
+		const broken = await client.callTool({ name: "broken", arguments: {} });
+		expect(broken.isError).toBe(true);
+		expect(JSON.stringify(broken.content)).toContain(
 			"Output validation error",
 		);
+
+		const unshaped = await client.callTool({
+			name: "unshaped",
+			arguments: {},
+		});
+		expect(unshaped.structuredContent).toEqual({
+			data: { anything: true },
+		});
 	});
 
 	test("publishes compact JSON Schema without OpenAPI field essays", async () => {
@@ -767,5 +797,8 @@ describe("MCP catalog size", () => {
 		expect(
 			listed.filter((tool) => tool.outputSchema === undefined),
 		).toEqual([]);
+		expect(
+			JSON.stringify(listed.map((tool) => tool.outputSchema)),
+		).not.toContain("{{");
 	});
 });

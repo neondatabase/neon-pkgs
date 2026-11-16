@@ -161,7 +161,7 @@ const searchDocsOutputSchema = z.looseObject({
 				excerpt: z.string(),
 			}),
 		)
-		.describe("Matching doc sections; pass a url to {{docs.get}}."),
+		.describe("Matching doc sections."),
 });
 
 export const searchDocsTool = (options: ToolClientOptions) => {

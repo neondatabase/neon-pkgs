@@ -146,7 +146,7 @@ const prepareMigrationOutputSchema = z.looseObject({
 			temporary_branch_id: z.string(),
 			parent_branch_id: z.string(),
 		})
-		.describe("Pass this object to {{migrations.complete}}."),
+		.describe("The values that apply or discard the migration."),
 	temporary_branch: z
 		.looseObject({
 			id: z.string(),
