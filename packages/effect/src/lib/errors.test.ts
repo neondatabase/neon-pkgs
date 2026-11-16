@@ -13,7 +13,7 @@ import {
 	NeonRequestTimeoutError as SdkRequestTimeoutError,
 	NeonWaitTimeoutError as SdkWaitTimeoutError,
 } from "@neon/sdk";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
 import { make } from "./client.js";
 import {
@@ -118,6 +118,31 @@ describe("toNeonEffectError", () => {
 		const abort = new NeonAbortError("aborted");
 
 		expect(() => toNeonEffectError(abort)).toThrow(abort);
+	});
+
+	it("as the catch of Effect.tryPromise, fails with the tagged error and dies on anything else", async () => {
+		const sdkError = new SdkNotFoundError("missing", {
+			...http,
+			status: 404,
+		});
+		const bug = new TypeError("undefined is not a function");
+
+		const failed = await Effect.runPromise(
+			Effect.tryPromise({
+				try: () => Promise.reject(sdkError),
+				catch: toNeonEffectError,
+			}).pipe(Effect.flip),
+		);
+		const died = await Effect.runPromiseExit(
+			Effect.tryPromise({
+				try: () => Promise.reject(bug),
+				catch: toNeonEffectError,
+			}),
+		);
+
+		expect(failed).toBeInstanceOf(NeonNotFoundError);
+		expect(failed.cause).toBe(sdkError);
+		expect(died).toStrictEqual(Exit.die(bug));
 	});
 });
 

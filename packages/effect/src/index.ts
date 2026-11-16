@@ -31,5 +31,6 @@ export {
 	NeonRateLimitError,
 	NeonRequestTimeoutError,
 	NeonWaitTimeoutError,
+	toNeonEffectError,
 } from "./lib/errors.js";
 export { layer, layerConfig, Neon } from "./lib/service.js";
