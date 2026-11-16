@@ -131,6 +131,16 @@ const optional =
 	(check: (value: unknown) => boolean) =>
 	(value: unknown): boolean =>
 		value === undefined || check(value);
+// Any fetch implementation's Response: a custom `fetch` may bring its own class.
+const isResponse = (value: unknown): boolean =>
+	typeof value === "object" &&
+	value !== null &&
+	"status" in value &&
+	isNumber(value.status) &&
+	"headers" in value &&
+	typeof value.headers === "object" &&
+	value.headers !== null;
+
 // The fields `operations.waitFor` reads to resume waiting.
 const isOperation = (value: unknown): boolean =>
 	typeof value === "object" &&
@@ -157,7 +167,7 @@ const httpShape = (kind: string): Shape => ({
 		status: isNumber,
 		code: optional(isString),
 		requestId: optional(isString),
-		response: optional((value) => value instanceof Response),
+		response: optional(isResponse),
 	},
 });
 

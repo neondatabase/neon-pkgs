@@ -160,6 +160,26 @@ describe("toNeonEffectError", () => {
 			expect(mapped).toMatchObject(fields);
 		});
 
+		it("maps an error whose response comes from another fetch implementation", () => {
+			const response = {
+				status: 404,
+				statusText: "Not Found",
+				headers: new Headers(),
+			};
+			const foreign = Object.assign(new Error("missing"), {
+				kind: "not_found",
+				status: 404,
+				response,
+				body: {},
+			});
+			foreign.name = "NeonNotFoundError";
+
+			const mapped = toNeonEffectError(foreign);
+
+			expect(mapped).toBeInstanceOf(NeonNotFoundError);
+			expect(mapped).toMatchObject({ response });
+		});
+
 		it("rethrows an error that only borrows a Neon name", () => {
 			const lookalike = new Error("not from the SDK");
 			lookalike.name = "NeonApiError";
