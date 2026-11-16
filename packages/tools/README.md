@@ -457,7 +457,14 @@ import { toMcpOutputJsonSchema, toMcpOutputSchema } from "@neon/tools/mcp";
 
 const json = toMcpOutputJsonSchema(tool.outputSchema); // JSON Schema of { data }
 const standard = toMcpOutputSchema(tool.outputSchema); // Standard Schema for MCP 2 registerTool
+
+// A host that removes fields from results before returning them
+const stripped = toMcpOutputSchema(tool.outputSchema, {
+	omit: ["connectionString", "password"],
+});
 ```
+
+`omit` drops those names from the schema at every level, including from `required`.
 
 Hosts that convert Zod themselves:
 

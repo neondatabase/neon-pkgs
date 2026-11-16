@@ -106,6 +106,32 @@ describe("toMcpOutputJsonSchema", () => {
 		});
 	});
 
+	test("omits fields the host strips, at every level", () => {
+		const connection = z.looseObject({
+			branch: branch.extend({ password: z.string() }),
+			connectionString: z.string(),
+		});
+		expect(
+			toMcpOutputJsonSchema(z.array(connection), {
+				omit: ["connectionString", "password"],
+			}).properties,
+		).toEqual({
+			data: {
+				type: "array",
+				items: {
+					type: "object",
+					properties: { branch: { type: "object" } },
+					required: ["branch"],
+				},
+			},
+		});
+		expect(
+			toMcpOutputJsonSchema(branch.extend({ password: z.string() }), {
+				omit: ["password"],
+			}),
+		).toEqual(toMcpOutputJsonSchema(branch));
+	});
+
 	test("keeps unions of objects and scalar data", () => {
 		expect(
 			toMcpOutputJsonSchema(

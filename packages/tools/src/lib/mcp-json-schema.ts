@@ -72,7 +72,11 @@ const compactUnion = (members: unknown[]): Record<string, unknown> => {
  * bounds, and `additionalProperties` are dropped: results may carry fields the
  * spec does not list yet.
  */
-const compactOutputNode = (node: unknown, depth: number): unknown => {
+const compactOutputNode = (
+	node: unknown,
+	depth: number,
+	omit: ReadonlySet<string>,
+): unknown => {
 	if (!isPlainObject(node)) {
 		return node;
 	}
@@ -99,7 +103,7 @@ const compactOutputNode = (node: unknown, depth: number): unknown => {
 			: undefined;
 	if (union !== undefined) {
 		const members = union.map((member) => {
-			const compact = compactOutputNode(member, depth);
+			const compact = compactOutputNode(member, depth, omit);
 			if (!isPlainObject(compact)) {
 				return compact;
 			}
@@ -116,21 +120,37 @@ const compactOutputNode = (node: unknown, depth: number): unknown => {
 		Object.assign(out, compactUnion(members));
 	}
 	if (node.items !== undefined) {
-		out.items = compactOutputNode(node.items, depth);
+		out.items = compactOutputNode(node.items, depth, omit);
 	}
 	if (depth < OUTPUT_PROPERTY_DEPTH && isPlainObject(node.properties)) {
 		out.properties = Object.fromEntries(
-			Object.entries(node.properties).map(([key, value]) => [
-				key,
-				compactOutputNode(value, depth + 1),
-			]),
+			Object.entries(node.properties)
+				.filter(([key]) => !omit.has(key))
+				.map(([key, value]) => [
+					key,
+					compactOutputNode(value, depth + 1, omit),
+				]),
 		);
-		if (Array.isArray(node.required) && node.required.length > 0) {
-			out.required = node.required;
+		const required = Array.isArray(node.required)
+			? node.required.filter(
+					(key) => typeof key === "string" && !omit.has(key),
+				)
+			: [];
+		if (required.length > 0) {
+			out.required = required;
 		}
 	}
 	return out;
 };
+
+export interface McpOutputSchemaOptions {
+	/**
+	 * Field names the host removes from results before returning them, such as
+	 * credentials. They are dropped from the schema at every level, so a result
+	 * without them still validates.
+	 */
+	omit?: readonly string[];
+}
 
 /**
  * The JSON Schema MCP publishes for a tool's `structuredContent`:
@@ -139,12 +159,14 @@ const compactOutputNode = (node: unknown, depth: number): unknown => {
  */
 export const toMcpOutputJsonSchema = (
 	outputSchema: z.ZodType,
+	options: McpOutputSchemaOptions = {},
 ): Record<string, unknown> => ({
 	type: "object",
 	properties: {
 		data: compactOutputNode(
 			z.toJSONSchema(outputSchema, { io: "input" }),
 			0,
+			new Set(options.omit),
 		),
 	},
 	required: ["data"],
@@ -157,8 +179,9 @@ export const toMcpOutputJsonSchema = (
  */
 export const toMcpOutputSchema = (
 	outputSchema: z.ZodType,
+	options: McpOutputSchemaOptions = {},
 ): McpStandardSchema => {
-	const json = toMcpOutputJsonSchema(outputSchema);
+	const json = toMcpOutputJsonSchema(outputSchema, options);
 	let validator: z.ZodType | undefined;
 	return {
 		"~standard": {

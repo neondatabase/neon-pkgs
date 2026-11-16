@@ -11,7 +11,10 @@ import {
 } from "./lib/mcp-register.js";
 import type { NeonTool } from "./lib/operation.js";
 
-export type { McpStandardSchema } from "./lib/mcp-json-schema.js";
+export type {
+	McpOutputSchemaOptions,
+	McpStandardSchema,
+} from "./lib/mcp-json-schema.js";
 export type { McpToolResult, McpToolServer };
 export {
 	compactJsonSchema,
