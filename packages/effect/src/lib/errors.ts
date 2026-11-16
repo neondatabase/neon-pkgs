@@ -125,23 +125,63 @@ const httpFields = <Cause extends SdkApiError>(
 	cause: error,
 });
 
+// Every `@neon/sdk` error class names itself with a literal `Neon*Error` and carries a
+// `kind`; the union below matches the SDK's `NeonErrorUnion` subclasses by name.
+const SDK_ERROR_NAMES = new Set([
+	"NeonApiError",
+	"NeonNotFoundError",
+	"NeonAuthError",
+	"NeonRateLimitError",
+	"NeonOperationError",
+	"NeonRequestTimeoutError",
+	"NeonWaitTimeoutError",
+	"NeonAbortError",
+	"NeonNetworkError",
+	"NeonClientError",
+]);
+
 /**
- * Map an `@neon/sdk` error to its tagged counterpart. Anything else is rethrown so
- * Effect records it as a defect rather than as an expected failure.
+ * An error thrown by another copy of `@neon/sdk` fails `instanceof` against this
+ * package's copy, which happens when `@neon/effect` and the library that threw (such
+ * as `@neon/tools`) resolve different SDK versions.
+ */
+function isNeonErrorFromAnySdkCopy(error: unknown): error is NeonErrorUnion {
+	return (
+		isNeonError(error) ||
+		(error instanceof Error &&
+			SDK_ERROR_NAMES.has(error.name) &&
+			"kind" in error &&
+			typeof error.kind === "string")
+	);
+}
+
+function isBaseClientError(error: unknown): error is NeonError {
+	return (
+		(error instanceof NeonError ||
+			(error instanceof Error && error.name === "NeonError")) &&
+		"kind" in error &&
+		error.kind === "client"
+	);
+}
+
+/**
+ * Map an `@neon/sdk` error, from any copy of the package, to its tagged counterpart.
+ * Anything else is rethrown so Effect records it as a defect rather than as an
+ * expected failure.
  */
 export function toNeonEffectError(error: unknown): NeonEffectError {
-	if (!isNeonError(error)) {
-		// `createNeonClient` rejects bad config with the base class, which
-		// `isNeonError` does not recognise.
-		if (error instanceof NeonError && error.kind === "client") {
-			return new NeonClientError({
-				message: error.message,
-				cause: error,
-			});
-		}
-		throw error;
+	if (isNeonErrorFromAnySdkCopy(error)) {
+		return fromUnion(error);
 	}
-	return fromUnion(error);
+	// `createNeonClient` rejects bad config with the base class, which
+	// `isNeonError` does not recognise.
+	if (isBaseClientError(error)) {
+		return new NeonClientError({
+			message: error.message,
+			cause: error,
+		});
+	}
+	throw error;
 }
 
 function fromUnion(error: NeonErrorUnion): NeonEffectError {
@@ -188,6 +228,9 @@ function fromUnion(error: NeonErrorUnion): NeonEffectError {
 		case "aborted":
 			// Only our own signal aborts a call, and only when the fiber was
 			// interrupted, so Effect discards whatever this produces.
+			throw error;
+		default:
+			// A kind added by a newer SDK copy than this package knows about.
 			throw error;
 	}
 }

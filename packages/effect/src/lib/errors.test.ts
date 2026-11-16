@@ -120,6 +120,63 @@ describe("toNeonEffectError", () => {
 		expect(() => toNeonEffectError(abort)).toThrow(abort);
 	});
 
+	describe("errors from another copy of @neon/sdk", () => {
+		// Another SDK copy defines its own classes, so its errors fail `instanceof`
+		// against this package's copy and are matched by name and kind instead.
+		class ForeignNotFoundError extends Error {
+			readonly kind = "not_found";
+			readonly status = 404;
+			readonly code = "NOT_FOUND";
+			readonly requestId = "req_2";
+			readonly response = undefined;
+			readonly body = { message: "missing" };
+			constructor() {
+				super("missing");
+				this.name = "NeonNotFoundError";
+			}
+		}
+
+		class ForeignNetworkError extends Error {
+			readonly kind = "network";
+			readonly reason = "ECONNRESET";
+			constructor() {
+				super("offline");
+				this.name = "NeonNetworkError";
+			}
+		}
+
+		it.each([
+			[new ForeignNotFoundError(), NeonNotFoundError, { status: 404 }],
+			[
+				new ForeignNetworkError(),
+				NeonNetworkError,
+				{ reason: "ECONNRESET" },
+			],
+		])("maps %s", (foreign, TaggedClass, fields) => {
+			const mapped = toNeonEffectError(foreign);
+
+			expect(mapped).toBeInstanceOf(TaggedClass);
+			expect(mapped.cause).toBe(foreign);
+			expect(mapped).toMatchObject(fields);
+		});
+
+		it("rethrows an error that only borrows a Neon name", () => {
+			const lookalike = new Error("not from the SDK");
+			lookalike.name = "NeonApiError";
+
+			expect(() => toNeonEffectError(lookalike)).toThrow(lookalike);
+		});
+
+		it("rethrows a kind this package does not know", () => {
+			const future = Object.assign(new Error("new failure"), {
+				kind: "quota",
+			});
+			future.name = "NeonApiError";
+
+			expect(() => toNeonEffectError(future)).toThrow(future);
+		});
+	});
+
 	it("as the catch of Effect.tryPromise, fails with the tagged error and dies on anything else", async () => {
 		const sdkError = new SdkNotFoundError("missing", {
 			...http,
