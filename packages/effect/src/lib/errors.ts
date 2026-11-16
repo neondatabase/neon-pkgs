@@ -125,33 +125,68 @@ const httpFields = <Cause extends SdkApiError>(
 	cause: error,
 });
 
-// Every `@neon/sdk` error class names itself with a literal `Neon*Error` and carries a
-// `kind`; the union below matches the SDK's `NeonErrorUnion` subclasses by name.
-const SDK_ERROR_NAMES = new Set([
-	"NeonApiError",
-	"NeonNotFoundError",
-	"NeonAuthError",
-	"NeonRateLimitError",
-	"NeonOperationError",
-	"NeonRequestTimeoutError",
-	"NeonWaitTimeoutError",
-	"NeonAbortError",
-	"NeonNetworkError",
-	"NeonClientError",
-]);
+const isNumber = (value: unknown): boolean => typeof value === "number";
+const isString = (value: unknown): boolean => typeof value === "string";
+
+type Shape = {
+	readonly kind: string;
+	readonly fields: Readonly<Record<string, (value: unknown) => boolean>>;
+};
+
+const httpShape = (kind: string): Shape => ({
+	kind,
+	fields: { status: isNumber },
+});
+
+// The SDK's `NeonErrorUnion` classes by their literal `name`, with the `kind` and the
+// fields `fromUnion` reads from each.
+const SDK_ERROR_SHAPES: Readonly<Record<string, Shape>> = {
+	NeonApiError: httpShape("api"),
+	NeonNotFoundError: httpShape("not_found"),
+	NeonAuthError: httpShape("auth"),
+	NeonRateLimitError: httpShape("rate_limit"),
+	NeonOperationError: {
+		kind: "operation",
+		fields: { operationId: isString, status: isString },
+	},
+	NeonRequestTimeoutError: {
+		kind: "timeout",
+		fields: { source: (value) => value === "request", timeoutMs: isNumber },
+	},
+	NeonWaitTimeoutError: {
+		kind: "timeout",
+		fields: {
+			source: (value) => value === "wait",
+			timeoutMs: isNumber,
+			operations: Array.isArray,
+		},
+	},
+	NeonAbortError: { kind: "aborted", fields: {} },
+	NeonNetworkError: { kind: "network", fields: { reason: isString } },
+	NeonClientError: { kind: "client", fields: {} },
+};
 
 /**
  * An error thrown by another copy of `@neon/sdk` fails `instanceof` against this
  * package's copy, which happens when `@neon/effect` and the library that threw (such
- * as `@neon/tools`) resolve different SDK versions.
+ * as `@neon/tools`) resolve different SDK versions. It is accepted only with the
+ * `kind` and fields its class name promises.
  */
 function isNeonErrorFromAnySdkCopy(error: unknown): error is NeonErrorUnion {
+	if (isNeonError(error)) return true;
+	if (
+		!(error instanceof Error) ||
+		!Object.hasOwn(SDK_ERROR_SHAPES, error.name)
+	) {
+		return false;
+	}
+	const shape = SDK_ERROR_SHAPES[error.name];
+	const fields: Record<string, unknown> = { ...error };
 	return (
-		isNeonError(error) ||
-		(error instanceof Error &&
-			SDK_ERROR_NAMES.has(error.name) &&
-			"kind" in error &&
-			typeof error.kind === "string")
+		fields.kind === shape.kind &&
+		Object.entries(shape.fields).every(([field, check]) =>
+			check(fields[field]),
+		)
 	);
 }
 

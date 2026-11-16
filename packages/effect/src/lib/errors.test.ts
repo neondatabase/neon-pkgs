@@ -167,13 +167,18 @@ describe("toNeonEffectError", () => {
 			expect(() => toNeonEffectError(lookalike)).toThrow(lookalike);
 		});
 
-		it("rethrows a kind this package does not know", () => {
-			const future = Object.assign(new Error("new failure"), {
-				kind: "quota",
-			});
-			future.name = "NeonApiError";
+		it.each([
+			["a kind that does not match the name", { kind: "network" }],
+			["a missing field the class promises", { kind: "api" }],
+			[
+				"a kind this package does not know",
+				{ kind: "quota", status: 500 },
+			],
+		])("rethrows %s", (_case, fields) => {
+			const foreign = Object.assign(new Error("not quite SDK"), fields);
+			foreign.name = "NeonApiError";
 
-			expect(() => toNeonEffectError(future)).toThrow(future);
+			expect(() => toNeonEffectError(foreign)).toThrow(foreign);
 		});
 	});
 
