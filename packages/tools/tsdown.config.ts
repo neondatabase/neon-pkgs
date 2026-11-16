@@ -12,6 +12,7 @@ export default defineConfig({
 		"src/schemas.ts",
 		"src/eve.ts",
 		"src/mastra.ts",
+		"src/effect.ts",
 		"src/operations.gen.ts",
 		"src/descriptions.gen.ts",
 		"src/lib/**/*.ts",

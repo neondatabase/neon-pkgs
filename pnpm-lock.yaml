@@ -1117,6 +1117,9 @@ importers:
       '@neon/e2e-harness':
         specifier: workspace:*
         version: link:../../tests/e2e-harness
+      '@neon/effect':
+        specifier: workspace:*
+        version: link:../effect
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17
@@ -1126,6 +1129,9 @@ importers:
       console-fail-test:
         specifier: 'catalog:'
         version: 0.5.0
+      effect:
+        specifier: 4.1.2
+        version: 4.1.2
       eve:
         specifier: 0.29.5
         version: 0.29.5(@opentelemetry/api@1.9.0)(ai@7.0.137(zod@4.5.4))(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@neondatabase/serverless@1.0.1)(@opentelemetry/api@1.9.0)(@types/pg@8.20.0)(kysely@0.29.6)(pg@8.23.1))(giget@3.3.0)(jiti@2.7.0)(lru-cache@11.5.1)

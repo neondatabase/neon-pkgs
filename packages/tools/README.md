@@ -508,6 +508,40 @@ const createProject = createTool(configs.create_and_connect_projects);
 
 The adapter maps approval requirements to Mastra's `requireApproval` field and forwards its abort signal. Credentials are the constructor `apiKey` (a string or a callback invoked on every request).
 
+## Effect
+
+`@neon/tools/effect` runs the same tools as [Effect](https://effect.website) v4 Effects. Install the optional peer dependencies `effect` and `@neon/effect`; the other entry points don't need them.
+
+```ts
+import { createNeonTools } from "@neon/tools";
+import { retryReadOnlyNetworkFailures, toEffectTools } from "@neon/tools/effect";
+import { Effect } from "effect";
+
+const tools = toEffectTools(
+	createNeonTools({ tools: ["projects.list", "projects.get"] as const }),
+	{ retry: retryReadOnlyNetworkFailures },
+);
+
+const project = tools["projects.get"]
+	.execute({ project_id: "my-project-id" }, { apiKey })
+	.pipe(Effect.catchTag("NeonNotFoundError", () => Effect.succeed(undefined)));
+```
+
+`toEffectTools` keeps every tool field and replaces `execute`, which returns `Effect<NeonToolResult, NeonToolError>` with a span named `NeonTools.<id>`. The execution context is the one above without `signal`: interrupting the fiber cancels the call.
+
+The span records every failure's tag as `error.type` and fails only for the server's: invalid input, a statement Postgres rejected, and any 4xx from the Neon API keep it ok. `NeonClientError` fails it, since the SDK uses it for malformed responses as well as its own validation. A `NeonSqlError` whose SQLSTATE class is 08, 40, 53, 55, 57, 58, F0, or XX (connection, rollback, resources, operator, system, or internal errors) fails it. `neon.tool.attempts` counts the attempts, and `neon.tool.retried_error.type` names the failure a retry recovered from.
+
+| Error / `_tag` | When |
+| --- | --- |
+| `NeonEffectError` members (`NeonAuthError`, `NeonNotFoundError`, `NeonNetworkError`, …) | The Neon API or SDK failed; see [`@neon/effect`](../effect/README.md#errors) |
+| `NeonToolInputError` | The input failed the tool's schema; `issues` lists why |
+| `NeonSqlError` | Postgres rejected the statement; `code` is the SQLSTATE, with `position`, `detail`, `hint`, `where` |
+| `NeonSqlConnectionError` | The SQL endpoint failed before Postgres answered |
+
+Anything else a tool throws becomes a defect. `toNeonToolError` is the mapping, for promise code you wrap yourself.
+
+Retries are off unless you pass `retry`. The SDK already retries 423, 429, and 503 responses and honours `Retry-After`. `retryReadOnlyNetworkFailures` retries a read-only tool that got no response, twice with jittered exponential backoff from 200 ms; mutations are never retried, since one may have reached the API. A retry runs the whole tool again, including `onExecute` hooks and every page of a list. Pass your own `NeonToolRetryPolicy` (`schedule`, `times`, `shouldRetry`) for a different policy. Whatever it says, the adapter only retries read-only tools and never a 423, 429, or 503 response.
+
 ## Safety and binary data
 
 Every non-read operation requires approval. Generated non-read operations are conservatively marked as potentially destructive; `migrations.prepare` and `queryTuning.prepare` (which write only to a new temporary branch) and `feedback.send` are not. Reads that return connection credentials also require approval.
