@@ -125,23 +125,131 @@ const httpFields = <Cause extends SdkApiError>(
 	cause: error,
 });
 
+const isNumber = (value: unknown): boolean => typeof value === "number";
+const isString = (value: unknown): boolean => typeof value === "string";
+const optional =
+	(check: (value: unknown) => boolean) =>
+	(value: unknown): boolean =>
+		value === undefined || check(value);
+// Any fetch implementation's Response: a custom `fetch` may bring its own class.
+const isResponse = (value: unknown): boolean =>
+	typeof value === "object" &&
+	value !== null &&
+	"status" in value &&
+	isNumber(value.status) &&
+	"headers" in value &&
+	typeof value.headers === "object" &&
+	value.headers !== null;
+
+// The fields `operations.waitFor` reads to resume waiting.
+const isOperation = (value: unknown): boolean =>
+	typeof value === "object" &&
+	value !== null &&
+	"id" in value &&
+	isString(value.id) &&
+	"project_id" in value &&
+	isString(value.project_id) &&
+	"action" in value &&
+	isString(value.action) &&
+	"status" in value &&
+	isString(value.status);
+const isOperations = (value: unknown): boolean =>
+	Array.isArray(value) && value.every(isOperation);
+
+type Shape = {
+	readonly kind: string;
+	readonly fields: Readonly<Record<string, (value: unknown) => boolean>>;
+};
+
+const httpShape = (kind: string): Shape => ({
+	kind,
+	fields: {
+		status: isNumber,
+		code: optional(isString),
+		requestId: optional(isString),
+		response: optional(isResponse),
+	},
+});
+
+// The SDK's `NeonErrorUnion` classes by their literal `name`, with the `kind` and the
+// fields `fromUnion` reads from each.
+const SDK_ERROR_SHAPES: Readonly<Record<string, Shape>> = {
+	NeonApiError: httpShape("api"),
+	NeonNotFoundError: httpShape("not_found"),
+	NeonAuthError: httpShape("auth"),
+	NeonRateLimitError: httpShape("rate_limit"),
+	NeonOperationError: {
+		kind: "operation",
+		fields: { operationId: isString, status: isString },
+	},
+	NeonRequestTimeoutError: {
+		kind: "timeout",
+		fields: { source: (value) => value === "request", timeoutMs: isNumber },
+	},
+	NeonWaitTimeoutError: {
+		kind: "timeout",
+		fields: {
+			source: (value) => value === "wait",
+			timeoutMs: isNumber,
+			operations: isOperations,
+		},
+	},
+	NeonAbortError: { kind: "aborted", fields: {} },
+	NeonNetworkError: { kind: "network", fields: { reason: isString } },
+	NeonClientError: { kind: "client", fields: {} },
+};
+
 /**
- * Map an `@neon/sdk` error to its tagged counterpart. Anything else is rethrown so
- * Effect records it as a defect rather than as an expected failure.
+ * An error thrown by another copy of `@neon/sdk` fails `instanceof` against this
+ * package's copy, which happens when `@neon/effect` and the library that threw (such
+ * as `@neon/tools`) resolve different SDK versions. It is accepted only with the
+ * `kind` and fields its class name promises.
+ */
+function isNeonErrorFromAnySdkCopy(error: unknown): error is NeonErrorUnion {
+	if (isNeonError(error)) return true;
+	if (
+		!(error instanceof Error) ||
+		!Object.hasOwn(SDK_ERROR_SHAPES, error.name)
+	) {
+		return false;
+	}
+	const shape = SDK_ERROR_SHAPES[error.name];
+	const fields: Record<string, unknown> = { ...error };
+	return (
+		fields.kind === shape.kind &&
+		Object.entries(shape.fields).every(([field, check]) =>
+			check(fields[field]),
+		)
+	);
+}
+
+function isBaseClientError(error: unknown): error is NeonError {
+	return (
+		(error instanceof NeonError ||
+			(error instanceof Error && error.name === "NeonError")) &&
+		"kind" in error &&
+		error.kind === "client"
+	);
+}
+
+/**
+ * Map an `@neon/sdk` error, from any copy of the package, to its tagged counterpart.
+ * Anything else is rethrown so Effect records it as a defect rather than as an
+ * expected failure.
  */
 export function toNeonEffectError(error: unknown): NeonEffectError {
-	if (!isNeonError(error)) {
-		// `createNeonClient` rejects bad config with the base class, which
-		// `isNeonError` does not recognise.
-		if (error instanceof NeonError && error.kind === "client") {
-			return new NeonClientError({
-				message: error.message,
-				cause: error,
-			});
-		}
-		throw error;
+	if (isNeonErrorFromAnySdkCopy(error)) {
+		return fromUnion(error);
 	}
-	return fromUnion(error);
+	// `createNeonClient` rejects bad config with the base class, which
+	// `isNeonError` does not recognise.
+	if (isBaseClientError(error)) {
+		return new NeonClientError({
+			message: error.message,
+			cause: error,
+		});
+	}
+	throw error;
 }
 
 function fromUnion(error: NeonErrorUnion): NeonEffectError {
@@ -188,6 +296,9 @@ function fromUnion(error: NeonErrorUnion): NeonEffectError {
 		case "aborted":
 			// Only our own signal aborts a call, and only when the fiber was
 			// interrupted, so Effect discards whatever this produces.
+			throw error;
+		default:
+			// A kind added by a newer SDK copy than this package knows about.
 			throw error;
 	}
 }

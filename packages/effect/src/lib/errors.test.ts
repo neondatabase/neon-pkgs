@@ -120,6 +120,145 @@ describe("toNeonEffectError", () => {
 		expect(() => toNeonEffectError(abort)).toThrow(abort);
 	});
 
+	describe("errors from another copy of @neon/sdk", () => {
+		// Another SDK copy defines its own classes, so its errors fail `instanceof`
+		// against this package's copy and are matched by name and kind instead.
+		class ForeignNotFoundError extends Error {
+			readonly kind = "not_found";
+			readonly status = 404;
+			readonly code = "NOT_FOUND";
+			readonly requestId = "req_2";
+			readonly response = undefined;
+			readonly body = { message: "missing" };
+			constructor() {
+				super("missing");
+				this.name = "NeonNotFoundError";
+			}
+		}
+
+		class ForeignNetworkError extends Error {
+			readonly kind = "network";
+			readonly reason = "ECONNRESET";
+			constructor() {
+				super("offline");
+				this.name = "NeonNetworkError";
+			}
+		}
+
+		it.each([
+			[new ForeignNotFoundError(), NeonNotFoundError, { status: 404 }],
+			[
+				new ForeignNetworkError(),
+				NeonNetworkError,
+				{ reason: "ECONNRESET" },
+			],
+		])("maps %s", (foreign, TaggedClass, fields) => {
+			const mapped = toNeonEffectError(foreign);
+
+			expect(mapped).toBeInstanceOf(TaggedClass);
+			expect(mapped.cause).toBe(foreign);
+			expect(mapped).toMatchObject(fields);
+		});
+
+		it("maps an error whose response comes from another fetch implementation", () => {
+			const response = {
+				status: 404,
+				statusText: "Not Found",
+				headers: new Headers(),
+			};
+			const foreign = Object.assign(new Error("missing"), {
+				kind: "not_found",
+				status: 404,
+				response,
+				body: {},
+			});
+			foreign.name = "NeonNotFoundError";
+
+			const mapped = toNeonEffectError(foreign);
+
+			expect(mapped).toBeInstanceOf(NeonNotFoundError);
+			expect(mapped).toMatchObject({ response });
+		});
+
+		it("rethrows an error that only borrows a Neon name", () => {
+			const lookalike = new Error("not from the SDK");
+			lookalike.name = "NeonApiError";
+
+			expect(() => toNeonEffectError(lookalike)).toThrow(lookalike);
+		});
+
+		it.each([
+			[
+				"a kind that does not match the name",
+				"NeonApiError",
+				{ kind: "network" },
+			],
+			[
+				"a missing field the class promises",
+				"NeonApiError",
+				{ kind: "api" },
+			],
+			[
+				"a kind this package does not know",
+				"NeonApiError",
+				{ kind: "quota", status: 500 },
+			],
+			[
+				"an optional field of the wrong type",
+				"NeonApiError",
+				{ kind: "api", status: 500, code: 123 },
+			],
+			[
+				"a response that is not a Response",
+				"NeonApiError",
+				{ kind: "api", status: 500, response: "invalid" },
+			],
+			[
+				"an operation without an id",
+				"NeonWaitTimeoutError",
+				{
+					kind: "timeout",
+					source: "wait",
+					timeoutMs: 1,
+					operations: [null],
+				},
+			],
+			[
+				"an operation missing the fields waitFor reads",
+				"NeonWaitTimeoutError",
+				{
+					kind: "timeout",
+					source: "wait",
+					timeoutMs: 1,
+					operations: [{ id: "op_1" }],
+				},
+			],
+		])("rethrows %s", (_case, name, fields) => {
+			const foreign = Object.assign(new Error("not quite SDK"), fields);
+			foreign.name = name;
+
+			expect(() => toNeonEffectError(foreign)).toThrow(foreign);
+		});
+
+		it("dies with a malformed lookalike as the catch of Effect.tryPromise", async () => {
+			const foreign = Object.assign(new Error("not quite SDK"), {
+				kind: "api",
+				status: 500,
+				code: 123,
+			});
+			foreign.name = "NeonApiError";
+
+			const exit = await Effect.runPromiseExit(
+				Effect.tryPromise({
+					try: () => Promise.reject(foreign),
+					catch: toNeonEffectError,
+				}),
+			);
+
+			expect(exit).toStrictEqual(Exit.die(foreign));
+		});
+	});
+
 	it("as the catch of Effect.tryPromise, fails with the tagged error and dies on anything else", async () => {
 		const sdkError = new SdkNotFoundError("missing", {
 			...http,

@@ -145,7 +145,7 @@ const project = Effect.tryPromise({
 });
 ```
 
-An SDK error becomes its tagged class. Any other error is rethrown, so the Effect dies with it as a defect.
+An SDK error becomes its tagged class, including one thrown by another copy of `@neon/sdk` (when this package and the library that threw resolve different SDK versions). Any other error is rethrown, so the Effect dies with it as a defect.
 
 ## Cancellation and deadlines
 
