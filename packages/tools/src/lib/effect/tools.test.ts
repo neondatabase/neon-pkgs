@@ -208,6 +208,55 @@ describe("retries", () => {
 		expect(calls).toHaveLength(1);
 	});
 
+	test("never resend a mutation or an SDK-retried status, whatever the policy", async () => {
+		const retryEverything: NeonToolRetryPolicy = {
+			schedule: Schedule.spaced("1 millis"),
+			times: 2,
+			shouldRetry: () => true,
+		};
+
+		// Requests sent for one failing call, with and without the policy. The SDK's
+		// own 423/429/503 retries count in both.
+		const requestsSent = async (input: {
+			readonly status: number;
+			readonly tool: "projects.get" | "projects.delete";
+			readonly retry?: NeonToolRetryPolicy;
+		}) => {
+			let sent = 0;
+			const tools = toEffectTools(
+				createNeonTools({
+					apiKey: "test-key",
+					tools: ["projects.get", "projects.delete"] as const,
+					fetch: async () => {
+						sent += 1;
+						return jsonResponse(
+							{ message: "failed" },
+							input.status,
+						);
+					},
+				}),
+				{ retry: input.retry },
+			);
+			await Effect.runPromise(
+				Effect.flip(
+					tools[input.tool].execute({ project_id: "project-1" }),
+				),
+			);
+			return sent;
+		};
+
+		for (const [tool, status] of [
+			["projects.delete", 500],
+			["projects.get", 423],
+			["projects.get", 429],
+			["projects.get", 503],
+		] as const) {
+			expect(
+				await requestsSent({ tool, status, retry: retryEverything }),
+			).toBe(await requestsSent({ tool, status }));
+		}
+	});
+
 	test("stop when the fiber is interrupted during backoff", async () => {
 		const { calls, fetch } = flakyFetch(10);
 		const tools = toEffectTools(

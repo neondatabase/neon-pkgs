@@ -38,8 +38,10 @@ export type NeonEffectTools<
 > = { readonly [Id in keyof Tools]: NeonEffectTool<Tools[Id]> };
 
 /**
- * Which failures to retry and how. The SDK already retries 423, 429, and 503
- * responses, honouring `Retry-After`; a policy here covers what it leaves alone.
+ * Which failures to retry and how. A policy only ever sees failures of
+ * read-only tools that the SDK did not already retry: the adapter never resends
+ * a mutation, and leaves 423, 429, and 503 responses to the SDK, which retries
+ * them and honours `Retry-After`.
  */
 export interface NeonToolRetryPolicy {
 	readonly schedule: Schedule.Schedule<unknown, NeonToolError>;
@@ -64,10 +66,24 @@ export interface EffectToolOptions {
 export const retryReadOnlyNetworkFailures: NeonToolRetryPolicy = {
 	schedule: Schedule.exponential("200 millis").pipe(Schedule.jittered),
 	times: 2,
-	shouldRetry: ({ tool, error }) =>
-		tool.annotations.readOnlyHint &&
-		Predicate.isTagged(error, "NeonNetworkError"),
+	shouldRetry: ({ error }) => Predicate.isTagged(error, "NeonNetworkError"),
 };
+
+const SDK_RETRIED_STATUSES = new Set([423, 429, 503]);
+
+const sdkRetried = (error: NeonToolError): boolean =>
+	"status" in error &&
+	typeof error.status === "number" &&
+	SDK_RETRIED_STATUSES.has(error.status);
+
+const mayRetry = (
+	tool: ExecutableNeonTool,
+	error: NeonToolError,
+	policy: NeonToolRetryPolicy,
+): boolean =>
+	tool.annotations.readOnlyHint &&
+	!sdkRetried(error) &&
+	policy.shouldRetry({ tool, error });
 
 /** Run a Neon tool as an Effect, with a span named `NeonTools.<id>`. */
 export const toEffectTool = <Input, Output, Tool extends ExecutableNeonTool>(
@@ -92,7 +108,7 @@ export const toEffectTool = <Input, Output, Tool extends ExecutableNeonTool>(
 					Effect.retry({
 						schedule: retry.schedule,
 						times: retry.times,
-						while: (error) => retry.shouldRetry({ tool, error }),
+						while: (error) => mayRetry(tool, error, retry),
 					}),
 				);
 
