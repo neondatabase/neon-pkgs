@@ -885,3 +885,42 @@ describe("branches", () => {
 		);
 	});
 });
+
+describe("branches without --project-id", () => {
+	test("refuses to guess a project when the user belongs to several organizations", async ({
+		testCliCommand,
+	}) => {
+		const paths: string[] = [];
+		await testCliCommand(["branches", "list"], {
+			mockDir: "multi_org_one_project_in_default_scope",
+			code: 1,
+			snapshot: false,
+			stderr: "ERROR: Multiple organizations found, please provide a project with the --project-id option, or an organization with the --org-id option",
+			onRequest: (request) => paths.push(request.path),
+		});
+		expect(paths).not.toContain("/projects");
+		expect(paths).not.toContain("/projects/proj-default-scope/branches");
+	});
+
+	test("uses the only project of the organization given with --org-id", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["branches", "list", "--org-id", "org-other"], {
+			mockDir: "multi_org_one_project_in_default_scope",
+			output: "json",
+			snapshot: false,
+			stdout: expect.stringContaining("br-other-org-main-123456"),
+		});
+	});
+
+	test("uses the only project when the user belongs to one organization", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["branches", "list"], {
+			mockDir: "single_org",
+			output: "json",
+			snapshot: false,
+			stdout: expect.stringContaining("br-main-branch-123456"),
+		});
+	});
+});
