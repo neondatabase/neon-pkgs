@@ -26,6 +26,7 @@ import {
 	applyToolPolicy,
 	type NeonToolPolicyOptions,
 	type NeonToolPredicate,
+	toolCallGuard,
 	toolDescriptor,
 } from "./lib/policy.js";
 
@@ -101,6 +102,10 @@ type AllNeonToolIds = typeof toolIds;
 export type CreateNeonToolsOptions<
 	Tools extends readonly NeonToolId[] = readonly NeonToolId[],
 > = NeonToolsClientOptions & { tools: Tools };
+
+export type CreateNeonToolsPredicateOptions = NeonToolsClientOptions & {
+	tools: NeonToolPredicate;
+};
 
 type SelectedTools<T> = T extends {
 	tools: infer S extends readonly NeonToolId[];
@@ -228,21 +233,22 @@ const bindTools = <T extends CreateNeonToolsInput>(
 		selectorsById.set(published, id);
 		publishedIds.set(id, published);
 	}
-	const entries = rawEntries.map(
-		([id, tool]) =>
-			[
-				id,
-				applyToolCustomization(
-					applyToolPolicy(
-						tool,
-						options,
-						publishedIdOf(publishedIds, id),
-					),
-					options,
-					publishedIds,
-				),
-			] as const,
-	);
+	const entries = rawEntries.map(([id, tool]) => {
+		const guard = toolCallGuard(
+			tool,
+			options,
+			publishedIdOf(publishedIds, id),
+		);
+		return [
+			id,
+			applyToolCustomization(
+				applyToolPolicy(tool, options, guard),
+				options,
+				publishedIds,
+				guard,
+			),
+		] as const;
+	});
 	const tools: unknown = Object.fromEntries(entries);
 	assertNeonTools(tools, selected);
 	return tools as NeonTools<SelectedTools<T>>;
@@ -335,10 +341,12 @@ export function createNeonTool<
 	assertKnownNameKeys(options.names, [tool]);
 	const published = publishedToolId(tool, options);
 	const publishedIds = new Map([[id, published]]);
+	const guard = toolCallGuard(tool, options, published);
 	return applyToolCustomization(
-		applyToolPolicy(tool, options, published),
+		applyToolPolicy(tool, options, guard),
 		options,
 		publishedIds,
+		guard,
 	) as
 		| NamedNeonTool<Id, Inject>
 		| InjectedNeonTool<ToolForId<Id>, Inject>

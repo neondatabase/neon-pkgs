@@ -273,7 +273,7 @@ await tools["projects.delete"].execute(
 ); // runs
 ```
 
-The refusal happens inside `onExecute`, so a tracking hook sees it as a failed call.
+The refusal happens inside `onExecute`, so a tracking hook sees it as a failed call, and before `inject` resolves a project or branch id.
 
 ### Select tools by metadata
 
@@ -290,7 +290,7 @@ const readTools = createNeonTools({
 await readTools["branches.list"]?.execute({ project_id: "project-id" });
 ```
 
-The result is typed as a partial record, since which tools the predicate keeps is known only at runtime. `toMastraTools` keeps that optionality. Pass a list of selectors when you need exact keys.
+The result is typed as a partial record, since which tools the predicate keeps is known only at runtime. `toMastraTools` keeps that optionality, also when the record mixes in tools from a list. `CreateNeonToolsPredicateOptions` types predicate options declared ahead of the call. Pass a list of selectors when you need exact keys.
 
 ## Writes and waiting
 

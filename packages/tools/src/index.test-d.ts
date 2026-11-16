@@ -2,6 +2,7 @@ import { expectTypeOf } from "vitest";
 import { toEveTool } from "./eve.js";
 import {
 	type CreateNeonToolsOptions,
+	type CreateNeonToolsPredicateOptions,
 	createNeonTool,
 	createNeonTools,
 	publishedId,
@@ -391,3 +392,19 @@ const injectedReadTools = createNeonTools({
 	inject: { projectId: "granted-project", omitFromSchema: true },
 });
 injectedReadTools["projects.get"]?.execute({});
+
+const annotatedPredicate: CreateNeonToolsPredicateOptions = {
+	apiKey: "test-key",
+	tools: (tool) => tool.metadata.readOnlySafe,
+};
+// @ts-expect-error a predicate may exclude any tool
+createNeonTools(annotatedPredicate)["projects.list"].execute({});
+createNeonTools(annotatedPredicate)["projects.list"]?.execute({ limit: 1 });
+
+const mixedMastraTools = toMastraTools({
+	...readTools,
+	"regions.list": createNeonTool("regions.list", {}),
+});
+mixedMastraTools.list_regions.execute({}, {});
+// @ts-expect-error a predicate-selected tool stays optional next to a required one
+mixedMastraTools.delete_projects.execute({ project_id: "p" }, {});

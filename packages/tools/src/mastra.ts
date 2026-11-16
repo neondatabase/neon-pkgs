@@ -20,17 +20,12 @@ export type MastraToolConfig<Tool extends NeonTool> = {
 	): ReturnType<Tool["execute"]>;
 };
 
-type MastraToolMap<Tools extends Readonly<Record<string, NeonTool>>> = {
-	[Tool in NonNullable<
-		Tools[keyof Tools]
-	> as Tool["id"]]: MastraToolConfig<Tool>;
+/** Keyed by published id; a tool optional in `Tools`, as after a `tools` predicate, stays optional. */
+export type MastraTools<Tools extends Readonly<Record<string, NeonTool>>> = {
+	[Key in keyof Tools as NonNullable<Tools[Key]>["id"]]: MastraToolConfig<
+		NonNullable<Tools[Key]>
+	>;
 };
-
-/** Optional when the Neon tools are, as after a `tools` predicate. */
-export type MastraTools<Tools extends Readonly<Record<string, NeonTool>>> =
-	Record<never, never> extends Tools
-		? Partial<MastraToolMap<Tools>>
-		: MastraToolMap<Tools>;
 
 type MastraToolSource = {
 	id: string;

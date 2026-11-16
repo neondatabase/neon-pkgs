@@ -198,6 +198,26 @@ describe("readOnly", () => {
 		expect(requests).toHaveLength(0);
 	});
 
+	test("refuses before an injected id resolves", async () => {
+		const resolved: string[] = [];
+		const deleteProject = createNeonTool("projects.delete", {
+			apiKey: "test-key",
+			readOnly: true,
+			inject: {
+				projectId: async () => {
+					resolved.push("projectId");
+					throw new Error("project lookup failed");
+				},
+				omitFromSchema: true,
+			},
+		});
+
+		await expect(deleteProject.execute({})).rejects.toThrow(
+			"delete_projects is unavailable in read-only mode",
+		);
+		expect(resolved).toEqual([]);
+	});
+
 	test("runs inside onExecute, so the hook sees the refusal", async () => {
 		const outcomes: string[] = [];
 		const tools = createNeonTools({

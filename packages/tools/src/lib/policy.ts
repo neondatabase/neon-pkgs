@@ -1,5 +1,5 @@
 import { NeonClientError } from "@neon/sdk";
-import type { NeonTool } from "./operation.js";
+import type { NeonTool, NeonToolExecutionContext } from "./operation.js";
 
 export interface NeonToolPolicyOptions {
 	/** The default for `readOnly` in every execution context. */
@@ -30,25 +30,36 @@ export const toolDescriptor = (tool: NeonTool): NeonToolDescriptor => ({
 	metadata: tool.metadata,
 });
 
-/**
- * Refuses a call the effective `readOnly` forbids before it reaches Neon, and
- * passes the effective value on so SQL tools open a `READ ONLY` transaction.
- */
+export type NeonToolCallGuard = (context?: NeonToolExecutionContext) => void;
+
+/** Throws for a call the effective policy forbids. */
+export const toolCallGuard =
+	(
+		tool: NeonTool,
+		options: NeonToolPolicyOptions,
+		publishedId: string,
+	): NeonToolCallGuard =>
+	(context) => {
+		const readOnly = context?.readOnly ?? options.readOnly;
+		if (readOnly === true && !tool.metadata.readOnlySafe) {
+			throw new NeonClientError(
+				`${publishedId} is unavailable in read-only mode because it can change Neon resources or returns a connection string or role password.`,
+			);
+		}
+	};
+
+/** SQL tools read the effective `readOnly` to open a `READ ONLY` transaction. */
 export const applyToolPolicy = <Tool extends NeonTool>(
 	tool: Tool,
 	options: NeonToolPolicyOptions,
-	publishedId: string,
+	guard: NeonToolCallGuard,
 ): Tool => {
 	const execute = tool.execute.bind(tool);
 	return {
 		...tool,
 		execute: async (input, context) => {
+			guard(context);
 			const readOnly = context?.readOnly ?? options.readOnly;
-			if (readOnly === true && !tool.metadata.readOnlySafe) {
-				throw new NeonClientError(
-					`${publishedId} is unavailable in read-only mode because it can change Neon resources or returns a connection string or role password.`,
-				);
-			}
 			return execute(
 				input,
 				readOnly === undefined ? context : { ...context, readOnly },
