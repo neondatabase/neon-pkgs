@@ -100,8 +100,9 @@ const SERVER_SQLSTATE_CLASSES = new Set([
 	"XX",
 ]);
 
-// Mistakes in the call: invalid input, a statement Postgres rejected, an
-// SDK-side validation failure, and any 4xx from the Neon API.
+// Mistakes in the call: invalid input, a statement Postgres rejected, and any
+// 4xx from the Neon API. `NeonClientError` covers both SDK-side validation and
+// malformed responses, so it counts as the server's.
 const isCallerError = (error: NeonToolError): boolean => {
 	if (Predicate.isTagged(error, "NeonSqlError")) {
 		return !SERVER_SQLSTATE_CLASSES.has(error.code.slice(0, 2));
@@ -109,7 +110,6 @@ const isCallerError = (error: NeonToolError): boolean => {
 
 	return (
 		Predicate.isTagged(error, "NeonToolInputError") ||
-		Predicate.isTagged(error, "NeonClientError") ||
 		("status" in error &&
 			typeof error.status === "number" &&
 			error.status < 500)

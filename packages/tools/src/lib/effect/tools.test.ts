@@ -1,4 +1,5 @@
 import { NeonAuthError, NeonNetworkError } from "@neon/effect";
+import { NeonClientError as SdkClientError } from "@neon/sdk";
 import { NeonDbError } from "@neondatabase/serverless";
 import { Effect, Exit, Fiber, Option, Schedule, Tracer } from "effect";
 import { describe, expect, test } from "vitest";
@@ -429,6 +430,26 @@ describe("tool spans", () => {
 
 		expect(error._tag).toBe("NeonSqlError");
 		expect(toolSpan("run_sql")?.exit?._tag).toBe(spanExit);
+	});
+
+	test("fails the span for a NeonClientError, which may be a malformed response", async () => {
+		const { tracer, toolSpan } = recordingTracer();
+		const clientTool = toEffectTool({
+			id: "list_objects",
+			annotations: { readOnlyHint: true, openWorldHint: true },
+			execute: async (_input: Record<string, never>) => {
+				throw new SdkClientError(
+					"Object list was truncated without a next cursor.",
+				);
+			},
+		});
+
+		const error = await Effect.runPromise(
+			Effect.flip(clientTool.execute({}).pipe(Effect.withTracer(tracer))),
+		);
+
+		expect(error._tag).toBe("NeonClientError");
+		expect(toolSpan("list_objects")?.exit?._tag).toBe("Failure");
 	});
 
 	test("records the attempts and the failure a retry recovered from", async () => {
