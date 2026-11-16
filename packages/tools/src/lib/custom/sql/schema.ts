@@ -52,12 +52,13 @@ const LIST_TABLES_SQL = `
 // A name is read as a raw name the way schema.listTables returns it (User,
 // Auth.User), which to_regclass would fold to lowercase, and as SQL through
 // to_regclass, the only reading of a quoted name. More than one row means the
-// readings name different tables.
+// readings name different tables. $1::text keeps Postgres from typing $1 as
+// name, which truncates a qualified name longer than 63 bytes.
 const RESOLVE_TABLE_SQL = `
 	WITH candidates AS (
 		SELECT oid
 		FROM pg_catalog.pg_class
-		WHERE relname = $1 AND pg_catalog.pg_table_is_visible(oid)
+		WHERE relname = $1::text AND pg_catalog.pg_table_is_visible(oid)
 		UNION
 		SELECT cls.oid
 		FROM pg_catalog.pg_class cls

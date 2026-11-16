@@ -409,6 +409,27 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		}
 	});
 
+	it("schema.describeTable resolves a qualified name longer than 63 bytes", async () => {
+		const longName = `long_${"a".repeat(58)}`;
+		await run(`CREATE TABLE ${longName} (id int)`);
+		try {
+			for (const tableName of [
+				`public.${longName}`,
+				`"public"."${longName}"`,
+			]) {
+				const { data } = await tools["schema.describeTable"].execute({
+					project_id: projectId,
+					table_name: tableName,
+				});
+				expect(data.raw.columns.map((column) => column.name)).toEqual([
+					"id",
+				]);
+			}
+		} finally {
+			await run(`DROP TABLE ${longName}`);
+		}
+	});
+
 	it("schema.describeTable resolves mixed-case names as schema.listTables returns them, and refuses a name two tables match", async () => {
 		await run('CREATE TABLE "User" (id int PRIMARY KEY, email text)');
 		await run('CREATE SCHEMA "Auth"');
