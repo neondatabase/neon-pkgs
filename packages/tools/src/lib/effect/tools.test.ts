@@ -404,6 +404,33 @@ describe("tool spans", () => {
 		);
 	});
 
+	test.each([
+		[
+			"keeps the span ok for a statement Postgres rejected",
+			"42703",
+			"Success",
+		],
+		["fails the span for a server-side SQL failure", "53200", "Failure"],
+	])("%s", async (_case, code, spanExit) => {
+		const { tracer, toolSpan } = recordingTracer();
+		const sqlTool = toEffectTool({
+			id: "run_sql",
+			annotations: { readOnlyHint: false, openWorldHint: true },
+			execute: async (_input: Record<string, never>) => {
+				throw Object.assign(new NeonDbError("statement failed"), {
+					code,
+				});
+			},
+		});
+
+		const error = await Effect.runPromise(
+			Effect.flip(sqlTool.execute({}).pipe(Effect.withTracer(tracer))),
+		);
+
+		expect(error._tag).toBe("NeonSqlError");
+		expect(toolSpan("run_sql")?.exit?._tag).toBe(spanExit);
+	});
+
 	test("records the attempts and the failure a retry recovered from", async () => {
 		const { tracer, toolSpan } = recordingTracer();
 		const { fetch } = flakyFetch(1);

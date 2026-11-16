@@ -85,15 +85,36 @@ const mayRetry = (
 	!sdkRetried(error) &&
 	policy.shouldRetry({ tool, error });
 
-// Mistakes in the call: invalid input, SQL Postgres rejected, an SDK-side
-// validation failure, and any 4xx from the Neon API.
-const isCallerError = (error: NeonToolError): boolean =>
-	Predicate.isTagged(error, "NeonToolInputError") ||
-	Predicate.isTagged(error, "NeonSqlError") ||
-	Predicate.isTagged(error, "NeonClientError") ||
-	("status" in error &&
-		typeof error.status === "number" &&
-		error.status < 500);
+// SQLSTATE classes that are the database's failure, not the statement's:
+// connection, transaction rollback (serialization, deadlock), insufficient
+// resources, object not in prerequisite state, operator intervention, system,
+// configuration, and internal errors.
+const SERVER_SQLSTATE_CLASSES = new Set([
+	"08",
+	"40",
+	"53",
+	"55",
+	"57",
+	"58",
+	"F0",
+	"XX",
+]);
+
+// Mistakes in the call: invalid input, a statement Postgres rejected, an
+// SDK-side validation failure, and any 4xx from the Neon API.
+const isCallerError = (error: NeonToolError): boolean => {
+	if (Predicate.isTagged(error, "NeonSqlError")) {
+		return !SERVER_SQLSTATE_CLASSES.has(error.code.slice(0, 2));
+	}
+
+	return (
+		Predicate.isTagged(error, "NeonToolInputError") ||
+		Predicate.isTagged(error, "NeonClientError") ||
+		("status" in error &&
+			typeof error.status === "number" &&
+			error.status < 500)
+	);
+};
 
 /**
  * Run a Neon tool as an Effect, in a span named `NeonTools.<id>`. The span
