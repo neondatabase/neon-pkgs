@@ -324,6 +324,13 @@ export const fillSingleProject = async (
 		if (orgsData.organizations.length === 1) {
 			orgId = orgsData.organizations[0].id;
 		}
+		// Without org_id the API lists only the key's default scope, which need not be
+		// the organization the user is working in.
+		if (orgsData.organizations.length > 1) {
+			throw new Error(
+				"Multiple organizations found, please provide a project with the --project-id option, or an organization with the --org-id option",
+			);
+		}
 	}
 
 	try {

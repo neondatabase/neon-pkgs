@@ -1,0 +1,6 @@
+{
+  "organizations": [
+    { "id": "org-default-scope", "name": "Default scope org" },
+    { "id": "org-other", "name": "Other org" }
+  ]
+}
