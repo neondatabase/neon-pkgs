@@ -203,6 +203,16 @@ describe("toNeonEffectError", () => {
 					operations: [null],
 				},
 			],
+			[
+				"an operation missing the fields waitFor reads",
+				"NeonWaitTimeoutError",
+				{
+					kind: "timeout",
+					source: "wait",
+					timeoutMs: 1,
+					operations: [{ id: "op_1" }],
+				},
+			],
 		])("rethrows %s", (_case, name, fields) => {
 			const foreign = Object.assign(new Error("not quite SDK"), fields);
 			foreign.name = name;

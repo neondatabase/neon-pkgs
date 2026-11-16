@@ -131,11 +131,18 @@ const optional =
 	(check: (value: unknown) => boolean) =>
 	(value: unknown): boolean =>
 		value === undefined || check(value);
+// The fields `operations.waitFor` reads to resume waiting.
 const isOperation = (value: unknown): boolean =>
 	typeof value === "object" &&
 	value !== null &&
 	"id" in value &&
-	isString(value.id);
+	isString(value.id) &&
+	"project_id" in value &&
+	isString(value.project_id) &&
+	"action" in value &&
+	isString(value.action) &&
+	"status" in value &&
+	isString(value.status);
 const isOperations = (value: unknown): boolean =>
 	Array.isArray(value) && value.every(isOperation);
 
