@@ -28,7 +28,7 @@
    - A composed tool (`bindTool` in `src/lib/ergonomic/composed.ts`) when the tool needs its own input schema, for example renamed or nested fields, or an SDK method that makes several requests.
    - A custom tool (`src/lib/custom/`) when it calls Postgres, neon.com, or several SDK methods.
 
-   Every tool declares the shape of its `data`: `output` for `fromGenerated` (an `output.gen.ts` component, `z.array(...)` for a list, `z.null()` for an empty response), `outputSchema` for `bindTool` and `bindPublicTool`. Use loose objects and `.nullish()` for fields that may be absent. `tsc` fails on `outputSchemasHoldResults` in `catalog.ts` when a schema does not accept the type `execute()` returns, and names the tool.
+   Every tool declares the shape of its `data`: `output` for `fromGenerated` (an `output.gen.ts` component, `z.array(...)` for a list, `z.null()` for an empty response), `outputSchema` for `bindTool` and `bindPublicTool`. Use loose objects and `.nullish()` for fields that may be absent. `tsc` fails on `outputSchemasHoldResults` in `catalog.test-d.ts` when a schema does not accept the type `execute()` returns, and names the tool.
 4. Write its description (below), and add `"<mcp name>": "<selector>"` to `scripts/mcp-tool-names.json` if the Neon MCP server publishes it.
 5. Run the checks:
 
