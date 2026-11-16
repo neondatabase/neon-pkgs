@@ -152,3 +152,42 @@ describe("snapshots.setSchedule forwards the schedule body verbatim", () => {
 		});
 	});
 });
+
+describe("snapshots.restore finalizes only when asked", () => {
+	// Without targetBranchId the API targets the snapshot's source branch, so a
+	// default finalize would replace it.
+	it("does not finalize a restore given only the snapshot", async () => {
+		const { neon, calls } = neonCapturing();
+		await neon.snapshots.restore({
+			projectId: "p-1",
+			snapshotId: "snap-1",
+		});
+		expect(calls[0]?.url).toContain(
+			"/projects/p-1/snapshots/snap-1/restore",
+		);
+		expect(calls[0]?.body).toEqual({ finalize_restore: false });
+	});
+
+	it("does not finalize a restore onto a target branch", async () => {
+		const { neon, calls } = neonCapturing();
+		await neon.snapshots.restore({
+			projectId: "p-1",
+			snapshotId: "snap-1",
+			targetBranchId: "br-1",
+		});
+		expect(calls[0]?.body).toEqual({
+			target_branch_id: "br-1",
+			finalize_restore: false,
+		});
+	});
+
+	it("finalizes when finalize is true", async () => {
+		const { neon, calls } = neonCapturing();
+		await neon.snapshots.restore({
+			projectId: "p-1",
+			snapshotId: "snap-1",
+			finalize: true,
+		});
+		expect(calls[0]?.body).toEqual({ finalize_restore: true });
+	});
+});

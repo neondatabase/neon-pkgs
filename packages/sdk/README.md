@@ -926,8 +926,14 @@ const { data: snapshot } = await neon.snapshots.create({
 ```
 
 `restore` input: `{ name?, targetBranchId?, finalize?, preview?, keepOnAbort? }`.
-- Restoring **as a new branch** (no `targetBranchId`) finalizes by default → ready to use.
-- Restoring **onto an existing branch** doesn't finalize by default, so you can preview first.
+- The restored branch is always a new branch, and `restore` doesn't finalize by default: the target (`targetBranchId`, or the snapshot's source branch) keeps serving its data.
+- `finalize: true` swaps the restored branch in for the target, moving its computes and name onto the restored data. Without `targetBranchId` that target is the snapshot's source branch:
+
+```ts
+// Replace the snapshot's source branch with the snapshot's data
+await neon.snapshots.restore({ projectId, snapshotId, finalize: true });
+```
+
 - **Transaction-style** with `preview`: it restores un-finalized, runs your callback against the restored branch, then **finalizes (commit)** if it returns `true` or **deletes the preview branch (abort)** if `false` (unless `keepOnAbort`):
 
 ```ts

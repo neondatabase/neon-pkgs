@@ -305,11 +305,13 @@ export const restoreSnapshotInputSchema = z.strictObject({
 	),
 	snapshot_id: zod.zRestoreSnapshotPath.shape.snapshot_id,
 	name: zod.zRestoreSnapshotBody.shape.name,
-	target_branch_id: zod.zRestoreSnapshotBody.shape.target_branch_id,
+	target_branch_id: zod.zRestoreSnapshotBody.shape.target_branch_id.describe(
+		"Branch that finalize replaces. Defaults to the snapshot's source branch.",
+	),
 	finalize: z
 		.boolean()
 		.describe(
-			"Move computes onto the restored branch now. Default true for a new branch, false onto an existing one.",
+			"Replace the target branch with the restored data now. Default false.",
 		)
 		.optional(),
 });
@@ -653,7 +655,7 @@ export const restoreSnapshotTool = (options: ToolClientOptions) =>
 			id: publishedId("snapshots.restore"),
 			title: "Restore snapshot",
 			description:
-				"Restores a snapshot onto a new branch or onto target_branch_id and waits until it is ready. With finalize false, swap it in later with {{branches.finalizeRestore}}.",
+				"Restores a snapshot into a new branch and waits until it is ready. finalize true replaces target_branch_id (default: the snapshot's source branch) with it. NEVER finalize autonomously; ask the user first. Swap in later with {{branches.finalizeRestore}}.",
 			inputSchema: restoreSnapshotInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
