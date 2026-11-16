@@ -127,6 +127,17 @@ const httpFields = <Cause extends SdkApiError>(
 
 const isNumber = (value: unknown): boolean => typeof value === "number";
 const isString = (value: unknown): boolean => typeof value === "string";
+const optional =
+	(check: (value: unknown) => boolean) =>
+	(value: unknown): boolean =>
+		value === undefined || check(value);
+const isOperation = (value: unknown): boolean =>
+	typeof value === "object" &&
+	value !== null &&
+	"id" in value &&
+	isString(value.id);
+const isOperations = (value: unknown): boolean =>
+	Array.isArray(value) && value.every(isOperation);
 
 type Shape = {
 	readonly kind: string;
@@ -135,7 +146,12 @@ type Shape = {
 
 const httpShape = (kind: string): Shape => ({
 	kind,
-	fields: { status: isNumber },
+	fields: {
+		status: isNumber,
+		code: optional(isString),
+		requestId: optional(isString),
+		response: optional((value) => value instanceof Response),
+	},
 });
 
 // The SDK's `NeonErrorUnion` classes by their literal `name`, with the `kind` and the
@@ -158,7 +174,7 @@ const SDK_ERROR_SHAPES: Readonly<Record<string, Shape>> = {
 		fields: {
 			source: (value) => value === "wait",
 			timeoutMs: isNumber,
-			operations: Array.isArray,
+			operations: isOperations,
 		},
 	},
 	NeonAbortError: { kind: "aborted", fields: {} },

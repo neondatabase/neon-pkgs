@@ -168,17 +168,64 @@ describe("toNeonEffectError", () => {
 		});
 
 		it.each([
-			["a kind that does not match the name", { kind: "network" }],
-			["a missing field the class promises", { kind: "api" }],
+			[
+				"a kind that does not match the name",
+				"NeonApiError",
+				{ kind: "network" },
+			],
+			[
+				"a missing field the class promises",
+				"NeonApiError",
+				{ kind: "api" },
+			],
 			[
 				"a kind this package does not know",
+				"NeonApiError",
 				{ kind: "quota", status: 500 },
 			],
-		])("rethrows %s", (_case, fields) => {
+			[
+				"an optional field of the wrong type",
+				"NeonApiError",
+				{ kind: "api", status: 500, code: 123 },
+			],
+			[
+				"a response that is not a Response",
+				"NeonApiError",
+				{ kind: "api", status: 500, response: "invalid" },
+			],
+			[
+				"an operation without an id",
+				"NeonWaitTimeoutError",
+				{
+					kind: "timeout",
+					source: "wait",
+					timeoutMs: 1,
+					operations: [null],
+				},
+			],
+		])("rethrows %s", (_case, name, fields) => {
 			const foreign = Object.assign(new Error("not quite SDK"), fields);
-			foreign.name = "NeonApiError";
+			foreign.name = name;
 
 			expect(() => toNeonEffectError(foreign)).toThrow(foreign);
+		});
+
+		it("dies with a malformed lookalike as the catch of Effect.tryPromise", async () => {
+			const foreign = Object.assign(new Error("not quite SDK"), {
+				kind: "api",
+				status: 500,
+				code: 123,
+			});
+			foreign.name = "NeonApiError";
+
+			const exit = await Effect.runPromiseExit(
+				Effect.tryPromise({
+					try: () => Promise.reject(foreign),
+					catch: toNeonEffectError,
+				}),
+			);
+
+			expect(exit).toStrictEqual(Exit.die(foreign));
 		});
 	});
 
