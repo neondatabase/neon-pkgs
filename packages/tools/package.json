@@ -60,6 +60,11 @@
 			"types": "./dist/mastra.d.ts",
 			"import": "./dist/mastra.js",
 			"default": "./dist/mastra.js"
+		},
+		"./effect": {
+			"types": "./dist/effect.d.ts",
+			"import": "./dist/effect.js",
+			"default": "./dist/effect.js"
 		}
 	},
 	"files": [
@@ -82,6 +87,18 @@
 		"@neondatabase/serverless": "1.0.0",
 		"zod": "^4.5.4"
 	},
+	"peerDependencies": {
+		"@neon/effect": "^0.5.0",
+		"effect": "^4.1.2"
+	},
+	"peerDependenciesMeta": {
+		"@neon/effect": {
+			"optional": true
+		},
+		"effect": {
+			"optional": true
+		}
+	},
 	"devDependencies": {
 		"@hey-api/openapi-ts": "0.98.2",
 		"@mastra/core": "1.56.0-alpha.5",
@@ -89,9 +106,11 @@
 		"@modelcontextprotocol/sdk-v1": "npm:@modelcontextprotocol/sdk@1.30.0",
 		"@modelcontextprotocol/server": "2.0.0",
 		"@neon/e2e-harness": "workspace:*",
+		"@neon/effect": "workspace:*",
 		"@types/node": "catalog:",
 		"@vitest/coverage-v8": "catalog:",
 		"console-fail-test": "catalog:",
+		"effect": "4.1.2",
 		"eve": "0.29.5",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
