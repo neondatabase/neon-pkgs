@@ -60,13 +60,16 @@ export interface UpdateSnapshotInput {
 export interface RestoreSnapshotInput {
 	/** Name for the restored branch. Auto-generated when omitted. */
 	name?: string;
-	/** Branch to restore onto. Defaults to the snapshot's source branch. */
+	/**
+	 * Branch the restore replaces when finalized. Defaults to the snapshot's source
+	 * branch.
+	 */
 	targetBranchId?: string;
 	/**
-	 * Finalize immediately (move computes onto the restored branch). Defaults to `true`
-	 * when restoring as a new branch (nothing to clobber) and `false` when restoring
-	 * **onto** an existing branch (`targetBranchId`), so you can preview before the swap.
-	 * Ignored when `preview` is set (the preview flow always restores un-finalized first).
+	 * Finalize immediately: move the target branch's computes and name onto the restored
+	 * branch, replacing the target. Defaults to `false`, the API's default, which leaves
+	 * the restored branch as a separate branch to inspect first. Ignored when `preview`
+	 * is set (the preview flow always restores un-finalized first).
 	 */
 	finalize?: boolean;
 	/**
@@ -287,10 +290,11 @@ export class Snapshots<DThrow extends boolean> {
 	/**
 	 * Restore a snapshot into a branch. Returns the restored branch.
 	 *
-	 * - **As a new branch** (no `targetBranchId`): finalizes by default — ready to use.
-	 * - **Onto an existing branch** (`targetBranchId`): does **not** finalize by default,
-	 *   so you can preview before the compute swap. Finish later with
-	 *   `branches.finalizeRestore`, or pass a `preview` callback to do it transactionally.
+	 * The restored branch is always new. It does **not** finalize by default, so the target
+	 * (`targetBranchId`, or the snapshot's source branch when omitted) keeps serving its
+	 * data. Pass `finalize: true` to swap the restored branch in for the target, finish
+	 * later with `branches.finalizeRestore`, or pass a `preview` callback to do it
+	 * transactionally.
 	 *
 	 * With `preview`, this restores un-finalized, runs your callback against the restored
 	 * branch, then finalizes (commit) or deletes the preview branch (abort, unless
@@ -321,11 +325,9 @@ export class Snapshots<DThrow extends boolean> {
 		const shouldThrow =
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const preview = input?.preview;
-		// New branch → finalize by default; onto existing → preview-first by default.
-		// The preview flow always restores un-finalized so it can inspect first.
-		const finalizeNow = preview
-			? false
-			: (input?.finalize ?? input?.targetBranchId === undefined);
+		// Without targetBranchId the API targets the snapshot's source branch, so
+		// finalizing by default would replace it (often production).
+		const finalizeNow = preview ? false : (input?.finalize ?? false);
 
 		const restored = await this.#ctx.execute(
 			{
