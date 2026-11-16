@@ -1,5 +1,17 @@
 # @neon/tools
 
+## 2.15.0
+
+### Minor Changes
+
+- 3cbe4b6: Add `@neon/tools/effect`: `toEffectTools` runs Neon tools as Effects with tagged errors (`NeonToolInputError`, `NeonSqlError`, `NeonSqlConnectionError`, and `@neon/effect`'s SDK errors), interruption that cancels the call, a span per tool, and opt-in retries such as `retryReadOnlyNetworkFailures`. `effect` and `@neon/effect` are optional peer dependencies.
+- b46f9d9: Every tool has an `outputSchema` describing its `data`, and `registerNeonTools` publishes it as the MCP `outputSchema` of `{ data }`, typed one level deep. The server rejects a successful result that does not match it. `@neon/tools/mcp` exports `toMcpOutputSchema` and `toMcpOutputJsonSchema`.
+
+### Patch Changes
+
+- Updated dependencies [210bf07]
+  - @neon/effect@0.5.2
+
 ## 2.14.4
 
 ### Patch Changes
