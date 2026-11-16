@@ -1,5 +1,15 @@
 # neon
 
+## 9.5.1
+
+### Patch Changes
+
+- 7fff6d5: Project-scoped commands run without `--project-id` (and without a project in `.neon`) no longer pick a project from the API key's default organization when you belong to several organizations. They now fail and ask for `--project-id` or `--org-id`, so commands like `neon roles create` can't act on a project you didn't mean.
+- Updated dependencies [1c31581]
+  - @neon/sdk@7.13.1
+  - @neon/config@1.14.1
+  - @neon/config-runtime@1.12.4
+
 ## 9.5.0
 
 ### Minor Changes
