@@ -529,6 +529,8 @@ const project = tools["projects.get"]
 
 `toEffectTools` keeps every tool field and replaces `execute`, which returns `Effect<NeonToolResult, NeonToolError>` with a span named `NeonTools.<id>`. The execution context is the one above without `signal`: interrupting the fiber cancels the call.
 
+The span records every failure's tag as `error.type` and fails only for the server's: invalid input, SQL Postgres rejected, an SDK-side validation failure, and any 4xx from the Neon API keep it ok. `neon.tool.attempts` counts the attempts, and `neon.tool.retried_error.type` names the failure a retry recovered from.
+
 | Error / `_tag` | When |
 | --- | --- |
 | `NeonEffectError` members (`NeonAuthError`, `NeonNotFoundError`, `NeonNetworkError`, …) | The Neon API or SDK failed; see [`@neon/effect`](../effect/README.md#errors) |

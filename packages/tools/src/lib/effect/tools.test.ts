@@ -1,6 +1,6 @@
 import { NeonAuthError, NeonNetworkError } from "@neon/effect";
 import { NeonDbError } from "@neondatabase/serverless";
-import { Effect, Exit, Fiber, Schedule } from "effect";
+import { Effect, Exit, Fiber, Option, Schedule, Tracer } from "effect";
 import { describe, expect, test } from "vitest";
 import * as z from "zod";
 import { createNeonTools } from "../../index.js";
@@ -278,6 +278,154 @@ describe("retries", () => {
 		await Effect.runPromise(Fiber.interrupt(fiber));
 
 		expect(calls).toHaveLength(1);
+	});
+});
+
+type RecordedSpan = {
+	readonly name: string;
+	readonly parent: string | undefined;
+	readonly attributes: Map<string, unknown>;
+	exit: Exit.Exit<unknown, unknown> | undefined;
+};
+
+/** A tracer that keeps every span it starts, for asserting status and attributes. */
+const recordingTracer = () => {
+	const spans: RecordedSpan[] = [];
+	const tracer = Tracer.make({
+		span: (options) => {
+			const recorded: RecordedSpan = {
+				name: options.name,
+				parent: Option.getOrUndefined(
+					Option.map(options.parent, (parent) => parent.spanId),
+				),
+				attributes: new Map(),
+				exit: undefined,
+			};
+			spans.push(recorded);
+			const span: Tracer.Span = {
+				_tag: "Span",
+				name: options.name,
+				spanId: `span-${spans.length}`,
+				traceId: "trace",
+				parent: options.parent,
+				annotations: options.annotations,
+				status: { _tag: "Started", startTime: options.startTime },
+				attributes: recorded.attributes,
+				links: options.links,
+				sampled: options.sampled,
+				kind: options.kind,
+				end: (_endTime, exit) => {
+					recorded.exit = exit;
+				},
+				attribute: (key, value) => {
+					recorded.attributes.set(key, value);
+				},
+				event: () => undefined,
+				addLinks: () => undefined,
+			};
+			return span;
+		},
+	});
+	const toolSpan = (id: string) =>
+		spans.find((span) => span.name === `NeonTools.${id}`);
+	return { spans, tracer, toolSpan };
+};
+
+describe("tool spans", () => {
+	test("keeps the span ok for a caller's mistake and records its type", async () => {
+		const { tracer, toolSpan } = recordingTracer();
+		const tools = toEffectTools(
+			createNeonTools({
+				apiKey: "test-key",
+				tools: ["projects.get"] as const,
+				fetch: async () => jsonResponse({ message: "not found" }, 404),
+			}),
+		);
+
+		const invalid = await Effect.runPromiseExit(
+			// @ts-expect-error project_id is required
+			tools["projects.get"].execute({}).pipe(Effect.withTracer(tracer)),
+		);
+		const span = toolSpan(tools["projects.get"].id);
+
+		expect(Exit.isFailure(invalid)).toBe(true);
+		expect(span?.exit && Exit.isSuccess(span.exit)).toBe(true);
+		expect(span?.attributes.get("error.type")).toBe("NeonToolInputError");
+	});
+
+	test("keeps the span ok for a 404 from the Neon API", async () => {
+		const { tracer, toolSpan } = recordingTracer();
+		const tools = toEffectTools(
+			createNeonTools({
+				apiKey: "test-key",
+				tools: ["projects.get"] as const,
+				fetch: async () => jsonResponse({ message: "not found" }, 404),
+			}),
+		);
+
+		const error = await Effect.runPromise(
+			Effect.flip(
+				tools["projects.get"]
+					.execute({ project_id: "missing" })
+					.pipe(Effect.withTracer(tracer)),
+			),
+		);
+
+		expect(error._tag).toBe("NeonNotFoundError");
+		expect(toolSpan(tools["projects.get"].id)?.exit?._tag).toBe("Success");
+		expect(
+			toolSpan(tools["projects.get"].id)?.attributes.get("error.type"),
+		).toBe("NeonNotFoundError");
+	});
+
+	test("fails the span for a server failure, nested under the caller's span", async () => {
+		const { tracer, spans, toolSpan } = recordingTracer();
+		const { fetch } = flakyFetch(5);
+		const tools = toEffectTools(
+			createNeonTools({
+				apiKey: "test-key",
+				tools: ["projects.list"] as const,
+				fetch,
+			}),
+		);
+
+		await Effect.runPromiseExit(
+			tools["projects.list"]
+				.execute({})
+				.pipe(Effect.withSpan("request"), Effect.withTracer(tracer)),
+		);
+		const request = spans.find((span) => span.name === "request");
+		const span = toolSpan(tools["projects.list"].id);
+
+		expect(span?.exit?._tag).toBe("Failure");
+		expect(span?.attributes.get("error.type")).toBe("NeonNetworkError");
+		expect(span?.parent).toBe(
+			`span-${String(spans.indexOf(request ?? spans[0]) + 1)}`,
+		);
+	});
+
+	test("records the attempts and the failure a retry recovered from", async () => {
+		const { tracer, toolSpan } = recordingTracer();
+		const { fetch } = flakyFetch(1);
+		const tools = toEffectTools(
+			createNeonTools({
+				apiKey: "test-key",
+				tools: ["projects.list"] as const,
+				fetch,
+			}),
+			{ retry: immediateRetry },
+		);
+
+		await Effect.runPromise(
+			tools["projects.list"].execute({}).pipe(Effect.withTracer(tracer)),
+		);
+		const span = toolSpan(tools["projects.list"].id);
+
+		expect(span?.exit?._tag).toBe("Success");
+		expect(span?.attributes.get("neon.tool.attempts")).toBe(2);
+		expect(span?.attributes.get("neon.tool.retried_error.type")).toBe(
+			"NeonNetworkError",
+		);
 	});
 });
 

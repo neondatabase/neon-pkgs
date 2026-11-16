@@ -1,4 +1,4 @@
-import { Effect, Predicate, Schedule } from "effect";
+import { Effect, Predicate, Ref, Result, Schedule } from "effect";
 import type {
 	NeonToolAnnotations,
 	NeonToolExecutionContext,
@@ -85,7 +85,22 @@ const mayRetry = (
 	!sdkRetried(error) &&
 	policy.shouldRetry({ tool, error });
 
-/** Run a Neon tool as an Effect, with a span named `NeonTools.<id>`. */
+// Mistakes in the call: invalid input, SQL Postgres rejected, an SDK-side
+// validation failure, and any 4xx from the Neon API.
+const isCallerError = (error: NeonToolError): boolean =>
+	Predicate.isTagged(error, "NeonToolInputError") ||
+	Predicate.isTagged(error, "NeonSqlError") ||
+	Predicate.isTagged(error, "NeonClientError") ||
+	("status" in error &&
+		typeof error.status === "number" &&
+		error.status < 500);
+
+/**
+ * Run a Neon tool as an Effect, in a span named `NeonTools.<id>`. The span
+ * records `error.type` for every failure but fails only for the server's: a
+ * caller's mistake keeps it ok. `neon.tool.attempts` counts the attempts, and
+ * `neon.tool.retried_error.type` names the failure a retry recovered from.
+ */
 export const toEffectTool = <Input, Output, Tool extends ExecutableNeonTool>(
 	tool: Tool & ExecutableNeonTool<Input, Output>,
 	options: EffectToolOptions = {},
@@ -95,16 +110,37 @@ export const toEffectTool = <Input, Output, Tool extends ExecutableNeonTool>(
 	const attempt = (
 		input: Input,
 		context: NeonEffectToolContext | undefined,
+		attempts: Ref.Ref<number>,
 	) =>
-		Effect.tryPromise({
-			try: (signal) => tool.execute(input, { ...context, signal }),
-			catch: toNeonToolError,
-		});
+		Ref.updateAndGet(attempts, (n) => n + 1).pipe(
+			Effect.flatMap((n) =>
+				Effect.annotateCurrentSpan("neon.tool.attempts", n),
+			),
+			Effect.andThen(
+				Effect.tryPromise({
+					try: (signal) =>
+						tool.execute(input, { ...context, signal }),
+					catch: toNeonToolError,
+				}),
+			),
+		);
 
-	const run = (input: Input, context: NeonEffectToolContext | undefined) =>
+	const run = (
+		input: Input,
+		context: NeonEffectToolContext | undefined,
+		attempts: Ref.Ref<number>,
+	) =>
 		retry === undefined
-			? attempt(input, context)
-			: attempt(input, context).pipe(
+			? attempt(input, context, attempts)
+			: attempt(input, context, attempts).pipe(
+					Effect.tapError((error) =>
+						mayRetry(tool, error, retry)
+							? Effect.annotateCurrentSpan(
+									"neon.tool.retried_error.type",
+									error._tag,
+								)
+							: Effect.void,
+					),
 					Effect.retry({
 						schedule: retry.schedule,
 						times: retry.times,
@@ -112,12 +148,21 @@ export const toEffectTool = <Input, Output, Tool extends ExecutableNeonTool>(
 					}),
 				);
 
-	const execute = Effect.fn(`NeonTools.${tool.id}`)(function* (
-		input: Input,
-		context?: NeonEffectToolContext,
-	) {
-		return yield* run(input, context);
-	});
+	const execute = (input: Input, context?: NeonEffectToolContext) =>
+		Ref.make(0).pipe(
+			Effect.flatMap((attempts) => run(input, context, attempts)),
+			Effect.map(Result.succeed),
+			Effect.tapError((error) =>
+				Effect.annotateCurrentSpan("error.type", error._tag),
+			),
+			Effect.catchIf(isCallerError, (error) =>
+				Effect.succeed(Result.fail(error)),
+			),
+			Effect.withSpan(`NeonTools.${tool.id}`, {
+				attributes: { "neon.tool.id": tool.id },
+			}),
+			Effect.flatMap(Effect.fromResult),
+		);
 
 	const { execute: _promiseExecute, ...descriptor } = tool;
 
