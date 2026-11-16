@@ -192,6 +192,7 @@ export const searchResourcesTool = (options: ToolClientOptions) => {
 			requiresApproval: false,
 			metadata: {
 				method: "GET",
+				readOnlySafe: true,
 				path: "/projects",
 				stability: "stable",
 				deprecated: false,

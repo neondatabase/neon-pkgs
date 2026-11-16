@@ -11,8 +11,8 @@ import {
 	computeIdField,
 	projectIdField,
 	resolveConnection,
-	SQL_METADATA,
 	sqlClient,
+	sqlMetadata,
 } from "../connection.js";
 import { sqlReadAnnotations } from "../schema.js";
 import {
@@ -162,7 +162,7 @@ export const inspectDatabaseTool = (options: ToolClientOptions) =>
 			outputSchema: inspectDatabaseOutputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
-			metadata: SQL_METADATA,
+			metadata: sqlMetadata(true),
 		},
 		async (neonClient, input, signal, context) => {
 			const { check, database_name: databaseName, limit } = input;

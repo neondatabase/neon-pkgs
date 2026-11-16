@@ -11,8 +11,8 @@ import {
 	databaseNameField,
 	projectIdField,
 	resolveConnection,
-	SQL_METADATA,
 	sqlClient,
+	sqlMetadata,
 } from "./connection.js";
 
 export const listSlowQueriesInputSchema = z.strictObject({
@@ -86,7 +86,7 @@ export const listSlowQueriesTool = (options: ToolClientOptions) =>
 				openWorldHint: false,
 			},
 			requiresApproval: false,
-			metadata: SQL_METADATA,
+			metadata: sqlMetadata(true),
 		},
 		async (neonClient, input, signal, context) => {
 			const connection = await resolveConnection(

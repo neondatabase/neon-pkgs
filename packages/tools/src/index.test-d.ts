@@ -356,3 +356,38 @@ toMcpOutputSchema(
 		name: (id) => id,
 	})["branches.get"].outputSchema,
 );
+
+const readTools = createNeonTools({
+	apiKey: "test-key",
+	readOnly: true,
+	tools: (tool) => tool.metadata.readOnlySafe,
+});
+expectTypeOf(readTools["projects.list"]).toEqualTypeOf<
+	(typeof tools)["projects.list"] | undefined
+>();
+// @ts-expect-error a predicate may exclude any tool
+readTools["projects.list"].execute({});
+readTools["projects.list"]?.execute({ limit: 1 });
+// @ts-expect-error a predicate selection keeps tool-specific request types
+readTools["projects.list"]?.execute({ limit: "one" });
+
+const readMastraTools = toMastraTools(readTools);
+// @ts-expect-error a Mastra tool a predicate may have excluded is optional
+readMastraTools.list_projects.execute({}, {});
+readMastraTools.list_projects?.execute({ limit: 1 }, {});
+
+const namedReadTools = createNeonTools({
+	apiKey: "test-key",
+	tools: (tool) => tool.metadata.readOnlySafe,
+	name: (id) => `neon_${id}`,
+});
+expectTypeOf(namedReadTools["projects.list"]?.id).toEqualTypeOf<
+	string | undefined
+>();
+
+const injectedReadTools = createNeonTools({
+	apiKey: "test-key",
+	tools: (tool) => tool.metadata.readOnlySafe,
+	inject: { projectId: "granted-project", omitFromSchema: true },
+});
+injectedReadTools["projects.get"]?.execute({});

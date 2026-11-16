@@ -227,6 +227,7 @@ export const lokiQueryRangeTool = (options: ToolClientOptions) =>
 			requiresApproval: false,
 			metadata: {
 				method: "GET",
+				readOnlySafe: true,
 				path: "/telemetry/v1/projects/{project_id}/branches/{branch_id}/loki/api/v1/query_range",
 				stability: "beta",
 				deprecated: false,
@@ -370,6 +371,7 @@ export const createBranchTool = (options: ToolClientOptions) =>
 			requiresApproval: true,
 			metadata: {
 				method: "POST",
+				readOnlySafe: false,
 				path: "/projects/{project_id}/branches",
 				stability: "stable",
 				deprecated: false,
@@ -423,6 +425,7 @@ export const createBranchAndConnectTool = (options: ToolClientOptions) =>
 			requiresApproval: true,
 			metadata: {
 				method: "POST",
+				readOnlySafe: false,
 				path: "/projects/{project_id}/branches",
 				stability: "stable",
 				deprecated: false,
@@ -459,6 +462,7 @@ export const createProjectTool = (options: ToolClientOptions) =>
 			requiresApproval: true,
 			metadata: {
 				method: "POST",
+				readOnlySafe: false,
 				path: "/projects",
 				stability: "stable",
 				deprecated: false,
@@ -490,6 +494,7 @@ export const createProjectAndConnectTool = (options: ToolClientOptions) =>
 			requiresApproval: true,
 			metadata: {
 				method: "POST",
+				readOnlySafe: false,
 				path: "/projects",
 				stability: "stable",
 				deprecated: false,
@@ -515,6 +520,7 @@ export const getDefaultTool = (options: ToolClientOptions) =>
 			requiresApproval: false,
 			metadata: {
 				method: "GET",
+				readOnlySafe: true,
 				path: "/projects/{project_id}/branches",
 				stability: "stable",
 				deprecated: false,
@@ -543,6 +549,7 @@ export const resetFromParentTool = (options: ToolClientOptions) =>
 			requiresApproval: true,
 			metadata: {
 				method: "POST",
+				readOnlySafe: false,
 				path: "/projects/{project_id}/branches/{branch_id}/restore",
 				stability: "stable",
 				deprecated: false,
@@ -577,6 +584,7 @@ export const compareSchemaTool = (options: ToolClientOptions) =>
 			requiresApproval: false,
 			metadata: {
 				method: "GET",
+				readOnlySafe: true,
 				path: "/projects/{project_id}/branches/{branch_id}/compare_schema",
 				stability: "stable",
 				deprecated: false,
@@ -626,6 +634,7 @@ export const connectionStringTool = (options: ToolClientOptions) =>
 			requiresApproval: true,
 			metadata: {
 				method: "GET",
+				readOnlySafe: false,
 				path: "/projects/{project_id}/connection_uri",
 				stability: "stable",
 				deprecated: false,
@@ -661,6 +670,7 @@ export const createRoleTool = (options: ToolClientOptions) =>
 			requiresApproval: true,
 			metadata: {
 				method: "POST",
+				readOnlySafe: false,
 				path: "/projects/{project_id}/branches/{branch_id}/roles",
 				stability: "stable",
 				deprecated: false,
@@ -710,6 +720,7 @@ export const restoreSnapshotTool = (options: ToolClientOptions) =>
 			requiresApproval: true,
 			metadata: {
 				method: "POST",
+				readOnlySafe: false,
 				path: "/projects/{project_id}/snapshots/{snapshot_id}/restore",
 				stability: "stable",
 				deprecated: false,
@@ -743,6 +754,7 @@ export const setScheduleTool = (options: ToolClientOptions) =>
 			requiresApproval: true,
 			metadata: {
 				method: "PUT",
+				readOnlySafe: false,
 				path: "/projects/{project_id}/branches/{branch_id}/backup_schedule",
 				stability: "stable",
 				deprecated: false,

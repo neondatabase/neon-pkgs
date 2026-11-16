@@ -279,6 +279,7 @@ export const getAuthConfigTool = (options: ToolClientOptions) =>
 			requiresApproval: false,
 			metadata: {
 				method: "GET",
+				readOnlySafe: true,
 				path: "/projects/{project_id}/branches/{branch_id}/auth",
 				stability: "stable",
 				deprecated: false,

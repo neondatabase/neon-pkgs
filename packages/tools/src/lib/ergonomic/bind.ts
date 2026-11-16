@@ -304,6 +304,8 @@ type FromGeneratedMeta = {
 	list?: boolean;
 	annotations?: NeonToolAnnotations;
 	requiresApproval?: boolean;
+	/** Defaults to a `GET` that needs no approval. */
+	readOnlySafe?: boolean;
 };
 
 type OmittedInput<G extends NeonOperationId, Keys extends string> = Omit<
@@ -384,6 +386,8 @@ export function fromGenerated(
 			? schema
 			: omitObjectKeys(schema, spec.omit);
 	const description = toolDescriptions[spec.id] ?? generated.description;
+	const requiresApproval =
+		spec.requiresApproval ?? generated.requiresApproval;
 	return {
 		operationId: spec.id,
 		id: publishedId(spec.id),
@@ -394,8 +398,13 @@ export function fromGenerated(
 		inputSchema,
 		outputSchema: spec.output,
 		annotations: spec.annotations ?? generated.annotations,
-		requiresApproval: spec.requiresApproval ?? generated.requiresApproval,
-		metadata: generated.metadata,
+		requiresApproval,
+		metadata: {
+			...generated.metadata,
+			readOnlySafe:
+				spec.readOnlySafe ??
+				(generated.metadata.method === "GET" && !requiresApproval),
+		},
 		async execute(input, context) {
 			const parsed = await inputSchema.parseAsync(input);
 			const result = await spec.run(

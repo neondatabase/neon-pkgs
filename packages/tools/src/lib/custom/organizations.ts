@@ -39,6 +39,7 @@ export const userOrganizationsTool = (options: ToolClientOptions) =>
 			requiresApproval: false,
 			metadata: {
 				method: "GET",
+				readOnlySafe: true,
 				path: "/users/me/organizations",
 				stability: "stable",
 				deprecated: false,

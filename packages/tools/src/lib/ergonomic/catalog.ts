@@ -155,6 +155,7 @@ const listIncidentsTool = (options: ToolClientOptions) =>
 		requiresApproval: false,
 		metadata: {
 			method: "GET",
+			readOnlySafe: true,
 			path: NEON_STATUS_API_URL,
 			stability: "stable",
 			deprecated: false,
@@ -1345,6 +1346,7 @@ export const toolFactories = {
 			list: true,
 			annotations: logReadAnnotations,
 			requiresApproval: false,
+			readOnlySafe: true,
 			run: (neon, input, signal) =>
 				collectPages(
 					neon.logs.query(
@@ -2369,6 +2371,7 @@ export const toolFactories = {
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
+					readOnlySafe: true,
 					path: "/regions",
 					stability: "stable",
 					deprecated: false,

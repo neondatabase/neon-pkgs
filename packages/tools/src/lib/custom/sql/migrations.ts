@@ -11,8 +11,7 @@ import {
 	DATABASE_NAME_DESCRIPTION,
 	defaultDatabase,
 	projectIdField,
-	refuseInReadOnly,
-	SQL_METADATA,
+	sqlMetadata,
 } from "./connection.js";
 import {
 	runTransaction,
@@ -177,10 +176,9 @@ export const prepareMigrationTool = (options: ToolClientOptions) =>
 				openWorldHint: false,
 			},
 			requiresApproval: true,
-			metadata: SQL_METADATA,
+			metadata: sqlMetadata(false),
 		},
 		async (neonClient, input, signal, context) => {
-			refuseInReadOnly(context);
 			const projectId = input.project_id;
 			return withTemporaryBranch(
 				neonClient,
@@ -260,10 +258,9 @@ export const completeMigrationTool = (options: ToolClientOptions) =>
 			outputSchema: completeMigrationOutputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
-			metadata: SQL_METADATA,
+			metadata: sqlMetadata(false),
 		},
 		async (neonClient, input, signal, context) => {
-			refuseInReadOnly(context);
 			const migrationResult = input.apply_changes
 				? await runTransaction(
 						neonClient,

@@ -15,11 +15,10 @@ import {
 	computeIdField,
 	databaseNameField,
 	projectIdField,
-	refuseInReadOnly,
 	resolveConnection,
 	roleNameField,
-	SQL_METADATA,
 	sqlClient,
+	sqlMetadata,
 } from "./connection.js";
 import {
 	capRows,
@@ -168,7 +167,7 @@ export const runSqlTool = (options: ToolClientOptions) =>
 			outputSchema: sqlResultOutputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
-			metadata: SQL_METADATA,
+			metadata: sqlMetadata(true),
 		},
 		async (neonClient, input, signal, context) =>
 			capRows(
@@ -196,10 +195,9 @@ export const runSqlTransactionTool = (options: ToolClientOptions) =>
 			outputSchema: z.array(sqlResultOutputSchema),
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
-			metadata: SQL_METADATA,
+			metadata: sqlMetadata(false),
 		},
 		async (neonClient, input, signal, context) => {
-			refuseInReadOnly(context);
 			const results = await runTransaction(
 				neonClient,
 				input,
@@ -224,7 +222,7 @@ export const explainSqlTool = (options: ToolClientOptions) =>
 			outputSchema: sqlRowsOutputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
-			metadata: SQL_METADATA,
+			metadata: sqlMetadata(true),
 		},
 		(neonClient, input, signal, context) =>
 			explainStatement(neonClient, input, context, signal),
