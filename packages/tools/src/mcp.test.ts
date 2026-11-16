@@ -21,6 +21,40 @@ afterEach(async () => {
 	await Promise.all(closeables.splice(0).map((value) => value.close()));
 });
 
+const projectListItem = (id: string) => ({
+	id,
+	platform_id: "aws",
+	region_id: "aws-us-east-2",
+	name: id,
+	provisioner: "k8s-neonvm",
+	pg_version: 17,
+	proxy_host: "us-east-2.aws.neon.tech",
+	branch_logical_size_limit: 0,
+	branch_logical_size_limit_bytes: 0,
+	store_passwords: true,
+	active_time: 0,
+	cpu_used_sec: 0,
+	creation_source: "console",
+	created_at: "2026-01-01T00:00:00Z",
+	updated_at: "2026-01-01T00:00:00Z",
+	owner_id: "owner-id",
+});
+
+const project = (id: string) => {
+	const { active_time: _activeTime, ...item } = projectListItem(id);
+	return {
+		...item,
+		data_storage_bytes_hour: 0,
+		data_transfer_bytes: 0,
+		written_data_bytes: 0,
+		compute_time_seconds: 0,
+		active_time_seconds: 0,
+		history_retention_seconds: 86_400,
+		consumption_period_start: "2026-01-01T00:00:00Z",
+		consumption_period_end: "2026-02-01T00:00:00Z",
+	};
+};
+
 const tools = () =>
 	createNeonTools({
 		apiKey: "test-key",
@@ -28,7 +62,7 @@ const tools = () =>
 		fetch: async () =>
 			new Response(
 				JSON.stringify({
-					projects: [{ id: "project-id" }],
+					projects: [projectListItem("project-id")],
 					pagination: {},
 				}),
 				{ headers: { "content-type": "application/json" } },
@@ -63,7 +97,7 @@ describe("MCP v2 compatibility", () => {
 			arguments: {},
 		});
 		expect(called.structuredContent).toEqual({
-			data: [{ id: "project-id" }],
+			data: [projectListItem("project-id")],
 		});
 
 		const invalid = await client.callTool({
@@ -71,6 +105,61 @@ describe("MCP v2 compatibility", () => {
 			arguments: { limit: "one" },
 		});
 		expect(invalid.isError).toBe(true);
+	});
+
+	test("publishes the result shape and rejects a result that breaks it", async () => {
+		const server = new McpServerV2({
+			name: "test-server",
+			version: "1.0.0",
+		});
+		const { id: _id, ...withoutId } = projectListItem("project-id");
+		registerNeonToolsV2(
+			server,
+			createNeonTools({
+				apiKey: "test-key",
+				tools: ["projects.list"],
+				fetch: async () =>
+					new Response(
+						JSON.stringify({
+							projects: [withoutId],
+							pagination: {},
+						}),
+						{ headers: { "content-type": "application/json" } },
+					),
+			}),
+		);
+		const client = new ClientV2({ name: "test-client", version: "1.0.0" });
+		const [clientTransport, serverTransport] =
+			InMemoryTransportV2.createLinkedPair();
+		await Promise.all([
+			server.connect(serverTransport),
+			client.connect(clientTransport),
+		]);
+		closeables.push(client, server);
+
+		const listed = await client.listTools();
+		const outputSchema = listed.tools[0]?.outputSchema;
+		expect(outputSchema).toMatchObject({
+			properties: {
+				data: {
+					type: "array",
+					items: {
+						type: "object",
+						required: expect.arrayContaining(["id"]),
+					},
+				},
+			},
+		});
+		expect(JSON.stringify(outputSchema)).not.toContain("description");
+
+		const called = await client.callTool({
+			name: "list_projects",
+			arguments: {},
+		});
+		expect(called.isError).toBe(true);
+		expect(JSON.stringify(called.content)).toContain(
+			"Output validation error",
+		);
 	});
 
 	test("publishes compact JSON Schema without OpenAPI field essays", async () => {
@@ -218,7 +307,7 @@ const toolsWithCapturedAuth = () => {
 			requests.push(new Request(input, init));
 			return new Response(
 				JSON.stringify({
-					projects: [{ id: "project-id" }],
+					projects: [projectListItem("project-id")],
 					pagination: {},
 				}),
 				{ headers: { "content-type": "application/json" } },
@@ -463,12 +552,18 @@ describe("MCP v1 compatibility", () => {
 		]);
 		closeables.push(client, server);
 
+		const listed = await client.listTools();
+		expect(listed.tools[0]?.outputSchema).toMatchObject({
+			type: "object",
+			properties: { data: { type: "array" } },
+			required: ["data"],
+		});
 		const called = await client.callTool({
 			name: "list_projects",
 			arguments: {},
 		});
 		expect(called.structuredContent).toEqual({
-			data: [{ id: "project-id" }],
+			data: [projectListItem("project-id")],
 		});
 	});
 });
@@ -486,7 +581,7 @@ describe("MCP path injection", () => {
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
 				return new Response(
-					JSON.stringify({ project: { id: "granted-project" } }),
+					JSON.stringify({ project: project("granted-project") }),
 					{ headers: { "content-type": "application/json" } },
 				);
 			},
@@ -516,7 +611,7 @@ describe("MCP path injection", () => {
 			arguments: {},
 		});
 		expect(called.structuredContent).toEqual({
-			data: { id: "granted-project" },
+			data: project("granted-project"),
 		});
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/granted-project",
@@ -535,7 +630,7 @@ describe("MCP path injection", () => {
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
 				return new Response(
-					JSON.stringify({ project: { id: "granted-project" } }),
+					JSON.stringify({ project: project("granted-project") }),
 					{ headers: { "content-type": "application/json" } },
 				);
 			},
@@ -587,7 +682,7 @@ describe("MCP path injection", () => {
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
 				return new Response(
-					JSON.stringify({ project: { id: "granted-project" } }),
+					JSON.stringify({ project: project("granted-project") }),
 					{ headers: { "content-type": "application/json" } },
 				);
 			},
@@ -611,7 +706,7 @@ describe("MCP path injection", () => {
 			arguments: {},
 		});
 		expect(called.structuredContent).toEqual({
-			data: { id: "granted-project" },
+			data: project("granted-project"),
 		});
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/granted-project",
@@ -641,7 +736,7 @@ describe("MCP catalog size", () => {
 		]);
 		closeables.push(client, server);
 
-		const listed: Array<{ name: string }> = [];
+		const listed: Array<{ name: string; outputSchema?: unknown }> = [];
 		let cursor: string | undefined;
 		do {
 			const page = await client.listTools(
@@ -656,11 +751,21 @@ describe("MCP catalog size", () => {
 			[...toolIds].map(publishedId).sort(),
 		);
 
-		const chars = listed.reduce(
-			(sum, tool) => sum + JSON.stringify(tool).length,
-			0,
-		);
+		const tokens = (values: unknown[]) =>
+			values.reduce<number>(
+				(sum, value) => sum + JSON.stringify(value).length,
+				0,
+			) / 4;
 		// About 43,700 tokens with a description on every input, including the custom tools.
-		expect(chars / 4).toBeLessThan(43_800);
+		expect(
+			tokens(listed.map(({ outputSchema: _output, ...tool }) => tool)),
+		).toBeLessThan(43_800);
+		// About 21,800 tokens: every tool's top-level result fields, typed.
+		expect(tokens(listed.map((tool) => tool.outputSchema))).toBeLessThan(
+			22_000,
+		);
+		expect(
+			listed.filter((tool) => tool.outputSchema === undefined),
+		).toEqual([]);
 	});
 });

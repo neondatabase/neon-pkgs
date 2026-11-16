@@ -19,6 +19,7 @@ import { NeonDbError } from "@neondatabase/serverless";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createNeonTools, customToolIds, publishedId } from "../src/index.js";
 import { registerNeonTools } from "../src/mcp.js";
+import { holdingOutputContract } from "./output-contract.js";
 
 const sqlToolIds = [
 	"postgres.connectionString",
@@ -60,11 +61,13 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		baseUrl: configuredBaseUrl(),
 		throwOnError: true,
 	});
-	const tools = createNeonTools({
-		apiKey: requireApiKey(),
-		baseUrl: configuredBaseUrl(),
-		tools: sqlToolIds,
-	});
+	const tools = holdingOutputContract(
+		createNeonTools({
+			apiKey: requireApiKey(),
+			baseUrl: configuredBaseUrl(),
+			tools: sqlToolIds,
+		}),
+	);
 	let projectId: string;
 	let mainBranchId: string;
 
@@ -763,12 +766,14 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 	});
 
 	it("a readiness timeout in the prepare tools deletes the temporary branch", async () => {
-		const impatient = createNeonTools({
-			apiKey: requireApiKey(),
-			baseUrl: configuredBaseUrl(),
-			wait: { timeoutMs: 1 },
-			tools: ["migrations.prepare", "queryTuning.prepare"],
-		});
+		const impatient = holdingOutputContract(
+			createNeonTools({
+				apiKey: requireApiKey(),
+				baseUrl: configuredBaseUrl(),
+				wait: { timeoutMs: 1 },
+				tools: ["migrations.prepare", "queryTuning.prepare"],
+			}),
+		);
 		const before = await branchIds();
 		await expect(
 			impatient["migrations.prepare"].execute({
@@ -793,11 +798,13 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 	});
 
 	it("every new tool is listed over MCP and sql.run is callable", async () => {
-		const allTools = createNeonTools({
-			apiKey: requireApiKey(),
-			baseUrl: configuredBaseUrl(),
-			tools: customToolIds,
-		});
+		const allTools = holdingOutputContract(
+			createNeonTools({
+				apiKey: requireApiKey(),
+				baseUrl: configuredBaseUrl(),
+				tools: customToolIds,
+			}),
+		);
 		const server = new McpServer({ name: "e2e", version: "1.0.0" });
 		registerNeonTools(server, allTools);
 		const client = new Client({ name: "e2e-client", version: "1.0.0" });
@@ -831,9 +838,11 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 });
 
 describe("e2e — @neon/tools docs and feedback tools", () => {
-	const tools = createNeonTools({
-		tools: ["docs.search", "docs.get", "feedback.send"],
-	});
+	const tools = holdingOutputContract(
+		createNeonTools({
+			tools: ["docs.search", "docs.get", "feedback.send"],
+		}),
+	);
 
 	it("docs.search queries neon.com without an API key", async () => {
 		const { data } = await tools["docs.search"].execute({
@@ -896,19 +905,23 @@ describe("e2e — @neon/tools docs and feedback tools", () => {
 		const { port } = address;
 		try {
 			const feedbackUrl = `http://127.0.0.1:${port}/`;
-			const local = createNeonTools({
-				tools: ["feedback.send"],
-				feedbackUrl,
-			});
+			const local = holdingOutputContract(
+				createNeonTools({
+					tools: ["feedback.send"],
+					feedbackUrl,
+				}),
+			);
 			const { data } = await local["feedback.send"].execute({
 				feedback: "  The SQL tools work.  ",
 			});
 			expect(data).toEqual({ message: "Feedback received. Thank you!" });
-			const fromMcp = createNeonTools({
-				tools: ["feedback.send"],
-				feedbackUrl,
-				feedbackSource: "neon_mcp",
-			});
+			const fromMcp = holdingOutputContract(
+				createNeonTools({
+					tools: ["feedback.send"],
+					feedbackUrl,
+					feedbackSource: "neon_mcp",
+				}),
+			);
 			await fromMcp["feedback.send"].execute({ feedback: "Second" });
 			expect(received).toEqual([
 				{

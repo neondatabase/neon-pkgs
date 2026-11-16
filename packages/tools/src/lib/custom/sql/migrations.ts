@@ -14,7 +14,11 @@ import {
 	refuseInReadOnly,
 	SQL_METADATA,
 } from "./connection.js";
-import { runTransaction, sqlWriteAnnotations } from "./run.js";
+import {
+	runTransaction,
+	sqlRowsOutputSchema,
+	sqlWriteAnnotations,
+} from "./run.js";
 
 /** Splits on every `;`, including one inside a string literal or function body. */
 export const splitSqlStatements = (sql: string): string[] =>
@@ -132,6 +136,29 @@ export const completeMigrationInputSchema = z.strictObject({
 		),
 });
 
+const prepareMigrationOutputSchema = z.looseObject({
+	complete: z
+		.looseObject({
+			migration_id: z.string(),
+			migration_sql: z.string(),
+			database_name: z.string(),
+			project_id: z.string(),
+			temporary_branch_id: z.string(),
+			parent_branch_id: z.string(),
+		})
+		.describe("Pass this object to {{migrations.complete}}."),
+	temporary_branch: z
+		.looseObject({
+			id: z.string(),
+			name: z.string(),
+			parent_id: z.string(),
+		})
+		.describe("The branch the migration ran on."),
+	migration_result: z
+		.array(sqlRowsOutputSchema)
+		.describe("Rows per statement."),
+});
+
 export const prepareMigrationTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -142,6 +169,7 @@ export const prepareMigrationTool = (options: ToolClientOptions) =>
 			description:
 				"Applies a schema change on a new temporary branch and returns a migration_id. Test it there with {{sql.run}}, ask the user, then always call {{migrations.complete}} with the response's complete object so the branch is deleted.",
 			inputSchema: prepareMigrationInputSchema,
+			outputSchema: prepareMigrationOutputSchema,
 			annotations: {
 				readOnlyHint: false,
 				destructiveHint: false,
@@ -207,6 +235,18 @@ export const prepareMigrationTool = (options: ToolClientOptions) =>
 		},
 	);
 
+const completeMigrationOutputSchema = z.looseObject({
+	applied: z
+		.boolean()
+		.describe("Whether the migration ran on the parent branch."),
+	migrationResult: z.array(sqlRowsOutputSchema).nullish(),
+	deletedBranchId: z.string().nullish(),
+	cleanupError: z
+		.string()
+		.nullish()
+		.describe("Set when the temporary branch could not be deleted."),
+});
+
 export const completeMigrationTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -217,6 +257,7 @@ export const completeMigrationTool = (options: ToolClientOptions) =>
 			description:
 				"Applies or discards a prepared migration and deletes the temporary branch. NEVER run autonomously; always ask the user first. Pass the complete object from {{migrations.prepare}}; apply_changes false discards.",
 			inputSchema: completeMigrationInputSchema,
+			outputSchema: completeMigrationOutputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,

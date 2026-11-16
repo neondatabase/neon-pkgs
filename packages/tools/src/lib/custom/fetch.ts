@@ -284,6 +284,18 @@ export const fetchResource = async (
 	throw invalidId(id);
 };
 
+const fetchResourceOutputSchema = z.looseObject({
+	id: z.string(),
+	title: z.string(),
+	text: z.string().describe("The resource as markdown."),
+	url: z.string().describe("Console URL."),
+	metadata: z
+		.looseObject({})
+		.describe(
+			"API records: organization, members, and projects; project and branches; endpoint; or snapshot.",
+		),
+});
+
 export const fetchResourceTool = (options: ToolClientOptions) => {
 	const consoleUrl = consoleBaseUrl(options.baseUrl ?? DEFAULT_API_BASE_URL);
 	return bindTool(
@@ -295,6 +307,7 @@ export const fetchResourceTool = (options: ToolClientOptions) => {
 			description:
 				"Returns an organization, project, branch, compute, or snapshot by an id from {{resources.search}}: markdown text, console URL, and records in metadata.",
 			inputSchema: fetchResourceInputSchema,
+			outputSchema: fetchResourceOutputSchema,
 			annotations: {
 				readOnlyHint: true,
 				destructiveHint: false,

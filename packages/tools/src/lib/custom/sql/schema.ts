@@ -272,6 +272,10 @@ export const describeTableAt = async (
 	};
 };
 
+const listTablesOutputSchema = z
+	.array(z.record(z.string(), z.unknown()))
+	.describe("One row per table: table_schema, table_name, table_type.");
+
 export const listTablesTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -282,6 +286,7 @@ export const listTablesTool = (options: ToolClientOptions) =>
 			description:
 				"Lists a database's tables and views outside the system schemas. For one table's columns, use {{schema.describeTable}}.",
 			inputSchema: listTablesInputSchema,
+			outputSchema: listTablesOutputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
 			metadata: SQL_METADATA,
@@ -297,6 +302,42 @@ export const listTablesTool = (options: ToolClientOptions) =>
 		},
 	);
 
+export const tableSchemaOutputSchema = z.looseObject({
+	columns: z.array(
+		z.looseObject({
+			name: z.string(),
+			type: z.string(),
+			nullable: z.boolean(),
+			default: z.string().nullable(),
+			description: z.string().nullable(),
+		}),
+	),
+	indexes: z.array(
+		z.looseObject({
+			name: z.string(),
+			definition: z.string(),
+			size: z.string(),
+		}),
+	),
+	constraints: z.array(
+		z.looseObject({
+			name: z.string(),
+			type: z.string(),
+			definition: z.string(),
+		}),
+	),
+	tableSize: z.string(),
+	indexSize: z.string(),
+	totalSize: z.string(),
+});
+
+const describeTableOutputSchema = z.looseObject({
+	raw: tableSchemaOutputSchema.describe(
+		"Columns, indexes, constraints, and sizes.",
+	),
+	formatted: z.string().describe("The same, as text."),
+});
+
 export const describeTableTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -307,6 +348,7 @@ export const describeTableTool = (options: ToolClientOptions) =>
 			description:
 				"Returns a table's columns, indexes, constraints, and sizes. For every table, use {{schema.listTables}}.",
 			inputSchema: describeTableInputSchema,
+			outputSchema: describeTableOutputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
 			metadata: SQL_METADATA,

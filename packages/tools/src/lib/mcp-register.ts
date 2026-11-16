@@ -145,6 +145,7 @@ export const registerNeonToolsWithSchema = (
 	server: McpToolServer,
 	tools: Readonly<Record<string, NeonTool>>,
 	inputSchema: (tool: NeonTool) => unknown,
+	outputSchema: (schema: NonNullable<NeonTool["outputSchema"]>) => unknown,
 ): void => {
 	if (typeof server.registerTool !== "function") {
 		throw new TypeError("Expected an MCP server with registerTool().");
@@ -157,6 +158,9 @@ export const registerNeonToolsWithSchema = (
 				title: tool.title,
 				description: tool.description,
 				inputSchema: inputSchema(tool),
+				...(tool.outputSchema === undefined
+					? {}
+					: { outputSchema: outputSchema(tool.outputSchema) }),
 				annotations: tool.annotations,
 				_meta: { "neon/requiresApproval": tool.requiresApproval },
 			},

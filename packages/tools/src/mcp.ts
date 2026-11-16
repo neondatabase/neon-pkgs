@@ -1,4 +1,9 @@
-import { compactJsonSchema, toMcpInputSchema } from "./lib/mcp-json-schema.js";
+import {
+	compactJsonSchema,
+	toMcpInputSchema,
+	toMcpOutputJsonSchema,
+	toMcpOutputSchema,
+} from "./lib/mcp-json-schema.js";
 import {
 	type McpToolResult,
 	type McpToolServer,
@@ -8,13 +13,21 @@ import type { NeonTool } from "./lib/operation.js";
 
 export type { McpStandardSchema } from "./lib/mcp-json-schema.js";
 export type { McpToolResult, McpToolServer };
-export { compactJsonSchema, toMcpInputSchema };
+export {
+	compactJsonSchema,
+	toMcpInputSchema,
+	toMcpOutputJsonSchema,
+	toMcpOutputSchema,
+};
 
 export const registerNeonTools = (
 	server: McpToolServer,
 	tools: Readonly<Record<string, NeonTool>>,
 ): void => {
-	registerNeonToolsWithSchema(server, tools, (tool) =>
-		toMcpInputSchema(tool.inputSchema),
+	registerNeonToolsWithSchema(
+		server,
+		tools,
+		(tool) => toMcpInputSchema(tool.inputSchema),
+		toMcpOutputSchema,
 	);
 };

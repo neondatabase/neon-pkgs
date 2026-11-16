@@ -157,6 +157,18 @@ const searchResources = async (
 	return { results };
 };
 
+const searchResourcesOutputSchema = z.looseObject({
+	results: z
+		.array(
+			z.looseObject({
+				id: z.string(),
+				title: z.string(),
+				url: z.string(),
+			}),
+		)
+		.describe("Matches; pass an id to {{resources.fetch}}."),
+});
+
 export const searchResourcesTool = (options: ToolClientOptions) => {
 	const consoleUrl = consoleBaseUrl(options.baseUrl ?? DEFAULT_API_BASE_URL);
 	return bindTool(
@@ -168,6 +180,7 @@ export const searchResourcesTool = (options: ToolClientOptions) => {
 			description:
 				"Finds organizations, projects (including shared ones), branches, computes, and snapshots whose name or id contains query, with ids for {{resources.fetch}}. To list projects, use {{projects.list}}; for docs, {{docs.search}}.",
 			inputSchema: searchResourcesInputSchema,
+			outputSchema: searchResourcesOutputSchema,
 			annotations: {
 				readOnlyHint: true,
 				destructiveHint: false,

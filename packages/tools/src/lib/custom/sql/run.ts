@@ -144,6 +144,17 @@ export const explainStatement = (
 	);
 };
 
+export const sqlRowsOutputSchema = z.array(z.record(z.string(), z.unknown()));
+
+const sqlResultOutputSchema = z.looseObject({
+	rows: sqlRowsOutputSchema.describe("Result rows, keyed by column name."),
+	totalRowCount: z.number().describe("Rows the statement returned."),
+	truncated: z
+		.boolean()
+		.describe("Whether rows holds fewer than totalRowCount."),
+	note: z.string().nullish(),
+});
+
 export const runSqlTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -154,6 +165,7 @@ export const runSqlTool = (options: ToolClientOptions) =>
 			description:
 				"Runs one SQL statement on a branch's database and returns its rows. After a prepare step, pass its temporary branch_id. NEVER run destructive SQL autonomously; always ask the user first.",
 			inputSchema: runSqlInputSchema,
+			outputSchema: sqlResultOutputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,
@@ -181,6 +193,7 @@ export const runSqlTransactionTool = (options: ToolClientOptions) =>
 			description:
 				"Runs several SQL statements in one transaction and returns each one's rows. After a prepare step, pass its temporary branch_id. NEVER run destructive SQL autonomously; always ask the user first.",
 			inputSchema: runSqlTransactionInputSchema,
+			outputSchema: z.array(sqlResultOutputSchema),
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,
@@ -208,6 +221,7 @@ export const explainSqlTool = (options: ToolClientOptions) =>
 			description:
 				"Returns a statement's execution plan as JSON. analyze true executes it, side effects included, so never analyze potentially destructive SQL autonomously. For rows, use {{sql.run}}.",
 			inputSchema: explainSqlInputSchema,
+			outputSchema: sqlRowsOutputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,

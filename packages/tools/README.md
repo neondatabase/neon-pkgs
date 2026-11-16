@@ -94,7 +94,7 @@ await tools["projects.list"].execute(
 );
 ```
 
-Each tool includes its Zod 4 `inputSchema`, published `id`, title, description, safety annotations, stability metadata, and `execute()`. Inputs are snake_case at the tool boundary. `execute()` strictly validates the input, rejects unknown fields, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
+Each tool includes its Zod 4 `inputSchema` and `outputSchema`, published `id`, title, description, safety annotations, stability metadata, and `execute()`. Inputs are snake_case at the tool boundary. `execute()` strictly validates the input, rejects unknown fields, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
 
 Paginated lists call `.all()` and return the item array. Do not pass a cursor; those fields are omitted from the input schema.
 
@@ -422,6 +422,42 @@ registerNeonTools(server, tools);
 ```
 
 `registerNeonTools` publishes that catalog. MCP 2 `inputSchema` is JSON Schema without `$schema`. Generated fields have types, enums, `required`, and constraints, and no OpenAPI property docs. Fields this package described with `.describe()` (`pooled`, `finalize`, `zip`) keep that copy.
+
+Every tool also publishes an `outputSchema` for its `structuredContent`, `{ data }`:
+
+```json
+{
+	"type": "object",
+	"properties": {
+		"data": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"properties": {
+					"id": { "type": "string" },
+					"name": { "type": "string" },
+					"default": { "type": "boolean" },
+					"parent_id": { "type": ["string", "null"] },
+					"created_by": { "type": ["object", "null"] }
+				},
+				"required": ["id", "name", "default"]
+			}
+		}
+	},
+	"required": ["data"]
+}
+```
+
+That is an excerpt of `list_branches`. The schema types the fields of `data`, or of each list item, and stops there: a nested object is `{ "type": "object" }`. Enums are strings and extra fields are allowed, so a new API value or field still validates. Descriptions appear only where this package wrote them. The server checks every successful result against this schema, the same check a validating MCP client runs; a result that breaks it becomes an `isError` result reading `Output validation error`. Failures return `{ error }` and are not checked.
+
+`tool.outputSchema` is the full Zod schema of `data`. Hosts that register tools themselves can publish the same compact form:
+
+```ts
+import { toMcpOutputJsonSchema, toMcpOutputSchema } from "@neon/tools/mcp";
+
+const json = toMcpOutputJsonSchema(tool.outputSchema); // JSON Schema of { data }
+const standard = toMcpOutputSchema(tool.outputSchema); // Standard Schema for MCP 2 registerTool
+```
 
 Hosts that convert Zod themselves:
 

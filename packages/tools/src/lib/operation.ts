@@ -67,12 +67,18 @@ export interface NeonTool<
 	InputSchema extends z.ZodType = z.ZodType,
 	Id extends string = string,
 	Output = unknown,
+	OutputSchema extends z.ZodType = z.ZodType,
 > {
 	operationId: string;
 	id: Id;
 	title: string;
 	description: string;
 	inputSchema: InputSchema;
+	/**
+	 * The shape of `execute()`'s `data`. It describes results; it does not
+	 * validate them. Every catalog tool has one; hand-built tools may omit it.
+	 */
+	outputSchema?: OutputSchema;
 	annotations: NeonToolAnnotations;
 	requiresApproval: boolean;
 	metadata: NeonToolMetadata;

@@ -18,9 +18,10 @@ import { extractExecutionMetrics, extractTablesFromPlan } from "./plan.js";
 import {
 	explainStatement,
 	runTransaction,
+	sqlRowsOutputSchema,
 	sqlWriteAnnotations,
 } from "./run.js";
-import { describeTableAt } from "./schema.js";
+import { describeTableAt, tableSchemaOutputSchema } from "./schema.js";
 
 export const prepareQueryTuningInputSchema = z.strictObject({
 	sql: z.string().describe("The slow SQL statement to analyze."),
@@ -72,6 +73,32 @@ export const completeQueryTuningInputSchema = z.strictObject({
 		),
 });
 
+const prepareQueryTuningOutputSchema = z.looseObject({
+	complete: z
+		.looseObject({
+			tuning_id: z.string(),
+			database_name: z.string(),
+			project_id: z.string(),
+			temporary_branch_id: z.string(),
+			role_name: z.string().nullish(),
+		})
+		.describe("Pass this object to {{queryTuning.complete}}."),
+	execution_plan: sqlRowsOutputSchema.describe("EXPLAIN ANALYZE output."),
+	table_schemas: z
+		.array(
+			z.looseObject({
+				tableName: z.string(),
+				schema: tableSchemaOutputSchema,
+				formatted: z.string(),
+			}),
+		)
+		.describe("Schemas of the tables the query reads."),
+	sql: z.string(),
+	baseline_metrics: z
+		.looseObject({})
+		.describe("Execution and planning time, cost, rows, and buffer usage."),
+});
+
 export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -82,6 +109,7 @@ export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 			description:
 				"Runs EXPLAIN ANALYZE for a slow query on a new temporary branch; returns the plan, table schemas, and a tuning_id. Try changes there with {{sql.run}} and {{sql.explain}}, then always call {{queryTuning.complete}} with the complete object so the branch is deleted. Not {{migrations.prepare}}.",
 			inputSchema: prepareQueryTuningInputSchema,
+			outputSchema: prepareQueryTuningOutputSchema,
 			annotations: {
 				readOnlyHint: false,
 				destructiveHint: false,
@@ -168,6 +196,13 @@ export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 		},
 	);
 
+const completeQueryTuningOutputSchema = z.looseObject({
+	message: z.string().describe("What ran, one step per line."),
+	appliedChanges: z.array(z.string()).nullish(),
+	results: z.array(sqlRowsOutputSchema).nullish(),
+	deletedBranches: z.array(z.string()).nullish(),
+});
+
 export const completeQueryTuningTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -178,6 +213,7 @@ export const completeQueryTuningTool = (options: ToolClientOptions) =>
 			description:
 				"Applies or discards query-tuning changes and deletes the temporary branch. NEVER run autonomously. Pass the complete object from {{queryTuning.prepare}} and suggested_sql_statements; apply_changes true applies, omitted discards. Call it even when the user rejects.",
 			inputSchema: completeQueryTuningInputSchema,
+			outputSchema: completeQueryTuningOutputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
 			metadata: SQL_METADATA,

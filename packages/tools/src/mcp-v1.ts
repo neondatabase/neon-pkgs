@@ -1,3 +1,5 @@
+import * as z from "zod";
+import { toMcpOutputJsonSchema } from "./lib/mcp-json-schema.js";
 import {
 	type McpToolResult,
 	type McpToolServer,
@@ -11,5 +13,10 @@ export const registerNeonTools = (
 	server: McpToolServer,
 	tools: Readonly<Record<string, NeonTool>>,
 ): void => {
-	registerNeonToolsWithSchema(server, tools, (tool) => tool.inputSchema);
+	registerNeonToolsWithSchema(
+		server,
+		tools,
+		(tool) => tool.inputSchema,
+		(schema) => z.fromJSONSchema(toMcpOutputJsonSchema(schema)),
+	);
 };

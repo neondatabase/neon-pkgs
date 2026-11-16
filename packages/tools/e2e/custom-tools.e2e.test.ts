@@ -16,7 +16,9 @@ import {
 } from "@neon/sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createNeonTools } from "../src/index.js";
+import type { NeonTool } from "../src/lib/operation.js";
 import { registerNeonTools } from "../src/mcp.js";
+import { holdingOutputContract } from "./output-contract.js";
 
 const OAUTH_SECRET = "e2e-oauth-client-secret-value";
 const SMTP_PASSWORD = "e2e-smtp-password-value";
@@ -32,16 +34,18 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 		baseUrl: configuredBaseUrl(),
 		throwOnError: true,
 	});
-	const tools = createNeonTools({
-		apiKey: requireApiKey(),
-		baseUrl: configuredBaseUrl(),
-		tools: [
-			"user.organizations",
-			"auth.getConfig",
-			"resources.search",
-			"resources.fetch",
-		],
-	});
+	const tools = holdingOutputContract(
+		createNeonTools({
+			apiKey: requireApiKey(),
+			baseUrl: configuredBaseUrl(),
+			tools: [
+				"user.organizations",
+				"auth.getConfig",
+				"resources.search",
+				"resources.fetch",
+			],
+		}),
+	);
 	const projectName = uniqueProjectName("tools-custom");
 	let projectId: string;
 	let mainBranchId: string;
@@ -301,6 +305,136 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 			search: "no-organization-matches-this",
 		});
 		expect(none).toEqual([]);
+	});
+
+	const catalogReadIds = [
+		"projects.list",
+		"projects.count",
+		"projects.get",
+		"projects.permissions.list",
+		"branches.list",
+		"branches.get",
+		"branches.getDefault",
+		"branches.compareSchema",
+		"postgres.endpoints.list",
+		"postgres.endpoints.listByBranch",
+		"postgres.roles.list",
+		"postgres.roles.get",
+		"postgres.databases.list",
+		"postgres.databases.get",
+		"snapshots.list",
+		"snapshots.getSchedule",
+		"operations.list",
+		"auth.get",
+		"auth.oauthProviders.list",
+		"auth.trustedDomains.list",
+		"auth.allowLocalhost.get",
+		"auth.emailAndPassword.get",
+		"auth.emailProvider.get",
+		"auth.plugins.get",
+		"auth.webhooks.get",
+		"organizations.get",
+		"organizations.members.list",
+		"incidents.list",
+	] as const;
+
+	const catalogReadInput: Record<
+		(typeof catalogReadIds)[number],
+		() => Record<string, unknown>
+	> = {
+		"projects.list": () => ({ org_id: configuredOrgId(), limit: 5 }),
+		"projects.count": () => ({ org_id: configuredOrgId() }),
+		"projects.get": () => ({ project_id: projectId }),
+		"projects.permissions.list": () => ({ project_id: projectId }),
+		"branches.list": () => ({ project_id: projectId }),
+		"branches.get": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+		}),
+		"branches.getDefault": () => ({ project_id: projectId }),
+		"branches.compareSchema": () => ({
+			project_id: projectId,
+			branch_id: plainBranchId,
+			database_name: "neondb",
+		}),
+		"postgres.endpoints.list": () => ({ project_id: projectId }),
+		"postgres.endpoints.listByBranch": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+		}),
+		"postgres.roles.list": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+		}),
+		"postgres.roles.get": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+			role_name: "neondb_owner",
+		}),
+		"postgres.databases.list": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+		}),
+		"postgres.databases.get": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+			database_name: "neondb",
+		}),
+		"snapshots.list": () => ({ project_id: projectId }),
+		"snapshots.getSchedule": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+		}),
+		"operations.list": () => ({ project_id: projectId }),
+		"auth.get": () => ({ project_id: projectId, branch_id: mainBranchId }),
+		"auth.oauthProviders.list": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+		}),
+		"auth.trustedDomains.list": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+		}),
+		"auth.allowLocalhost.get": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+		}),
+		"auth.emailAndPassword.get": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+		}),
+		"auth.emailProvider.get": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+		}),
+		"auth.plugins.get": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+		}),
+		"auth.webhooks.get": () => ({
+			project_id: projectId,
+			branch_id: mainBranchId,
+		}),
+		"organizations.get": () => ({ org_id: configuredOrgId() }),
+		"organizations.members.list": () => ({ org_id: configuredOrgId() }),
+		"incidents.list": () => ({}),
+	};
+
+	it.each(
+		catalogReadIds,
+	)("%s results hold the published output schema", async (id) => {
+		const catalog: Readonly<Record<string, NeonTool>> =
+			holdingOutputContract(
+				createNeonTools({
+					apiKey: requireApiKey(),
+					baseUrl: configuredBaseUrl(),
+					tools: [id],
+				}),
+			);
+		const tool = catalog[id];
+		if (tool === undefined)
+			throw new Error(`createNeonTools omitted ${id}`);
+		await tool.execute(catalogReadInput[id]());
 	});
 
 	it("the custom tools work over MCP", async () => {
