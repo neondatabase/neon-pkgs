@@ -88,7 +88,7 @@
 		"zod": "^4.5.4"
 	},
 	"peerDependencies": {
-		"@neon/effect": "^0.5.0",
+		"@neon/effect": "^0.5.2",
 		"effect": "^4.1.2"
 	},
 	"peerDependenciesMeta": {
