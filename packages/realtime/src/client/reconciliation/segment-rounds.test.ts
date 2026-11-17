@@ -1345,6 +1345,45 @@ describe("ordered segment rounds", () => {
 					);
 			});
 
+			it("rejects a covered row removed, re-added and retagged out of scope", () => {
+				const session = new Session();
+				const live = session.subscribe("9", materialized);
+				const update = vi.fn();
+				live.onUpdate(update);
+				session.sync("9", { attempt: 1, batches: [initial] });
+				session.tick(
+					[
+						{
+							liveId: "9",
+							hole: true,
+							changes: [{ op: "remove", row_key: D }],
+						},
+					],
+					11,
+				);
+				session.tick(
+					[{ liveId: "9", changes: [upsert(D, "d2", T1)] }],
+					12,
+				);
+				session.tick(
+					[{ liveId: "9", changes: [upsert(D, "d3", T2)] }],
+					13,
+				);
+				expect(() =>
+					session.sync("9", {
+						attempt: 2,
+						scope: orderedSelected({ tag: T1 }),
+						covered: [1, 3],
+						batches: [[placed(tagged(B, "b2", T1), A)]],
+					}),
+				).toThrow("ordered entrant has no move");
+				expect(update).toHaveBeenCalledTimes(1);
+				if (materialized)
+					expect(live.getSnapshot().data).toEqual(
+						["a", "b", "c", "d"].map((value) => ({ value })),
+					);
+			});
+
 			it.each([
 				true,
 				false,

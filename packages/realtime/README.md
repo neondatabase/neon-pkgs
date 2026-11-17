@@ -509,9 +509,9 @@ A snapshot that is not refreshing has `updating: false`.
 
 For an unordered result, raw subscriptions receive a landed refresh as one
 `changes` update, never as a `rows` replacement: first a `remove` for every row
-the refresh replaces or removes, then an `upsert` for every row it shows. A consumer that keys rows by
-their contents can therefore apply the batch in order without seeing two row
-IDs claim one key. The batch's `txids` list every transaction it makes visible.
+the refresh replaces or removes, then an `upsert` for every row it shows. A
+consumer that keys rows by their contents can therefore apply the batch in
+order without seeing two row IDs claim one key. The batch's `txids` list every transaction it makes visible.
 Rows of an unordered result have no defined position, so a materialized array
 lists replaced rows wherever its map puts them.
 
@@ -520,7 +520,8 @@ upserts every row it shows, then moves each returned round row into place.
 A row that keeps its row ID receives an upsert without a remove. Each later
 buffered tick arrives as its own `changes` update, even when the refresh returns
 no rows. The materialized snapshot already includes those later ticks when
-update callbacks run.
+update callbacks run, and `onChange` listeners receive that same snapshot once
+per update.
 
 A row ID can receive contents another row ID held before the update. A consumer
 keying rows by contents must therefore apply each update as a whole, checking

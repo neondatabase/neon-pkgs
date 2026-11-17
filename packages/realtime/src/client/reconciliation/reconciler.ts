@@ -610,6 +610,9 @@ export class BaselineSyncPublicationReconciler {
 			if (!visibleBefore.has(rowKey))
 				visibleBefore.set(rowKey, index.has(rowKey));
 		};
+		// Keys a covered tick upserts while they are not shown. Such a row
+		// enters the result again, so it has no kept position either.
+		const reentered = new Set<string>();
 		const txids: string[] = [];
 		let replayed = 0;
 		let resolvedHoles = 0;
@@ -620,6 +623,12 @@ export class BaselineSyncPublicationReconciler {
 						"a round cannot replay an ordered move",
 					);
 				}
+				if (
+					ordered &&
+					change.op === "upsert" &&
+					!index.has(change.row_key)
+				)
+					reentered.add(change.row_key);
 				if (
 					ordered &&
 					change.op === "upsert" &&
@@ -723,7 +732,7 @@ export class BaselineSyncPublicationReconciler {
 			for (const [rowKey, row] of delta) {
 				if (
 					row !== null &&
-					!visibleBefore.get(rowKey) &&
+					(!visibleBefore.get(rowKey) || reentered.has(rowKey)) &&
 					!round.rowKeys.has(rowKey)
 				) {
 					throw new ProtocolError("ordered entrant has no move");
@@ -744,12 +753,13 @@ export class BaselineSyncPublicationReconciler {
 			} else replay(tick);
 		}
 
-		// 6. One update: every row the install takes out of the result or
-		// replaces first, then every row it shows. A consumer that derives its
-		// own keys from rows, such as a collection keyed by an ID column, then
-		// never sees two row keys holding one of its keys, even when a segment
-		// renumbers its rows. Ordered updates keep retained keys in place until
-		// their move: one content change per key is required by move validation.
+		// 6. One update. An unordered round removes every row the install takes
+		// out of the result or replaces, then upserts every row it shows, so a
+		// consumer that derives its own keys from rows, such as a collection
+		// keyed by an ID column, never sees two row keys holding one of its
+		// keys, even when a segment renumbers its rows. An ordered round removes
+		// only rows that leave and keeps the other keys in place until their
+		// move, because move validation allows one content change per key.
 		// Removing a key the result never showed is a no-op.
 		const removes: WireChange[] = [];
 		const upserts: WireChange[] = [];
