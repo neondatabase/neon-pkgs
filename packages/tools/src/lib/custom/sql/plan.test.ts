@@ -117,9 +117,21 @@ describe("hasPlanDocument", () => {
 		expect(hasPlanDocument(explainRows)).toBe(true);
 	});
 
-	test("rejects rows without a plan document", () => {
+	test("accepts a plan that reads no table", () => {
+		expect(
+			hasPlanDocument([
+				{ "QUERY PLAN": [{ Plan: { "Node Type": "Result" } }] },
+			]),
+		).toBe(true);
+	});
+
+	test("rejects rows without a recognizable plan node", () => {
 		expect(hasPlanDocument([])).toBe(false);
 		expect(hasPlanDocument([{ n: 1 }])).toBe(false);
 		expect(hasPlanDocument([{ "QUERY PLAN": [{}] }])).toBe(false);
+		expect(hasPlanDocument([{ "QUERY PLAN": [{ Plan: {} }] }])).toBe(false);
+		expect(
+			hasPlanDocument([{ "QUERY PLAN": [{ Plan: { "Node Type": 1 } }] }]),
+		).toBe(false);
 	});
 });

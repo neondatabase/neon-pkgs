@@ -85,8 +85,10 @@ const planDocument = (rows: unknown) => {
 };
 
 /** Whether `rows` hold the JSON plan document `EXPLAIN (FORMAT JSON)` returns. */
-export const hasPlanDocument = (rows: unknown): boolean =>
-	planDocument(rows) !== undefined;
+export const hasPlanDocument = (rows: unknown): boolean => {
+	const nodeType = planDocument(rows)?.root["Node Type"];
+	return typeof nodeType === "string" && nodeType !== "";
+};
 
 export const extractExecutionMetrics = (rows: unknown): QueryMetrics => {
 	const plan = planDocument(rows);
