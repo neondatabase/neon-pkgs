@@ -48,6 +48,7 @@ export const sendFeedbackTool = (options: ToolClientOptions) => {
 			requiresApproval: true,
 			metadata: {
 				method: "POST",
+				readOnlySafe: true,
 				path: "/",
 				stability: "stable",
 				deprecated: false,

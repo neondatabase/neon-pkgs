@@ -9,9 +9,8 @@ import {
 } from "../../ergonomic/bind.js";
 import {
 	projectIdField,
-	refuseInReadOnly,
 	resolveConnection,
-	SQL_METADATA,
+	sqlMetadata,
 } from "./connection.js";
 import { withTemporaryBranch } from "./migrations.js";
 import { extractExecutionMetrics, extractTablesFromPlan } from "./plan.js";
@@ -117,10 +116,9 @@ export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 				openWorldHint: false,
 			},
 			requiresApproval: true,
-			metadata: SQL_METADATA,
+			metadata: sqlMetadata(false),
 		},
 		async (neonClient, input, signal, context) => {
-			refuseInReadOnly(context);
 			const projectId = input.project_id;
 			return withTemporaryBranch(
 				neonClient,
@@ -216,10 +214,9 @@ export const completeQueryTuningTool = (options: ToolClientOptions) =>
 			outputSchema: completeQueryTuningOutputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,
-			metadata: SQL_METADATA,
+			metadata: sqlMetadata(false),
 		},
 		async (neonClient, input, signal, context) => {
-			refuseInReadOnly(context);
 			const operationLog: string[] = [];
 			let results: Awaited<ReturnType<typeof runTransaction>> | undefined;
 			if (

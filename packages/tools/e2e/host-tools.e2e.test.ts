@@ -191,7 +191,7 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		);
 		await expect(transaction).rejects.toBeInstanceOf(NeonClientError);
 		await expect(transaction).rejects.toThrow(
-			"This tool is unavailable in read-only mode because it runs caller SQL that can leave a read-only transaction.",
+			"run_transaction_sql is unavailable in read-only mode",
 		);
 		const migration = tools["migrations.prepare"].execute(
 			{ project_id: projectId, migration_sql: "SELECT 1" },
@@ -199,10 +199,25 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		);
 		await expect(migration).rejects.toBeInstanceOf(NeonClientError);
 		await expect(migration).rejects.toThrow(
-			"This tool is unavailable in read-only mode because it runs caller SQL that can leave a read-only transaction.",
+			"prepare_migrations is unavailable in read-only mode",
 		);
 		const branchesAfter = await neon.branches.list({ projectId }).all();
 		expect(branchesAfter).toHaveLength(branchesBefore.length);
+	});
+
+	it("factory readOnly: sql.run runs in a READ ONLY transaction", async () => {
+		const readOnlyTools = createNeonTools({
+			apiKey: requireApiKey(),
+			baseUrl: configuredBaseUrl(),
+			tools: ["sql.run"],
+			readOnly: true,
+		});
+		const write = readOnlyTools["sql.run"].execute({
+			project_id: projectId,
+			sql: "INSERT INTO items (name) VALUES ('x')",
+		});
+		await expect(write).rejects.toBeInstanceOf(NeonDbError);
+		await expect(write).rejects.toMatchObject({ code: "25006" });
 	});
 
 	it("postgresRole: connects as the pinned role and rejects another role_name", async () => {

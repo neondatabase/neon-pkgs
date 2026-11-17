@@ -9,13 +9,18 @@ import type {
 
 export const NEON_DEFAULT_DATABASE_NAME = "neondb";
 
-export const SQL_METADATA: NeonToolMetadata = {
+/**
+ * `readOnlySafe` for a tool that runs caller SQL means it runs one statement
+ * in its own `READ ONLY` transaction when `readOnly` is set.
+ */
+export const sqlMetadata = (readOnlySafe: boolean): NeonToolMetadata => ({
 	method: "SQL",
 	path: "/projects/{project_id}/connection_uri",
 	stability: "stable",
 	deprecated: false,
 	tags: ["SQL"],
-};
+	readOnlySafe,
+});
 
 export const DATABASE_NAME_DESCRIPTION = `Database name. Omit for ${NEON_DEFAULT_DATABASE_NAME}, else the first database.`;
 
@@ -157,15 +162,3 @@ export const resolveConnection = async (
 
 export const sqlClient = (uri: string, signal?: AbortSignal) =>
 	neon(uri, signal === undefined ? {} : { fetchOptions: { signal } });
-
-/**
- * Caller SQL that shares one transaction can escape `READ ONLY` with `COMMIT`
- * or `SET TRANSACTION READ WRITE`, so these tools refuse instead.
- */
-export const refuseInReadOnly = (context: NeonToolExecutionContext) => {
-	if (context.readOnly === true) {
-		throw new NeonClientError(
-			"This tool is unavailable in read-only mode because it runs caller SQL that can leave a read-only transaction.",
-		);
-	}
-};

@@ -180,6 +180,7 @@ export const searchDocsTool = (options: ToolClientOptions) => {
 			requiresApproval: false,
 			metadata: {
 				method: "POST",
+				readOnlySafe: true,
 				path: "/site-search",
 				stability: "stable",
 				deprecated: false,
@@ -246,6 +247,7 @@ export const getDocTool = (options: ToolClientOptions) => {
 			requiresApproval: false,
 			metadata: {
 				method: "GET",
+				readOnlySafe: true,
 				path: "/{slug}.md",
 				stability: "stable",
 				deprecated: false,

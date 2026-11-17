@@ -13,8 +13,8 @@ import {
 	databaseNameField,
 	projectIdField,
 	resolveConnection,
-	SQL_METADATA,
 	sqlClient,
+	sqlMetadata,
 } from "./connection.js";
 import type { Row } from "./rows.js";
 import { sqlReadAnnotations } from "./schema.js";
@@ -224,7 +224,7 @@ export const describeBranchTool = (options: ToolClientOptions) => {
 			outputSchema: describeBranchOutputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
-			metadata: SQL_METADATA,
+			metadata: sqlMetadata(true),
 		},
 		(neonClient, input, signal, context) =>
 			describeBranch(neonClient, input, context, consoleUrl, signal),

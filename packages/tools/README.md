@@ -227,7 +227,7 @@ await tools["sql.run"].execute(
 
 | Field | Effect |
 | --- | --- |
-| `readOnly` | `sql.run` and `sql.explain` run the statement in a `READ ONLY` transaction, so Postgres rejects writes. `sql.runTransaction`, `migrations.*`, and `queryTuning.*` throw `NeonClientError` without running anything, because a caller statement such as `COMMIT` or `SET TRANSACTION READ WRITE` can leave a read-only transaction. `schema.*` and `queries.listSlow` behave the same; `branches.describe` and `database.inspect` always use a `READ ONLY` transaction. |
+| `readOnly` | A tool whose `metadata.readOnlySafe` is `false` throws `NeonClientError` without a request (see [Read-only](#read-only)). `sql.run` and `sql.explain` run the statement in a `READ ONLY` transaction, so Postgres rejects writes. `sql.runTransaction`, `migrations.*`, and `queryTuning.*` are not read-only safe, because a caller statement such as `COMMIT` or `SET TRANSACTION READ WRITE` can leave a read-only transaction. `schema.*` and `queries.listSlow` behave like `sql.run`; `branches.describe` and `database.inspect` always use a `READ ONLY` transaction. |
 | `postgresRole` | Every SQL connection logs in as this role, and `postgres.connectionString` returns a URI for it. A `role_name` that differs throws `NeonClientError`. |
 | `caller` | Sent with `docs.search` as `x-caller-source`, `x-caller-user-agent`, and `x-caller-client`. Without it, or when `source` cannot be a header value, `x-caller-source` is `neon_tools`. The search service records `website`, `cli`, `mcp`, and `monitor` by name and counts any other source as `rest`. |
 
@@ -249,6 +249,48 @@ const { data: page } = await tools["docs.get"].execute({ slug: data.hits[0].slug
 ```
 
 Neon's feedback reporting counts `manual_test`, `neon_agent`, `neon_cli`, `neon_mcp`, and `neon_website` by name and any other `feedbackSource`, including the default, as `other`.
+
+## Read-only
+
+`metadata.readOnlySafe` is `true` when a tool changes no Neon resource and returns no connection string or role password: a `GET` that needs no approval, `logs.query`, the SQL tools that run one statement in a `READ ONLY` transaction, and the docs, feedback, search, and incidents tools. `postgres.connectionString` is a `GET` but not read-only safe, because its URI carries a role password that works against the read-write compute.
+
+`readOnly: true` on `createNeonTools`, `createNeonTool`, or `execute` refuses every tool that is not read-only safe. The execution context wins over the factory:
+
+```ts
+const tools = createNeonTools({
+	apiKey,
+	tools: ["projects.list", "projects.delete", "sql.run"],
+	readOnly: true,
+});
+
+await tools["projects.list"].execute({}); // runs
+await tools["sql.run"].execute({ project_id: "project-id", sql: "SELECT 1" }); // READ ONLY transaction
+await tools["projects.delete"].execute({ project_id: "project-id" });
+// throws NeonClientError: delete_projects is unavailable in read-only mode ...
+await tools["projects.delete"].execute(
+	{ project_id: "project-id" },
+	{ readOnly: false },
+); // runs
+```
+
+The refusal happens inside `onExecute`, so a tracking hook sees it as a failed call, and before `inject` resolves a project or branch id.
+
+### Select tools by metadata
+
+`tools` also takes a predicate. It sees every published tool without its `execute` (`operationId`, `id`, `title`, `description`, `annotations`, `requiresApproval`, `metadata`) and keeps the ones it returns `true` for, in `toolIds` order. A predicate that matches nothing throws.
+
+```ts
+const readTools = createNeonTools({
+	apiKey,
+	readOnly: true,
+	tools: (tool) =>
+		tool.metadata.readOnlySafe && tool.metadata.tags.includes("Branch"),
+});
+
+await readTools["branches.list"]?.execute({ project_id: "project-id" });
+```
+
+The result is typed as a partial record, since which tools the predicate keeps is known only at runtime. `toMastraTools` keeps that optionality, also when the record mixes in tools from a list. `CreateNeonToolsPredicateOptions` types predicate options declared ahead of the call. Pass a list of selectors when you need exact keys.
 
 ## Writes and waiting
 

@@ -317,6 +317,7 @@ export const fetchResourceTool = (options: ToolClientOptions) => {
 			requiresApproval: false,
 			metadata: {
 				method: "SQL",
+				readOnlySafe: true,
 				path: "/projects",
 				stability: "stable",
 				deprecated: false,

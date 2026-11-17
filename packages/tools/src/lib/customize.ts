@@ -158,6 +158,7 @@ export const applyToolCustomization = <Tool extends NeonTool>(
 	tool: Tool,
 	options: NeonToolCustomizeOptions,
 	publishedIds: ReadonlyMap<string, string>,
+	guard?: (context?: NeonToolExecutionContext) => void,
 ): Omit<Tool, "id"> & { id: string } => {
 	const inject = resolveInject(options.inject);
 	const id = publishedIds.get(tool.operationId);
@@ -199,7 +200,7 @@ export const applyToolCustomization = <Tool extends NeonTool>(
 		description,
 		inputSchema,
 		execute: wrapExecute
-			? wrapToolExecute({ ...tool, id }, options.onExecute, inject)
+			? wrapToolExecute({ ...tool, id }, options.onExecute, inject, guard)
 			: tool.execute,
 	};
 };
@@ -312,18 +313,21 @@ function applyDescription(
 	return description;
 }
 
+/** `guard` runs before injected ids resolve, so a refused call never resolves them. */
 function wrapToolExecute(
 	tool: NeonTool,
 	onExecute: NeonToolOnExecute | undefined,
 	inject: ResolvedInject,
+	guard: ((context?: NeonToolExecutionContext) => void) | undefined,
 ): NeonTool["execute"] {
 	const originalExecute = tool.execute.bind(tool);
 	const availableKeys = pathTemplateParams(tool.metadata.path);
 	const mode = inject.omitFromSchema ? "override" : "fill";
 
 	return async (input, context) => {
-		const run = async () =>
-			originalExecute(
+		const run = async () => {
+			guard?.(context);
+			return originalExecute(
 				mergeFields(
 					input,
 					await resolveInjectedFields(
@@ -336,6 +340,7 @@ function wrapToolExecute(
 				),
 				context,
 			);
+		};
 
 		if (onExecute === undefined) {
 			return run();

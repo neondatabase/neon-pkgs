@@ -19,7 +19,10 @@ export interface NeonToolCaller {
 export interface NeonToolExecutionContext {
 	signal?: AbortSignal;
 	apiKey?: NeonBearerCredential;
-	/** SQL tools run caller SQL in a `READ ONLY` transaction or refuse to run. */
+	/**
+	 * Refuses every tool whose `metadata.readOnlySafe` is false. SQL tools run
+	 * caller SQL in a `READ ONLY` transaction or refuse to run.
+	 */
 	readOnly?: boolean;
 	/** Every SQL connection logs in as this Postgres role. */
 	postgresRole?: string;
@@ -27,12 +30,20 @@ export interface NeonToolExecutionContext {
 	caller?: NeonToolCaller;
 }
 
-export interface NeonToolMetadata {
+export interface NeonOperationMetadata {
 	method: string;
 	path: string;
 	stability: string;
 	deprecated: boolean;
 	tags: readonly string[];
+}
+
+export interface NeonToolMetadata extends NeonOperationMetadata {
+	/**
+	 * Changes no Neon resource and returns no connection string or role
+	 * password. A tool that is not refuses to run when `readOnly` is true.
+	 */
+	readOnlySafe: boolean;
 }
 
 export interface JsonSafeBlob {
@@ -100,7 +111,7 @@ export interface NeonOperation<
 	inputSchema: InputSchema;
 	annotations: NeonToolAnnotations;
 	requiresApproval: boolean;
-	metadata: NeonToolMetadata;
+	metadata: NeonOperationMetadata;
 	invoke(
 		client: Client,
 		input: z.output<InputSchema>,
@@ -116,6 +127,15 @@ export const defineOperation = <
 	operation: NeonOperation<InputSchema, Id, Output>,
 ) => operation;
 
+/** A generated operation bound to a client. `fromGenerated` adds the tool policy. */
+export type NeonOperationTool<
+	InputSchema extends z.ZodType = z.ZodType,
+	Id extends string = string,
+	Output = unknown,
+> = Omit<NeonTool<InputSchema, Id, Output>, "metadata"> & {
+	metadata: NeonOperationMetadata;
+};
+
 export const bindOperation = <
 	const InputSchema extends z.ZodType,
 	const Id extends string,
@@ -123,7 +143,7 @@ export const bindOperation = <
 >(
 	operation: NeonOperation<InputSchema, Id, Output>,
 	client: Client,
-): NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>> => ({
+): NeonOperationTool<InputSchema, Id, JsonSafe<Awaited<Output>>> => ({
 	operationId: operation.operationId,
 	id: operation.id,
 	title: operation.title,

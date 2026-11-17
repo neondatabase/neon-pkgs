@@ -11,8 +11,8 @@ import {
 	databaseNameField,
 	projectIdField,
 	resolveConnection,
-	SQL_METADATA,
 	sqlClient,
+	sqlMetadata,
 } from "./connection.js";
 
 export const sqlReadAnnotations: NeonToolAnnotations = {
@@ -289,7 +289,7 @@ export const listTablesTool = (options: ToolClientOptions) =>
 			outputSchema: listTablesOutputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
-			metadata: SQL_METADATA,
+			metadata: sqlMetadata(true),
 		},
 		async (neonClient, input, signal, context) => {
 			const connection = await resolveConnection(
@@ -351,7 +351,7 @@ export const describeTableTool = (options: ToolClientOptions) =>
 			outputSchema: describeTableOutputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
-			metadata: SQL_METADATA,
+			metadata: sqlMetadata(true),
 		},
 		async (neonClient, input, signal, context) => {
 			const connection = await resolveConnection(
