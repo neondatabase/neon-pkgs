@@ -1,5 +1,5 @@
-import { NeonClientError } from "@neon/sdk";
 import * as z from "zod";
+import { NeonToolCallerError } from "../caller-error.js";
 import {
 	bindPublicTool,
 	publishedId,
@@ -132,17 +132,17 @@ export const searchDocsHeaders = (
 
 const validateDocSlug = (slug: string) => {
 	if (slug.includes("..")) {
-		throw new NeonClientError(
+		throw new NeonToolCallerError(
 			'Invalid doc slug: path traversal ("..") is not allowed',
 		);
 	}
 	if (slug.includes("://")) {
-		throw new NeonClientError(
+		throw new NeonToolCallerError(
 			"Invalid doc slug: absolute URLs are not allowed",
 		);
 	}
 	if (slug.startsWith("/")) {
-		throw new NeonClientError(
+		throw new NeonToolCallerError(
 			'Invalid doc slug: slug must not start with "/"',
 		);
 	}
@@ -204,7 +204,7 @@ export const searchDocsTool = (options: ToolClientOptions) => {
 				);
 			}
 			if (response.status === 400) {
-				throw new NeonClientError(
+				throw new NeonToolCallerError(
 					upstreamError(body) ??
 						"Neon site search rejected the request",
 				);
@@ -262,7 +262,7 @@ export const getDocTool = (options: ToolClientOptions) => {
 				signal: upstreamSignal(context.signal),
 			});
 			if (response.status === 404) {
-				throw new NeonClientError(
+				throw new NeonToolCallerError(
 					`Doc page not found: "${mdSlug}". Pass the slug of a docs search hit.`,
 				);
 			}

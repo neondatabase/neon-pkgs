@@ -1,4 +1,4 @@
-import { NeonClientError } from "@neon/sdk";
+import { NeonToolCallerError } from "./caller-error.js";
 import type {
 	NeonSecretField,
 	NeonSecretsMode,
@@ -77,13 +77,13 @@ export const toolCallGuard =
 	(context) => {
 		const readOnly = context?.readOnly ?? options.readOnly;
 		if (readOnly === true && !tool.metadata.readOnlySafe) {
-			throw new NeonClientError(
+			throw new NeonToolCallerError(
 				`${publishedId} is unavailable in read-only mode because it can change Neon resources or returns a connection string or role password.`,
 			);
 		}
 		const secrets = secretsMode(options, context);
 		if (withheldUnderSecrets(tool.metadata, secrets)) {
-			throw new NeonClientError(
+			throw new NeonToolCallerError(
 				`${publishedId} is unavailable with secrets: "${secrets}" because its result is a secret.`,
 			);
 		}

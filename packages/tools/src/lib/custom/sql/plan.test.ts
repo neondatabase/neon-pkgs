@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { extractExecutionMetrics, extractTablesFromPlan } from "./plan.js";
+import {
+	extractExecutionMetrics,
+	extractTablesFromPlan,
+	hasPlanDocument,
+} from "./plan.js";
 
 // Shape of `EXPLAIN (ANALYZE, VERBOSE, BUFFERS, FORMAT JSON)` over the HTTP driver:
 // one row whose `QUERY PLAN` column holds the plan document. As in Postgres, the
@@ -105,5 +109,29 @@ describe("extractExecutionMetrics", () => {
 		expect(() => extractExecutionMetrics([{ n: 1 }])).toThrow(
 			"EXPLAIN returned no JSON plan document",
 		);
+	});
+});
+
+describe("hasPlanDocument", () => {
+	test("accepts the rows EXPLAIN (FORMAT JSON) returns", () => {
+		expect(hasPlanDocument(explainRows)).toBe(true);
+	});
+
+	test("accepts a plan that reads no table", () => {
+		expect(
+			hasPlanDocument([
+				{ "QUERY PLAN": [{ Plan: { "Node Type": "Result" } }] },
+			]),
+		).toBe(true);
+	});
+
+	test("rejects rows without a recognizable plan node", () => {
+		expect(hasPlanDocument([])).toBe(false);
+		expect(hasPlanDocument([{ n: 1 }])).toBe(false);
+		expect(hasPlanDocument([{ "QUERY PLAN": [{}] }])).toBe(false);
+		expect(hasPlanDocument([{ "QUERY PLAN": [{ Plan: {} }] }])).toBe(false);
+		expect(
+			hasPlanDocument([{ "QUERY PLAN": [{ Plan: { "Node Type": 1 } }] }]),
+		).toBe(false);
 	});
 });
