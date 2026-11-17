@@ -74,14 +74,26 @@ const buffers = (
  * from the root plan node, because a parent node's cost, rows, and buffer
  * counters already include its children.
  */
-export const extractExecutionMetrics = (rows: unknown): QueryMetrics => {
+const planDocument = (rows: unknown) => {
 	const firstRow = Array.isArray(rows) ? rows[0] : undefined;
 	const documents = isRecord(firstRow) ? firstRow["QUERY PLAN"] : undefined;
 	const document = Array.isArray(documents) ? documents[0] : undefined;
 	const root = isRecord(document) ? document.Plan : undefined;
-	if (!isRecord(document) || !isRecord(root)) {
+	return isRecord(document) && isRecord(root)
+		? { document, root }
+		: undefined;
+};
+
+/** Whether `rows` hold the JSON plan document `EXPLAIN (FORMAT JSON)` returns. */
+export const hasPlanDocument = (rows: unknown): boolean =>
+	planDocument(rows) !== undefined;
+
+export const extractExecutionMetrics = (rows: unknown): QueryMetrics => {
+	const plan = planDocument(rows);
+	if (plan === undefined) {
 		throw new Error("EXPLAIN returned no JSON plan document");
 	}
+	const { document, root } = plan;
 	return {
 		executionTime: numberAt(document, "Execution Time"),
 		planningTime: numberAt(document, "Planning Time"),

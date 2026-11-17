@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { NeonClientError } from "@neon/sdk";
 import * as z from "zod";
 import { pathInputDescriptions } from "../../../descriptions.gen.js";
 import { NeonToolCallerError } from "../../caller-error.js";
@@ -13,7 +14,11 @@ import {
 	sqlMetadata,
 } from "./connection.js";
 import { withTemporaryBranch } from "./migrations.js";
-import { extractExecutionMetrics, extractTablesFromPlan } from "./plan.js";
+import {
+	extractExecutionMetrics,
+	extractTablesFromPlan,
+	hasPlanDocument,
+} from "./plan.js";
 import {
 	explainStatement,
 	runTransaction,
@@ -140,9 +145,13 @@ export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 					);
 					const tables = extractTablesFromPlan(executionPlan);
 					if (tables.length === 0) {
-						throw new NeonToolCallerError(
-							"No tables found in execution plan. Cannot proceed with optimization.",
-						);
+						const message =
+							"No tables found in execution plan. Cannot proceed with optimization.";
+						// A plan that reads no table is the query's; rows that hold no
+						// plan at all are a malformed EXPLAIN result.
+						throw hasPlanDocument(executionPlan)
+							? new NeonToolCallerError(message)
+							: new NeonClientError(message);
 					}
 					const connection = await resolveConnection(
 						neonClient,
