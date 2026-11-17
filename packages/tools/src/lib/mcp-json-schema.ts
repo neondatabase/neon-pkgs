@@ -202,8 +202,41 @@ export const toMcpOutputSchema = (
 	};
 };
 
+const ZOD_ISO_DATETIME_PATTERN = z.toJSONSchema(z.iso.datetime()).pattern;
+
+/**
+ * `z.iso.datetime()` publishes a 256-character pattern next to
+ * `format: "date-time"`. Its main constraint beyond `format` is a `Z` offset,
+ * so `tools/list` carries `Z$` instead. `validate` still runs the full schema.
+ * Other patterns are published unchanged.
+ */
+const compactDateTimePatterns = (node: unknown): unknown => {
+	if (Array.isArray(node)) {
+		return node.map(compactDateTimePatterns);
+	}
+	if (!isPlainObject(node)) {
+		return node;
+	}
+	const out = Object.fromEntries(
+		Object.entries(node).map(([key, value]) => [
+			key,
+			compactDateTimePatterns(value),
+		]),
+	);
+	if (
+		typeof ZOD_ISO_DATETIME_PATTERN === "string" &&
+		out.format === "date-time" &&
+		out.pattern === ZOD_ISO_DATETIME_PATTERN
+	) {
+		out.pattern = "Z$";
+	}
+	return out;
+};
+
 export const toMcpInputSchema = (schema: z.ZodType): McpStandardSchema => {
-	const json = compactJsonSchema(z.toJSONSchema(schema, { io: "input" }));
+	const json = compactDateTimePatterns(
+		compactJsonSchema(z.toJSONSchema(schema, { io: "input" })),
+	);
 	if (!isPlainObject(json)) {
 		throw new TypeError(
 			"MCP tool input schemas must be JSON Schema objects",

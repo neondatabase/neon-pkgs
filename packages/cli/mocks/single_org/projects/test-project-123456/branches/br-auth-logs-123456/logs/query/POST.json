@@ -1,0 +1,21 @@
+{
+  "logs": [
+    {
+      "timestamp": "2025-01-01T00:00:04.000Z",
+      "message": "sign-in succeeded",
+      "source": "neon_auth",
+      "service_name": "neon-auth",
+      "severity_text": "INFO",
+      "attributes": {}
+    },
+    {
+      "timestamp": "2025-01-01T00:00:03.000Z",
+      "message": "a source this CLI release does not know yet",
+      "source": "future_service",
+      "severity_text": "INFO",
+      "attributes": {}
+    }
+  ],
+  "next_cursor": "",
+  "is_truncated": false
+}

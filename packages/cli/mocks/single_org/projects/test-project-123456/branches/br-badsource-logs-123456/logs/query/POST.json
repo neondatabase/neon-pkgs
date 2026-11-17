@@ -1,0 +1,12 @@
+{
+  "logs": [
+    {
+      "timestamp": "2025-01-01T00:00:04.000Z",
+      "message": "a source that is not a string",
+      "source": 42,
+      "attributes": {}
+    }
+  ],
+  "next_cursor": "",
+  "is_truncated": false
+}

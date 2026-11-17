@@ -71,6 +71,96 @@ describe("toMcpInputSchema", () => {
 		const invalid = await mcpSchema["~standard"].validate({ limit: "one" });
 		expect(invalid).toMatchObject({ issues: expect.any(Array) });
 	});
+
+	test("publishes Z$ for Zod's default datetime pattern and validates the full format", async () => {
+		const schema = z.strictObject({
+			expires_at: z.iso.datetime().optional(),
+			nested: z
+				.strictObject({ at: z.iso.datetime().nullable() })
+				.optional(),
+			with_offset: z.iso.datetime({ offset: true }).optional(),
+			custom: z.string().regex(/^a+$/).optional(),
+		});
+		const mcpSchema = toMcpInputSchema(schema);
+		const json = mcpSchema["~standard"].jsonSchema.input();
+		const raw = z.toJSONSchema(schema, { io: "input" }) as {
+			properties: Record<string, unknown>;
+		};
+
+		expect(json).toMatchObject({
+			properties: {
+				expires_at: {
+					type: "string",
+					format: "date-time",
+					pattern: "Z$",
+				},
+				nested: {
+					properties: {
+						at: {
+							anyOf: [
+								{
+									type: "string",
+									format: "date-time",
+									pattern: "Z$",
+								},
+								{ type: "null" },
+							],
+						},
+					},
+				},
+				with_offset: raw.properties.with_offset,
+				custom: raw.properties.custom,
+			},
+		});
+
+		for (const expires_at of [
+			"2026-02-30T00:00:00Z",
+			"2026-01-01T00:00:00-08:00",
+			"tomorrow",
+		]) {
+			expect(
+				await mcpSchema["~standard"].validate({ expires_at }),
+			).toMatchObject({ issues: expect.any(Array) });
+		}
+		expect(
+			await mcpSchema["~standard"].validate({
+				expires_at: "2026-01-01T00:00:00Z",
+			}),
+		).toMatchObject({ value: { expires_at: "2026-01-01T00:00:00Z" } });
+	});
+
+	test("leaves inputs named format or pattern and datetime defaults alone", () => {
+		const at = "2026-01-01T00:00:00Z";
+		const schema = z.strictObject({
+			format: z.string().default("date-time"),
+			pattern: z.string().optional(),
+			since: z.iso.datetime().default(at),
+		});
+		const json = toMcpInputSchema(schema)["~standard"].jsonSchema.input();
+
+		expect(json).toMatchObject({
+			properties: {
+				format: { type: "string", default: "date-time" },
+				pattern: { type: "string" },
+				since: {
+					type: "string",
+					format: "date-time",
+					pattern: "Z$",
+					default: at,
+				},
+			},
+		});
+	});
+
+	test("Zod's default datetime pattern only accepts a Z offset", () => {
+		const pattern = z.toJSONSchema(z.iso.datetime()).pattern;
+		expect(pattern).toEqual(expect.any(String));
+		const regex = new RegExp(pattern as string);
+		expect(regex.test("2026-01-01T00:00:00Z")).toBe(true);
+		expect(regex.test("2026-01-01T00:00:00.123Z")).toBe(true);
+		expect(regex.test("2026-01-01T00:00:00+01:00")).toBe(false);
+		expect(regex.test("2026-01-01T00:00:00")).toBe(false);
+	});
 });
 
 describe("toMcpOutputJsonSchema", () => {

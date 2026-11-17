@@ -23,12 +23,17 @@ Use neon logs query for structured filters, human-readable tables and cursor pag
 For more information, visit https://neon.com/docs/cli/logs`;
 
 // `satisfies` fails the build if a value here leaves the SDK's union, so the CLI
-// can never offer a source or severity the API rejects.
-const LOG_SOURCES = [
-	"function",
-	"storage",
-	"pg_endpoint",
-] as const satisfies readonly ProjectBranchLogSource[];
+// can never offer a source or severity the API rejects. Sources are keyed by the
+// union, so the build also fails when the SDK gains one the CLI does not offer.
+const LOG_SOURCES = Object.keys({
+	function: true,
+	storage: true,
+	pg_endpoint: true,
+	neon_auth: true,
+} satisfies Record<
+	ProjectBranchLogSource,
+	true
+>) as readonly ProjectBranchLogSource[];
 
 const LOG_SORT_ORDERS = ["asc", "desc"] as const satisfies readonly NonNullable<
 	ProjectBranchLogsQueryRequest["sort_order"]
@@ -386,15 +391,16 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isOptionalString = (value: unknown): value is string | undefined =>
 	value === undefined || typeof value === "string";
 
-const isProjectBranchLogRecord = (
-	value: unknown,
-): value is ProjectBranchLogRecord =>
+// `source` is any string so that a source the API adds before the next CLI
+// release still prints.
+type LogRecord = Omit<ProjectBranchLogRecord, "source"> & { source?: string };
+
+const isLogRecord = (value: unknown): value is LogRecord =>
 	isRecord(value) &&
 	typeof value.timestamp === "string" &&
 	!Number.isNaN(Date.parse(value.timestamp)) &&
 	typeof value.message === "string" &&
-	(value.source === undefined ||
-		LOG_SOURCES.some((source) => source === value.source)) &&
+	isOptionalString(value.source) &&
 	isOptionalString(value.entity_id) &&
 	isOptionalString(value.service_name) &&
 	isOptionalString(value.scope_name) &&
@@ -409,14 +415,14 @@ const isProjectBranchLogRecord = (
 	isRecord(value.attributes);
 
 function assertLogsQueryResponse(value: unknown): asserts value is {
-	logs: ProjectBranchLogRecord[];
+	logs: LogRecord[];
 	next_cursor?: string;
 	is_truncated: boolean;
 } {
 	if (
 		!isRecord(value) ||
 		!Array.isArray(value.logs) ||
-		!value.logs.every(isProjectBranchLogRecord) ||
+		!value.logs.every(isLogRecord) ||
 		!isOptionalString(value.next_cursor) ||
 		typeof value.is_truncated !== "boolean"
 	) {

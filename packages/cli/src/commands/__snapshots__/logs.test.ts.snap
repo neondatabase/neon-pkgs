@@ -292,6 +292,14 @@ No logs found in the 1h window ending now.
 "
 `;
 
+exports[`logs > query prints neon_auth records and sources this release does not know 1`] = `
+"logs
+Timestamp                 Source          Service Name  Severity Text  Message
+2025-01-01T00:00:04.000Z  neon_auth       neon-auth     INFO           sign-in succeeded
+2025-01-01T00:00:03.000Z  future_service                INFO           a source this CLI release does not know yet
+"
+`;
+
 exports[`logs > query rejects --logql together with a structured filter 1`] = `""`;
 
 exports[`logs > query rejects --since together with --start-time 1`] = `""`;
@@ -446,6 +454,8 @@ next_cursor: ""
 is_truncated: false
 "
 `;
+
+exports[`logs > query still rejects a record whose source is not a string 1`] = `""`;
 
 exports[`logs > query with table output 1`] = `
 "logs

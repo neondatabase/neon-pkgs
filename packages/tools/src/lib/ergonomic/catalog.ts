@@ -1204,6 +1204,7 @@ export const toolFactories = {
 						name: input.name,
 						scopes: input.scopes,
 						principal_type: input.principal_type,
+						expires_at: input.expires_at,
 					},
 					{ signal },
 				),

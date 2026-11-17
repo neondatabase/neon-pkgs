@@ -440,6 +440,9 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 
 	it("creates, reveals, rotates and revokes a branch credential", async () => {
 		let tokenId: string | undefined;
+		const expiresAt = new Date(
+			Math.ceil(Date.now() / 1000) * 1000 + 60 * 60_000,
+		).toISOString();
 		try {
 			const created = expectOk(
 				await neon.credentials.create({
@@ -448,11 +451,15 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 					name: "sdk-e2e",
 					scopes: ["storage:read"],
 					principal_type: "user",
+					expires_at: expiresAt,
 				}),
 			);
 			tokenId = created.token_id;
 			expect(created.api_token.length).toBeGreaterThan(0);
 			expect(created.s3_secret_access_key.length).toBeGreaterThan(0);
+			expect(Date.parse(created.expires_at ?? "")).toBe(
+				Date.parse(expiresAt),
+			);
 
 			const revealed = expectOk(
 				await neon.credentials.reveal({
@@ -474,6 +481,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			);
 			expect(rotated.token_id).toBe(created.token_id);
 			expect(rotated.api_token).not.toBe(created.api_token);
+			expect(rotated.expires_at).toBe(created.expires_at);
 
 			expectOk(
 				await neon.credentials.revoke({

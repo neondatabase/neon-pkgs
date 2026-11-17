@@ -38,6 +38,8 @@ const CONTROL_BRANCH = ["--branch", "br-control-logs-123456"] as const;
 const CONTROL_CURSOR_BRANCH = ["--branch", "br-control-cursor-123456"] as const;
 const BROKEN_PAGE_BRANCH = ["--branch", "br-broken-page-123456"] as const;
 const MALFORMED_BRANCH = ["--branch", "br-malformed-logs-123456"] as const;
+const AUTH_LOGS_BRANCH = ["--branch", "br-auth-logs-123456"] as const;
+const BAD_SOURCE_BRANCH = ["--branch", "br-badsource-logs-123456"] as const;
 const PROJECT = ["--project-id", "test-project-123456"] as const;
 
 describe("logs", () => {
@@ -270,6 +272,51 @@ describe("logs", () => {
 			body_contains: "connection",
 			trace_id: "4bf92f3577b34da6a3ce929d0e0e4736",
 		});
+	});
+
+	test("query sends --source neon_auth", async ({ testCliCommand }) => {
+		const sink = join(TEST_TMP, "query-neon-auth.json");
+		process.env.NEONCTL_TEST_LOGS_QUERY_SINK = sink;
+
+		await testCliCommand(
+			["logs", "query", "--source", "neon_auth", ...SCOPE],
+			{
+				mockDir: "single_org",
+				snapshot: false,
+			},
+		);
+
+		expect(JSON.parse(readFileSync(sink, "utf8"))).toEqual({
+			limit: 100,
+			source: "neon_auth",
+		});
+	});
+
+	test("query prints neon_auth records and sources this release does not know", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["logs", "query", ...PROJECT, ...AUTH_LOGS_BRANCH],
+			{
+				mockDir: "single_org",
+				outputTable: true,
+				stderr: "",
+			},
+		);
+	});
+
+	test("query still rejects a record whose source is not a string", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["logs", "query", ...PROJECT, ...BAD_SOURCE_BRANCH],
+			{
+				mockDir: "single_org",
+				output: "json",
+				code: 1,
+				stderr: "ERROR: Neon returned an invalid logs query response; expected logs[] and is_truncated.",
+			},
+		);
 	});
 
 	test("query cursor guidance syntax preserves leading shell metacharacters", async ({
@@ -647,6 +694,29 @@ describe("logs", () => {
 				source: "function",
 				limit: "10",
 			},
+		});
+	});
+
+	test("field-values sends --source neon_auth", async ({
+		testCliCommand,
+	}) => {
+		const sink = join(TEST_TMP, "field-values-neon-auth.json");
+		process.env.NEONCTL_TEST_LOGS_FIELD_VALUES_SINK = sink;
+
+		await testCliCommand(
+			[
+				"logs",
+				"field-values",
+				"service_name",
+				"--source",
+				"neon_auth",
+				...SCOPE,
+			],
+			{ mockDir: "single_org", snapshot: false },
+		);
+
+		expect(JSON.parse(readFileSync(sink, "utf8")).query).toEqual({
+			source: "neon_auth",
 		});
 	});
 

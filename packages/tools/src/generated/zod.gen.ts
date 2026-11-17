@@ -2450,7 +2450,8 @@ export const zBranchStorageNotEnabled = z.strictObject({
 export const zProjectBranchLogSource = z.enum([
     'function',
     'storage',
-    'pg_endpoint'
+    'pg_endpoint',
+    'neon_auth'
 ]).describe("The Neon service that emitted the log record.");
 
 /**
@@ -2632,7 +2633,8 @@ export const zGrantedCredentialScope = z.enum([
 export const zCreateCredentialRequest = z.strictObject({
     name: z.string().max(256).describe("Free-form customer label for the credential.").optional(),
     scopes: z.array(zCredentialScope).min(1).max(16),
-    principal_type: z.enum(['user']).describe("Principal type for the credential.")
+    principal_type: z.enum(['user']).describe("Principal type for the credential."),
+    expires_at: z.iso.datetime().describe("When the credential stops working.").optional()
 });
 
 export const zCreateCredentialResponse = z.strictObject({
@@ -4029,7 +4031,8 @@ export const zListProjectBranchLogFieldValuesQuery = z.strictObject({
     source: z.enum([
         'function',
         'storage',
-        'pg_endpoint'
+        'pg_endpoint',
+        'neon_auth'
     ]).describe("Only consider records emitted by this Neon service.").optional(),
     limit: z.int().gte(1).lte(1000).describe("Maximum number of distinct values to return.").optional()
 });

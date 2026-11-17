@@ -9274,7 +9274,7 @@
             ],
             "post": {
                 "summary": "Query branch logs",
-                "description": "Returns logs emitted by services running on the specified branch,\nordered by timestamp according to `sort_order`.\n\nAll supplied filters are combined with `AND`: a record is returned only\nwhen it matches every filter. `minimum_severity` and `severity_text` are\nindependent filters, so setting both requires a record to clear the\nseverity floor *and* match the exact severity text.\n\nSupply `logql` instead of the structured filters to run a raw LogQL\nexpression. Combining it with any structured filter is rejected rather\nthan silently ignored; `limit`, `sort_order`, and the time window still\napply, because those bound the query rather than form part of the\nexpression.\n\nGive the window either as `since` \u2014 a duration ending at `end_time`, or\nat the current time when `end_time` is omitted \u2014 or as an explicit\n`start_time`. Supplying both is rejected.\n\nA single response holds at most 1,000 records. When `is_truncated` is\n`true`, pass the returned `next_cursor` back as `cursor` to fetch the\nnext page, repeating the time range and every filter unchanged.\n\nIf no time range is supplied, the query covers the previous hour. The\nmaximum supported time range is seven days. `end_time` is exclusive.\n\n**Note**: This endpoint is currently in Private Beta.\n",
+                "description": "Returns logs emitted by services running on the specified branch,\nordered by timestamp according to `sort_order`.\n\nAll supplied filters are combined with `AND`: a record is returned only\nwhen it matches every filter. `minimum_severity` and `severity_text` are\nindependent filters, so setting both requires a record to clear the\nseverity floor *and* match the exact severity text.\n\nSupply `logql` instead of the structured filters to run a raw LogQL\nexpression. Combining it with any structured filter is rejected rather\nthan silently ignored; `limit`, `sort_order`, and the time window still\napply, because those bound the query rather than form part of the\nexpression.\n\n`source=neon_auth` returns a 404 `telemetry_not_enabled` response when\nNeon Auth logs are not enabled for this project.\n\nGive the window either as `since` \u2014 a duration ending at `end_time`, or\nat the current time when `end_time` is omitted \u2014 or as an explicit\n`start_time`. Supplying both is rejected.\n\nA single response holds at most 1,000 records. When `is_truncated` is\n`true`, pass the returned `next_cursor` back as `cursor` to fetch the\nnext page, repeating the time range and every filter unchanged.\n\nIf no time range is supplied, the query covers the previous hour. The\nmaximum supported time range is seven days. `end_time` is exclusive.\n\n**Note**: This endpoint is currently in Private Beta.\n",
                 "tags": [
                     "Logs"
                 ],
@@ -9455,7 +9455,7 @@
                     },
                     {
                         "name": "source",
-                        "description": "Only consider records emitted by this Neon service.",
+                        "description": "Only consider records emitted by this Neon service. `neon_auth` returns\na 404 `telemetry_not_enabled` response when Neon Auth logs are not enabled\nfor this project.\n",
                         "in": "query",
                         "schema": {
                             "$ref": "#/components/schemas/ProjectBranchLogSource"
@@ -18027,7 +18027,8 @@
                 "enum": [
                     "function",
                     "storage",
-                    "pg_endpoint"
+                    "pg_endpoint",
+                    "neon_auth"
                 ]
             },
             "ProjectBranchLogSeverity": {
@@ -18536,6 +18537,11 @@
                             "user"
                         ],
                         "description": "Principal type for the credential. Only `user` is customer-managed\nand accepted here. `function` and `system` credentials are\nplatform-internal (e.g. function-serve auto-mint, presign signer)\nand are never issued through the customer-facing API.\n"
+                    },
+                    "expires_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "When the credential stops working. Omit it for a credential that\ndoesn't expire. Must be at least 1 minute and at most 365 days from\nnow. Rotating the credential keeps the same expiry, and an expired\ncredential can't be rotated.\n"
                     }
                 }
             },

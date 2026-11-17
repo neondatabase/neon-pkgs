@@ -554,7 +554,7 @@ export const CredentialScope = z.string();
 
 export const GrantedCredentialScope = z.string();
 
-export const CreateCredentialRequest = z.looseObject({ name: z.string().nullish(), scopes: z.array(CredentialScope), principal_type: z.string() });
+export const CreateCredentialRequest = z.looseObject({ name: z.string().nullish(), scopes: z.array(CredentialScope), principal_type: z.string(), expires_at: z.string().nullish() });
 
 export const CreateCredentialResponse = z.looseObject({ token_id: z.string(), token_id_short: z.string(), name: z.string().nullish(), api_token: z.string(), s3_secret_access_key: z.string(), scopes: z.array(GrantedCredentialScope), branch_id: z.string(), created_at: z.string(), expires_at: z.string().nullish() });
 

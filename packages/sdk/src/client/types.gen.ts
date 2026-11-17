@@ -4354,7 +4354,7 @@ export type BranchStorageNotEnabled = {
 /**
  * The Neon service that emitted the log record.
  */
-export type ProjectBranchLogSource = 'function' | 'storage' | 'pg_endpoint';
+export type ProjectBranchLogSource = 'function' | 'storage' | 'pg_endpoint' | 'neon_auth';
 
 /**
  * An OpenTelemetry severity level. A minimum severity includes every
@@ -4767,6 +4767,14 @@ export type CreateCredentialRequest = {
      *
      */
     principal_type: 'user';
+    /**
+     * When the credential stops working. Omit it for a credential that
+     * doesn't expire. Must be at least 1 minute and at most 365 days from
+     * now. Rotating the credential keeps the same expiry, and an expired
+     * credential can't be rotated.
+     *
+     */
+    expires_at?: string;
 };
 
 export type CreateCredentialResponse = {
@@ -14028,7 +14036,10 @@ export type ListProjectBranchLogFieldValuesData = {
          */
         end_time?: string;
         /**
-         * Only consider records emitted by this Neon service.
+         * Only consider records emitted by this Neon service. `neon_auth` returns
+         * a 404 `telemetry_not_enabled` response when Neon Auth logs are not enabled
+         * for this project.
+         *
          */
         source?: ProjectBranchLogSource;
         /**

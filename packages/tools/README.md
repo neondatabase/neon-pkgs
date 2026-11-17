@@ -534,7 +534,7 @@ const tools = createNeonTools({
 registerNeonTools(server, tools);
 ```
 
-`registerNeonTools` publishes that catalog. MCP 2 `inputSchema` is JSON Schema without `$schema`. Generated fields have types, enums, `required`, and constraints, and no OpenAPI property docs. Fields this package described with `.describe()` (`pooled`, `finalize`, `zip`) keep that copy.
+`registerNeonTools` publishes that catalog. MCP 2 `inputSchema` is JSON Schema without `$schema`. Generated fields have types, enums, `required`, and constraints, and no OpenAPI property docs. Date-time fields publish `format: "date-time"` with `pattern: "Z$"` in place of Zod's full ISO pattern; `validate` and execution still check the full format. Fields this package described with `.describe()` (`pooled`, `finalize`, `zip`) keep that copy.
 
 Every tool also publishes an `outputSchema` for its `structuredContent`, `{ data }`:
 
@@ -591,6 +591,8 @@ const inputSchema = compactJsonSchema(
 	z.toJSONSchema(tool.inputSchema, { io: "input" }),
 );
 ```
+
+That keeps Zod's full date-time patterns. `toMcpInputSchema(tool.inputSchema)` from `@neon/tools/mcp` returns the Standard Schema `registerNeonTools` registers, with `pattern: "Z$"` in its JSON Schema.
 
 For a remote MCP server that already authenticated the client, omit `apiKey` at construction. `registerNeonTools` sends `authInfo.token` as the Bearer credential: MCP 2.x `http.authInfo.token`, MCP 1.x `authInfo.token`. The host must put a Neon API key or Neon OAuth access token there. A present `authInfo` with an empty token is an error, not a fall back to a constructor key.
 
