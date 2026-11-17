@@ -326,7 +326,10 @@ export const scaffoldFromTemplate = async (
 		installed = (
 			await (options.run ?? runCommandWithDetail)(
 				pm,
-				installArgs(pm, dependencies, { exact: true }),
+				installArgs(pm, dependencies, {
+					exact: true,
+					dir: projectRoot,
+				}),
 				projectRoot,
 			)
 		).ok;

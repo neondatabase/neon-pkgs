@@ -27,7 +27,7 @@
  * emits as agent JSON, or hands to {@link runCommand} comes from the formatters here.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import which from "which";
@@ -235,8 +235,42 @@ export const recommendedCliUpgradeCommand = (
 	return method === undefined ? undefined : CLI_UPGRADE_COMMANDS[method];
 };
 
-/** Where an added package lands in `package.json`. */
-export type AddOptions = { dev?: boolean; exact?: boolean };
+/**
+ * Where an added package lands in `package.json`. `dir` is the directory it is
+ * added to; pass it whenever that can be a monorepo root.
+ */
+export type AddOptions = { dev?: boolean; exact?: boolean; dir?: string };
+
+const isYarnWorkspaceRoot = (dir: string): boolean => {
+	try {
+		const manifest: unknown = JSON.parse(
+			readFileSync(join(dir, "package.json"), "utf8"),
+		);
+		return (
+			typeof manifest === "object" &&
+			manifest !== null &&
+			"workspaces" in manifest &&
+			manifest.workspaces !== undefined
+		);
+	} catch {
+		return false;
+	}
+};
+
+/**
+ * The flag that lets `pm` add to the workspace root at `dir`, or nothing when
+ * `dir` is not one. pnpm 9 and early pnpm 10 (ERR_PNPM_ADDING_TO_ROOT) and
+ * Yarn Classic refuse to add there without it; Yarn Berry has no such flag.
+ */
+const workspaceRootFlag = (pm: PackageManager, dir: string): string[] => {
+	if (pm === "pnpm") {
+		return existsSync(join(dir, "pnpm-workspace.yaml")) ? ["-w"] : [];
+	}
+	if (pm === "yarn" && isYarnWorkspaceRoot(dir) && yarnMajor(dir) === 1) {
+		return ["-W"];
+	}
+	return [];
+};
 
 /**
  * The argv for an install with `pm`: every dependency in the manifest when
@@ -255,6 +289,9 @@ export const installArgs = (
 	packages?.length
 		? [
 				pm === "npm" ? "install" : "add",
+				...(options?.dir === undefined
+					? []
+					: workspaceRootFlag(pm, options.dir)),
 				// All four accept -D for devDependencies, bun included.
 				...(options?.dev ? ["-D"] : []),
 				...(options?.exact ? ["-E"] : []),
@@ -263,11 +300,14 @@ export const installArgs = (
 		: ["install"];
 
 /**
- * yarn's major version, or undefined when it can't be read. Only consulted on
- * the global-install path, which already spawns.
+ * yarn's major version in `cwd`, or undefined when it can't be read. A project
+ * can pin its own yarn, so ask from the directory being installed into. Only
+ * consulted for a global install with yarn and for an add at a yarn workspace
+ * root, so it spawns nothing for any other manager or directory.
  */
-const yarnMajor = (): number | undefined => {
+const yarnMajor = (cwd?: string): number | undefined => {
 	const result = spawnSync("yarn", ["--version"], {
+		...(cwd === undefined ? {} : { cwd }),
 		encoding: "utf8",
 		timeout: 5000,
 		// yarn ships as a .cmd shim on Windows, which needs a shell.
@@ -317,6 +357,26 @@ export const globalInstallCommand = (
 	return usable === "npm"
 		? { command: "npm", args: ["install", "-g", pkg] }
 		: { command: usable, args: ["add", "-g", pkg] };
+};
+
+/**
+ * The error for `npx` missing from PATH while `command` needs it to run `tool`.
+ *
+ * Node.js is running this CLI, so what is missing is npm, which provides npx.
+ * Node.js managed by pnpm, or packaged by a Linux distribution, can come
+ * without it. Keep "needs npx (Node.js)": `errors.ts` classifies it as
+ * NPX_NOT_FOUND, and the skills and plugins commands print it without a retry
+ * line.
+ */
+export const missingNpxMessage = (command: string, tool: string): string => {
+	const install = globalInstallCommand(
+		resolveInvokingPackageManager(),
+		"npm",
+	);
+	const fix = install
+		? `Install npm, which provides npx, with \`${install.command} ${install.args.join(" ")}\``
+		: "Install npm, which provides npx (it comes with Node.js from nodejs.org)";
+	return `${command} needs npx (Node.js) to run the ${tool}, but npx is not on PATH. ${fix}, then retry.`;
 };
 
 /**

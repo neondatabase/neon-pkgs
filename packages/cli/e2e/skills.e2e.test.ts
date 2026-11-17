@@ -143,7 +143,7 @@ describe("outdated skills notice", () => {
 				? JSON.parse(readFileSync(cachePath, "utf8")).folders[KEY]
 				: undefined;
 		for (let i = 0; i < 60; i += 1) {
-			if (folder()?.content && !folder()?.pending) break;
+			if (folder()?.contentV2 && !folder()?.pending) break;
 			await sleep(500);
 		}
 		return folder();
@@ -166,6 +166,7 @@ describe("outdated skills notice", () => {
 		expect(await checkedFolder(config)).toMatchObject({
 			tree: expect.stringMatching(/^[0-9a-f]{40}$/),
 			content: expect.stringMatching(/^[0-9a-f]{64}$/),
+			contentV2: expect.stringMatching(/^[0-9a-f]{64}$/),
 		});
 
 		const second = await neon(["profile", "list"], false);

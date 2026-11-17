@@ -38,7 +38,8 @@ export const neonSkillsUpdateCommand = (scope: SkillsScope): string =>
 
 /**
  * A Neon skill as a skills CLI lock file records it. `hash` is the git tree SHA of the skill
- * folder (`tree`) or a SHA-256 of its files (`content`).
+ * folder (`tree`) or a SHA-256 of its files (`content`), in either digest the skills CLI has
+ * written. An empty project `hash` is one the skills CLI could not migrate and will reinstall.
  */
 export type LockedSkill = {
 	scope: SkillsScope;
@@ -97,7 +98,7 @@ export const parseSkillsLock = (
 			!NEON_SOURCES.has(source) ||
 			typeof skillPath !== "string" ||
 			typeof hash !== "string" ||
-			hash === ""
+			(hash === "" && scope === "global")
 		) {
 			continue;
 		}
@@ -170,6 +171,8 @@ export type RemoteFolder = {
 	content?: string;
 	/** The content hash of the folder as a `core.autocrlf=true` checkout writes it. */
 	contentCrlf?: string;
+	/** The folder's {@link skillContentHashV2}. */
+	contentV2?: string;
 	missing?: true;
 	pending?: true;
 };
@@ -201,20 +204,20 @@ export const skillStatus = (
 		if (remote?.tree === undefined) return undefined;
 		return remote.tree === skill.hash ? "up to date" : "outdated";
 	}
-	if (remote?.content === undefined) return undefined;
-	if (skill.hash === remote.content) return "up to date";
-	// A cache written before `contentCrlf` existed cannot rule out an autocrlf checkout.
-	if (remote.contentCrlf === undefined) return undefined;
-	return skill.hash === remote.contentCrlf ? "up to date" : "outdated";
+	// A content hash can be any of these, so "outdated" waits until a cache has all three.
+	const digests = [remote?.content, remote?.contentCrlf, remote?.contentV2];
+	if (digests.includes(skill.hash)) return "up to date";
+	return digests.includes(undefined) ? undefined : "outdated";
 };
 
 const parseRemoteFolder = (value: unknown): RemoteFolder | undefined => {
 	if (!isRecord(value)) return undefined;
-	const { tree, content, contentCrlf, missing, pending } = value;
+	const { tree, content, contentCrlf, contentV2, missing, pending } = value;
 	if (
 		(tree !== undefined && typeof tree !== "string") ||
 		(content !== undefined && typeof content !== "string") ||
 		(contentCrlf !== undefined && typeof contentCrlf !== "string") ||
+		(contentV2 !== undefined && typeof contentV2 !== "string") ||
 		(missing !== undefined && missing !== true) ||
 		(pending !== undefined && pending !== true)
 	) {
@@ -224,6 +227,7 @@ const parseRemoteFolder = (value: unknown): RemoteFolder | undefined => {
 		...(tree === undefined ? {} : { tree }),
 		...(content === undefined ? {} : { content }),
 		...(contentCrlf === undefined ? {} : { contentCrlf }),
+		...(contentV2 === undefined ? {} : { contentV2 }),
 		...(missing === undefined ? {} : { missing }),
 		...(pending === undefined ? {} : { pending }),
 	};
@@ -274,8 +278,8 @@ export const skillsCheckCachePath = (configDir: string): string =>
 	join(configDir, CACHE_FILE);
 
 /**
- * The digest the skills CLI writes to `computedHash`: every file's folder-relative path and
- * then its bytes, in `localeCompare` order of path.
+ * The digest skills CLI releases before 1.8 wrote to `computedHash` (lock version 1): every
+ * file's folder-relative path and then its bytes, in `localeCompare` order of path.
  */
 export const skillContentHash = (
 	files: readonly { path: string; bytes: Uint8Array }[],
@@ -292,6 +296,67 @@ export const skillContentHash = (
 
 const LF = 0x0a;
 const CR = 0x0d;
+
+/** skills 1.8 turns CRLF into LF in any file that has a CRLF and no NUL before hashing it. */
+const normalizeLineEndings = (bytes: Uint8Array): Uint8Array => {
+	if (bytes.includes(0)) return bytes;
+	const crlf = bytes.filter(
+		(byte, at) => byte === CR && bytes[at + 1] === LF,
+	).length;
+	if (crlf === 0) return bytes;
+	const out = new Uint8Array(bytes.length - crlf);
+	let at = 0;
+	for (let i = 0; i < bytes.length; i += 1) {
+		if (bytes[i] === CR && bytes[i + 1] === LF) continue;
+		out[at++] = bytes[i] as number;
+	}
+	return out;
+};
+
+const V2_EXCLUDED_FILES: ReadonlySet<string> = new Set(["metadata.json"]);
+const V2_EXCLUDED_DIRS: ReadonlySet<string> = new Set([
+	".git",
+	"__pycache__",
+	"__pypackages__",
+]);
+
+/** Whether the skills 1.8 digest leaves out the file at this folder-relative path. */
+const excludedFromV2 = (path: string): boolean => {
+	const parts = path.split(/[\\/]/).filter(Boolean);
+	return parts.some(
+		(part, at) =>
+			V2_EXCLUDED_FILES.has(part) ||
+			(at < parts.length - 1 && V2_EXCLUDED_DIRS.has(part)),
+	);
+};
+
+/**
+ * The digest skills 1.8 and later write to `computedHash` (lock version 2), and to the global
+ * lock when it has no tree SHA: per file in byte order of path, the path, its length, and its
+ * line-ending-normalized bytes. A symlink counts as a file holding its link text, as
+ * `skills add` records it; `skills update` follows the link instead, so a skill folder with a
+ * symlink in it would not match after an update.
+ */
+export const skillContentHashV2 = (
+	files: readonly { path: string; bytes: Uint8Array }[],
+): string => {
+	const entries = files
+		.filter((file) => !excludedFromV2(file.path))
+		.map((file) => ({
+			path: Buffer.from(file.path.replace(/\\/g, "/"), "utf8"),
+			bytes: normalizeLineEndings(file.bytes),
+		}))
+		.sort((a, b) => Buffer.compare(a.path, b.path));
+	const hash = createHash("sha256");
+	for (const { path, bytes } of entries) {
+		hash.update(path);
+		hash.update("\0");
+		hash.update(String(bytes.length));
+		hash.update("\0");
+		hash.update(bytes);
+	}
+	return hash.digest("hex");
+};
 /** Control bytes Git counts as printable text: backspace, tab, form feed, escape. */
 const PRINTABLE_CONTROLS: ReadonlySet<number> = new Set([
 	0x08, 0x09, 0x0c, 0x1b,
@@ -381,25 +446,25 @@ const fetchTree = async (
 	return body.tree.filter(isTreeEntry);
 };
 
-/** The files the skills CLI hashes: regular files, outside `.git` and `node_modules`. */
-const folderFiles = (tree: readonly TreeEntry[], folder: string) =>
-	tree.filter((entry) => {
-		if (entry.type !== "blob" || entry.mode === "120000") return false;
-		if (!entry.path.startsWith(`${folder}/`)) return false;
-		const dirs = entry.path
-			.slice(folder.length + 1)
-			.split("/")
-			.slice(0, -1);
-		return !dirs.includes(".git") && !dirs.includes("node_modules");
-	});
+const SYMLINK_MODE = "120000";
+
+/** The files the version 1 digest covers: regular files, outside `.git` and `node_modules`. */
+const inV1 = (entry: TreeEntry, path: string): boolean => {
+	if (entry.mode === SYMLINK_MODE) return false;
+	const dirs = path.split("/").slice(0, -1);
+	return !dirs.includes(".git") && !dirs.includes("node_modules");
+};
 
 const fetchContentHashes = async (
 	source: string,
 	folder: string,
 	tree: readonly TreeEntry[],
-): Promise<{ content: string; contentCrlf: string }> => {
+): Promise<{ content: string; contentCrlf: string; contentV2: string }> => {
+	const blobs = tree.filter(
+		(entry) => entry.type === "blob" && entry.path.startsWith(`${folder}/`),
+	);
 	const files = await Promise.all(
-		folderFiles(tree, folder).map(async (entry) => {
+		blobs.map(async (entry) => {
 			const path = entry.path
 				.split("/")
 				.map(encodeURIComponent)
@@ -417,17 +482,23 @@ const fetchContentHashes = async (
 			if (gitBlobSha(bytes) !== entry.sha) {
 				throw new Error(`${source} changed during the check. Retry.`);
 			}
-			return { path: entry.path.slice(folder.length + 1), bytes };
+			return {
+				entry,
+				path: entry.path.slice(folder.length + 1),
+				bytes,
+			};
 		}),
 	);
+	const v1 = files.filter((file) => inV1(file.entry, file.path));
 	return {
-		content: skillContentHash(files),
+		content: skillContentHash(v1),
 		contentCrlf: skillContentHash(
-			files.map((file) => ({
+			v1.map((file) => ({
 				...file,
 				bytes: autocrlfCheckout(file.bytes),
 			})),
 		),
+		contentV2: skillContentHashV2(files),
 	};
 };
 
@@ -505,8 +576,13 @@ export const refreshSkillsCheckCache = async ({
 			let hashes =
 				prior?.tree === node.sha &&
 				prior.content !== undefined &&
-				prior.contentCrlf !== undefined
-					? { content: prior.content, contentCrlf: prior.contentCrlf }
+				prior.contentCrlf !== undefined &&
+				prior.contentV2 !== undefined
+					? {
+							content: prior.content,
+							contentCrlf: prior.contentCrlf,
+							contentV2: prior.contentV2,
+						}
 					: undefined;
 			if (request.content && hashes === undefined) {
 				hashes = await fetchContentHashes(source, request.folder, tree);

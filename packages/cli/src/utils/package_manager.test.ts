@@ -18,6 +18,7 @@ import {
 	globalInstallCommand,
 	inferPackageManager,
 	installFailureDetail,
+	missingNpxMessage,
 	type PackageManager,
 	resolveInvokingPackageManager,
 	resolvePackageManager,
@@ -495,6 +496,133 @@ describe("formatInstallCommand", () => {
 	it("ignores the dev flag when installing the whole manifest", () => {
 		expect(formatInstallCommand("pnpm", [], { dev: true })).toBe(
 			"pnpm install",
+		);
+	});
+});
+
+describe("adding to a workspace root", () => {
+	const originalPath = process.env.PATH;
+	let root: string;
+	let bin: string;
+
+	const stub = (name: string, output: string) =>
+		writeFileSync(join(bin, name), `#!/bin/sh\necho "${output}"\n`, {
+			mode: 0o755,
+		});
+	const add = (pm: PackageManager, dir = root) =>
+		formatInstallCommand(pm, ["@neon/config", "@neon/env"], { dir });
+
+	beforeEach(() => {
+		root = mkdtempSync(join(tmpdir(), "neonctl-pm-workspace-"));
+		bin = mkdtempSync(join(tmpdir(), "neonctl-pm-workspace-bin-"));
+		process.env.PATH = bin;
+	});
+
+	afterEach(() => {
+		process.env.PATH = originalPath;
+		rmSync(root, { recursive: true, force: true });
+		rmSync(bin, { recursive: true, force: true });
+	});
+
+	it("passes -w to pnpm at a pnpm workspace root", () => {
+		writeFileSync(
+			join(root, "pnpm-workspace.yaml"),
+			"packages:\n  - apps/*\n",
+		);
+		expect(add("pnpm")).toBe("pnpm add -w @neon/config @neon/env");
+		expect(
+			formatInstallCommand("pnpm", ["mailer-sdk@1.2.3"], {
+				exact: true,
+				dir: root,
+			}),
+		).toBe("pnpm add -w -E mailer-sdk@1.2.3");
+	});
+
+	it("leaves a pnpm workspace package, a plain project, and whole-manifest installs alone", () => {
+		writeFileSync(
+			join(root, "pnpm-workspace.yaml"),
+			"packages:\n  - apps/*\n",
+		);
+		const app = join(root, "apps", "web");
+		mkdirSync(app, { recursive: true });
+		expect(add("pnpm", app)).toBe("pnpm add @neon/config @neon/env");
+		expect(formatInstallCommand("pnpm", [], { dir: root })).toBe(
+			"pnpm install",
+		);
+		rmSync(join(root, "pnpm-workspace.yaml"));
+		expect(add("pnpm")).toBe("pnpm add @neon/config @neon/env");
+	});
+
+	it("passes -W to Yarn Classic at a yarn workspace root", () => {
+		writeFileSync(
+			join(root, "package.json"),
+			JSON.stringify({ private: true, workspaces: ["apps/*"] }),
+		);
+		stub("yarn", "1.22.22");
+		expect(add("yarn")).toBe("yarn add -W @neon/config @neon/env");
+	});
+
+	it("adds no flag for Yarn Berry, or outside a yarn workspace root", () => {
+		writeFileSync(
+			join(root, "package.json"),
+			JSON.stringify({ private: true, workspaces: ["apps/*"] }),
+		);
+		stub("yarn", "4.1.0");
+		expect(add("yarn")).toBe("yarn add @neon/config @neon/env");
+		stub("yarn", "1.22.22");
+		writeFileSync(
+			join(root, "package.json"),
+			JSON.stringify({ private: true }),
+		);
+		expect(add("yarn")).toBe("yarn add @neon/config @neon/env");
+	});
+
+	it.each([
+		["npm", "npm install @neon/config @neon/env"],
+		["bun", "bun add @neon/config @neon/env"],
+	] as const)("adds no flag for %s, which adds to a root as asked", (pm, expected) => {
+		writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
+		writeFileSync(
+			join(root, "package.json"),
+			JSON.stringify({ private: true, workspaces: ["apps/*"] }),
+		);
+		expect(add(pm)).toBe(expected);
+	});
+});
+
+describe("missingNpxMessage", () => {
+	const originalPath = process.env.PATH;
+	const originalUserAgent = process.env.npm_config_user_agent;
+	let bin: string;
+
+	beforeEach(() => {
+		bin = mkdtempSync(join(tmpdir(), "neonctl-pm-npx-"));
+		process.env.PATH = bin;
+		delete process.env.npm_config_user_agent;
+	});
+
+	afterEach(() => {
+		process.env.PATH = originalPath;
+		if (originalUserAgent === undefined) {
+			delete process.env.npm_config_user_agent;
+		} else {
+			process.env.npm_config_user_agent = originalUserAgent;
+		}
+		rmSync(bin, { recursive: true, force: true });
+	});
+
+	it("names the global install that brings npx back", () => {
+		writeFileSync(join(bin, "pnpm"), "#!/bin/sh\nexit 0\n", {
+			mode: 0o755,
+		});
+		expect(missingNpxMessage("neon plugins", "plugins CLI")).toBe(
+			"neon plugins needs npx (Node.js) to run the plugins CLI, but npx is not on PATH. Install npm, which provides npx, with `pnpm add -g npm`, then retry.",
+		);
+	});
+
+	it("points at the Node.js installer when nothing can install npm", () => {
+		expect(missingNpxMessage("neon skills", "skills CLI")).toBe(
+			"neon skills needs npx (Node.js) to run the skills CLI, but npx is not on PATH. Install npm, which provides npx (it comes with Node.js from nodejs.org), then retry.",
 		);
 	});
 });

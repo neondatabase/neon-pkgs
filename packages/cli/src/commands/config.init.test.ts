@@ -120,6 +120,34 @@ describe("config init", () => {
 		expect(calls[0].args[0]).toBe("add");
 	});
 
+	test("adds to the root of a pnpm workspace with -w, and prints the same command", async () => {
+		writeFileSync(
+			join(workspace, "pnpm-workspace.yaml"),
+			"packages:\n  - apps/*\n",
+		);
+		writeFileSync(join(workspace, "pnpm-lock.yaml"), "");
+		const calls: { cmd: string; args: string[] }[] = [];
+
+		const failed = await initCmd({
+			cwd: workspace,
+			install: true,
+			requireInstall: true,
+			run: (cmd, args) => {
+				calls.push({ cmd, args });
+				return Promise.resolve({ ok: false, detail: "exit code 1" });
+			},
+		}).catch((error: unknown) => error);
+
+		expect(calls).toEqual([
+			{ cmd: "pnpm", args: ["add", "-w", "@neon/config", "@neon/env"] },
+		]);
+		expect(failed).toMatchObject({
+			command: expect.stringMatching(
+				/ && pnpm add -w @neon\/config @neon\/env$/,
+			),
+		});
+	});
+
 	test("only installs the packages that aren't already declared", async () => {
 		writeFileSync(
 			join(workspace, "package.json"),
