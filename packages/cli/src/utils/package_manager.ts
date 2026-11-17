@@ -27,7 +27,7 @@
  * emits as agent JSON, or hands to {@link runCommand} comes from the formatters here.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import which from "which";
@@ -235,8 +235,64 @@ export const recommendedCliUpgradeCommand = (
 	return method === undefined ? undefined : CLI_UPGRADE_COMMANDS[method];
 };
 
-/** Where an added package lands in `package.json`. */
-export type AddOptions = { dev?: boolean; exact?: boolean };
+/**
+ * Where an added package lands in `package.json`. `dir` is the directory it is
+ * added to; pass it whenever that can be a monorepo root.
+ */
+export type AddOptions = { dev?: boolean; exact?: boolean; dir?: string };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null;
+
+const readManifest = (dir: string): Record<string, unknown> | undefined => {
+	try {
+		const manifest: unknown = JSON.parse(
+			readFileSync(join(dir, "package.json"), "utf8"),
+		);
+		return isRecord(manifest) ? manifest : undefined;
+	} catch {
+		return undefined;
+	}
+};
+
+/**
+ * Whether the Yarn workspace root at `dir` uses Yarn Classic, read from its
+ * `packageManager` pin or its `yarn.lock` format. Running `yarn --version`
+ * would answer too, but in a project directory that executes whatever its
+ * `.yarnrc` `yarn-path` names, even on the print-only `--no-install` path.
+ */
+const usesYarnClassic = (
+	dir: string,
+	manifest: Record<string, unknown>,
+): boolean => {
+	const pinned = manifest.packageManager;
+	if (typeof pinned === "string" && pinned.startsWith("yarn@")) {
+		return pinned.startsWith("yarn@1.");
+	}
+	try {
+		return readFileSync(join(dir, "yarn.lock"), "utf8").includes(
+			"# yarn lockfile v1",
+		);
+	} catch {
+		return false;
+	}
+};
+
+/**
+ * The flag that lets `pm` add to the workspace root at `dir`, or nothing when
+ * `dir` is not one. pnpm 9 and early pnpm 10 (ERR_PNPM_ADDING_TO_ROOT) and
+ * Yarn Classic refuse to add there without it; Yarn Berry has no such flag.
+ */
+const workspaceRootFlag = (pm: PackageManager, dir: string): string[] => {
+	if (pm === "pnpm") {
+		return existsSync(join(dir, "pnpm-workspace.yaml")) ? ["-w"] : [];
+	}
+	if (pm !== "yarn") return [];
+	const manifest = readManifest(dir);
+	return manifest?.workspaces !== undefined && usesYarnClassic(dir, manifest)
+		? ["-W"]
+		: [];
+};
 
 /**
  * The argv for an install with `pm`: every dependency in the manifest when
@@ -255,6 +311,9 @@ export const installArgs = (
 	packages?.length
 		? [
 				pm === "npm" ? "install" : "add",
+				...(options?.dir === undefined
+					? []
+					: workspaceRootFlag(pm, options.dir)),
 				// All four accept -D for devDependencies, bun included.
 				...(options?.dev ? ["-D"] : []),
 				...(options?.exact ? ["-E"] : []),
@@ -303,7 +362,14 @@ export const globalInstallCommand = (
 	// Running `yarn --version` at all proves yarn is on PATH.
 	if (pm === "yarn" && yarnMajor() === 1)
 		return { command: "yarn", args: ["global", "add", pkg] };
+	return globalInstallWithoutYarn(pm, pkg);
+};
 
+/** {@link globalInstallCommand} without Yarn Classic, so it never runs yarn. */
+const globalInstallWithoutYarn = (
+	pm: PackageManager,
+	pkg: string,
+): { command: string; args: string[] } | undefined => {
 	// Every branch checks PATH, not just the yarn fallback: `pm` can be the
 	// `?? "npm"` default from resolveInvokingPackageManager, which is a guess
 	// about a machine nobody has looked at yet.
@@ -317,6 +383,27 @@ export const globalInstallCommand = (
 	return usable === "npm"
 		? { command: "npm", args: ["install", "-g", pkg] }
 		: { command: usable, args: ["add", "-g", pkg] };
+};
+
+/**
+ * The error for `npx` missing from PATH while `command` needs it to run `tool`.
+ *
+ * Node.js is running this CLI, so what is missing is npm, which provides npx.
+ * Node.js managed by pnpm, or packaged by a Linux distribution, can come
+ * without it. Keep "needs npx (Node.js)": `errors.ts` classifies it as
+ * NPX_NOT_FOUND, and the skills and plugins commands print it without a retry
+ * line. Never asks yarn for its version: in a project directory that runs the
+ * project's `.yarnrc` `yarn-path`.
+ */
+export const missingNpxMessage = (command: string, tool: string): string => {
+	const install = globalInstallWithoutYarn(
+		resolveInvokingPackageManager(),
+		"npm",
+	);
+	const fix = install
+		? `Install npm, which provides npx, with \`${install.command} ${install.args.join(" ")}\``
+		: "Install npm, which provides npx (it comes with Node.js from nodejs.org)";
+	return `${command} needs npx (Node.js) to run the ${tool}, but npx is not on PATH. ${fix}, then retry.`;
 };
 
 /**

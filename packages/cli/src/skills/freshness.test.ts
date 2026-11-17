@@ -21,6 +21,7 @@ import {
 	readLockedSkills,
 	type SkillsTelemetryScope,
 	skillContentHash,
+	skillContentHashV2,
 	skillStatus,
 	skillsTelemetry,
 } from "./freshness.js";
@@ -30,6 +31,7 @@ const NEW_TREE = "b".repeat(40);
 const CONTENT = "c".repeat(64);
 const NEW_CONTENT = "d".repeat(64);
 const NEW_CONTENT_CRLF = "e".repeat(64);
+const NEW_CONTENT_V2 = "f".repeat(64);
 const KEY = "neondatabase/agent-skills:skills/neon";
 
 const neon = (
@@ -114,6 +116,16 @@ describe("parseSkillsLock", () => {
 			},
 		});
 		expect(parseSkillsLock(raw, "project")).toEqual([]);
+	});
+
+	test("keeps a project skill with an empty hash and drops a global one", () => {
+		const empty = lock({ skillFolderHash: "", computedHash: "" });
+		expect(parseSkillsLock(empty, "project")[0]).toEqual(
+			neon("project", ""),
+		);
+		expect(
+			parseSkillsLock(empty, "global").map((skill) => skill.skill),
+		).toEqual(["neon-auth"]);
 	});
 
 	test("throws on a lock that is not JSON", () => {
@@ -224,6 +236,7 @@ describe("skillStatus", () => {
 				tree: TREE,
 				content: NEW_CONTENT,
 				contentCrlf: NEW_CONTENT_CRLF,
+				contentV2: NEW_CONTENT_V2,
 			}),
 		).toBe("outdated");
 	});
@@ -238,12 +251,45 @@ describe("skillStatus", () => {
 		).toBe("up to date");
 	});
 
+	test("matches a content hash in the skills 1.8 digest", () => {
+		const remote = {
+			tree: TREE,
+			content: NEW_CONTENT,
+			contentCrlf: NEW_CONTENT_CRLF,
+			contentV2: CONTENT,
+		};
+		expect(skillStatus(neon("project", CONTENT), remote)).toBe(
+			"up to date",
+		);
+		expect(skillStatus(neon("global", CONTENT, "content"), remote)).toBe(
+			"up to date",
+		);
+	});
+
+	test("reports a project skill the skills CLI left without a hash as outdated", () => {
+		expect(
+			skillStatus(neon("project", ""), {
+				tree: TREE,
+				content: CONTENT,
+				contentCrlf: CONTENT,
+				contentV2: CONTENT,
+			}),
+		).toBe("outdated");
+	});
+
 	test("has no answer before the needed hash is fetched", () => {
 		expect(
 			skillStatus(neon("project", CONTENT), undefined),
 		).toBeUndefined();
 		expect(
 			skillStatus(neon("project", CONTENT), { tree: TREE }),
+		).toBeUndefined();
+		expect(
+			skillStatus(neon("project", CONTENT), {
+				tree: TREE,
+				content: NEW_CONTENT,
+				contentCrlf: NEW_CONTENT_CRLF,
+			}),
 		).toBeUndefined();
 		expect(skillStatus(neon("global", TREE), { missing: true })).toBe(
 			"not found upstream",
@@ -268,6 +314,7 @@ describe("planSkillsCheck", () => {
 						tree: NEW_TREE,
 						content: NEW_CONTENT,
 						contentCrlf: NEW_CONTENT_CRLF,
+						contentV2: NEW_CONTENT_V2,
 					},
 				}),
 				lockModifiedAt: now - 5000,
@@ -282,6 +329,24 @@ describe("planSkillsCheck", () => {
 			planSkillsCheck({
 				skills: [skill],
 				cache: checked({ [KEY]: { tree: TREE, content: NEW_CONTENT } }),
+				lockModifiedAt: now - 5000,
+				now,
+			}),
+		).toEqual({ outdated: [], toCheck: [skill], refresh: true });
+	});
+
+	test("checks again instead of warning from a cache without the skills 1.8 digest", () => {
+		const skill = neon("project", CONTENT);
+		expect(
+			planSkillsCheck({
+				skills: [skill],
+				cache: checked({
+					[KEY]: {
+						tree: TREE,
+						content: NEW_CONTENT,
+						contentCrlf: NEW_CONTENT_CRLF,
+					},
+				}),
 				lockModifiedAt: now - 5000,
 				now,
 			}),
@@ -409,6 +474,7 @@ describe("skillsTelemetry", () => {
 						tree: TREE,
 						content: NEW_CONTENT,
 						contentCrlf: NEW_CONTENT_CRLF,
+						contentV2: NEW_CONTENT_V2,
 					},
 				}),
 			),
@@ -422,6 +488,30 @@ describe("skillsTelemetry", () => {
 				installed: true,
 				skills: { neon: { hash: CONTENT, outdated: true } },
 			},
+		});
+	});
+
+	test("reports a skills 1.8 hash as current and an empty project hash as outdated", () => {
+		const project = (hash: string) =>
+			skillsTelemetry(
+				{ global: none, project: installed(neon("project", hash)) },
+				cache({
+					[KEY]: {
+						tree: TREE,
+						content: NEW_CONTENT,
+						contentCrlf: NEW_CONTENT_CRLF,
+						contentV2: NEW_CONTENT_V2,
+					},
+				}),
+			).project;
+
+		expect(project(NEW_CONTENT_V2)).toEqual({
+			installed: true,
+			skills: { neon: { hash: NEW_CONTENT_V2, outdated: false } },
+		});
+		expect(project("")).toEqual({
+			installed: true,
+			skills: { neon: { hash: "", outdated: true } },
 		});
 	});
 
@@ -501,6 +591,56 @@ describe("skillContentHash", () => {
 		expect(
 			skillContentHash([{ path: "a.md", bytes: bytes("x") }]),
 		).not.toBe(skillContentHash([{ path: "b.md", bytes: bytes("x") }]));
+	});
+});
+
+describe("skillContentHashV2", () => {
+	const fixture = [
+		{
+			path: "SKILL.md",
+			text: "---\nname: fx\ndescription: fixture\n---\nbody\n",
+		},
+		{ path: "B.md", text: "upper\n" },
+		{ path: "a.md", text: "lower\n" },
+		{ path: "\u00e9.md", text: "accent\n" },
+		{ path: "references/win.md", text: "line one\r\nline two\r\n" },
+		{ path: "lone-cr.txt", text: "a\rb\n" },
+		{ path: "nul-crlf.bin", text: "x\0\r\n" },
+		{ path: "metadata.json/inner.md", text: "{}" },
+		{ path: "sub/metadata.json", text: '{"a":1}\n' },
+		{ path: "__pycache__/x.pyc", text: "pyc" },
+		{ path: "files/__pycache__", text: "file named like a dir\n" },
+		{ path: "node_modules/dep/index.js", text: "module.exports = 1;\n" },
+		{ path: ".git/HEAD", text: "ref: x\n" },
+	].map(({ path, text }) => ({ path, bytes: bytes(text) }));
+
+	test("matches the skills CLI's own digest of the same folder", () => {
+		// computeSkillFolderHash from skills@1.8.1, run over these files on disk.
+		expect(skillContentHashV2(fixture)).toBe(
+			"5dd28eb772acb6ba737096a6f2e28c523d488fe048ab853b950a21c972983fa0",
+		);
+	});
+
+	test("ignores CRLF, file order, and excluded files", () => {
+		const lf = fixture.map((file) =>
+			file.path === "references/win.md"
+				? { ...file, bytes: bytes("line one\nline two\n") }
+				: file,
+		);
+		const reordered = [...lf]
+			.reverse()
+			.filter((file) => file.path !== "sub/metadata.json");
+		expect(skillContentHashV2(reordered)).toBe(skillContentHashV2(fixture));
+	});
+
+	test("reads a backslash in a path as a separator, as the skills CLI does", () => {
+		const backslashed = fixture.map((file) => ({
+			...file,
+			path: file.path.replace(/\//g, "\\"),
+		}));
+		expect(skillContentHashV2(backslashed)).toBe(
+			skillContentHashV2(fixture),
+		);
 	});
 });
 

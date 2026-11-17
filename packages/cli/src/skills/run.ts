@@ -1,6 +1,7 @@
 import { execa } from "execa";
 
 import pkg from "../pkg.js";
+import { missingNpxMessage } from "../utils/package_manager.js";
 
 const TELEMETRY_BLOCKERS = ["DISABLE_TELEMETRY", "DO_NOT_TRACK"] as const;
 
@@ -186,9 +187,7 @@ export const runSkillsCli = async (options: {
 		return { stdout: result.stdout, stderr: result.stderr };
 	} catch (error) {
 		if (isCommandMissing(error)) {
-			throw new Error(
-				"neon skills needs npx (Node.js) to run the skills CLI. Install Node.js, then retry.",
-			);
+			throw new Error(missingNpxMessage("neon skills", "skills CLI"));
 		}
 		if (isExecaFailure(error)) {
 			const childOut = [error.stderr, error.stdout]

@@ -80,11 +80,13 @@ const machine = (): string => {
 				tree: hex("1", 40),
 				content: hex("c", 64),
 				contentCrlf: hex("7", 64),
+				contentV2: hex("8", 64),
 			},
 			[`${SOURCE}:skills/neon-postgres`]: {
 				tree: hex("2", 40),
 				content: hex("e", 64),
 				contentCrlf: hex("f", 64),
+				contentV2: hex("9", 64),
 			},
 		},
 	});

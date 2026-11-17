@@ -15,6 +15,7 @@ import {
 	describe,
 	expect,
 	test,
+	vi,
 } from "vitest";
 import {
 	buildFunctionBundle,
@@ -264,14 +265,22 @@ describe("buildFunctionBundle staging external package files", () => {
 			banner: { js: ESM_CJS_INTEROP_BANNER },
 			logLevel: "silent",
 		});
-		const expected = zipSync(
-			{ "index.mjs": baseline.outputFiles[0].contents },
-			{ level: 6 },
-		);
+		// fflate stamps every entry with Date.now() at two-second resolution, so both archives
+		// must be zipped under the same clock or a boundary between them changes the bytes.
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+		try {
+			const expected = zipSync(
+				{ "index.mjs": baseline.outputFiles[0].contents },
+				{ level: 6 },
+			);
 
-		const bundle = await buildFunctionBundle(fn(source));
-		expect(Object.keys(unzipSync(bundle))).toEqual(["index.mjs"]);
-		expect(sha256(bundle)).toBe(sha256(expected));
+			const bundle = await buildFunctionBundle(fn(source));
+			expect(Object.keys(unzipSync(bundle))).toEqual(["index.mjs"]);
+			expect(sha256(bundle)).toBe(sha256(expected));
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	test("does not install or trace anything when the list is absent", async () => {

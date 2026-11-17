@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { execa } from "execa";
+import { missingNpxMessage } from "../utils/package_manager.js";
 import { pluginsChildEnv } from "./child_env.js";
 
 export const PLUGIN_SOURCE = "neondatabase/agent-skills";
@@ -106,9 +107,7 @@ export const runPluginsCli = async (options: {
 		return { stdout: result.stdout, stderr: result.stderr };
 	} catch (error) {
 		if (isCommandMissing(error)) {
-			throw new Error(
-				"neon plugins needs npx (Node.js) to run the plugins CLI. Install Node.js, then retry.",
-			);
+			throw new Error(missingNpxMessage("neon plugins", "plugins CLI"));
 		}
 		if (isExecaFailure(error)) {
 			throw new Error(

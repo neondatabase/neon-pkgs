@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseEnvPullKeys } from "./env_services.js";
 import { isNetworkError, matchErrorCode } from "./errors.js";
+import { missingNpxMessage } from "./utils/package_manager.js";
 
 describe("matchErrorCode", () => {
 	it("counts --env NEON_FUNCTION_<SLUG>_BASE_URL apart from unknown errors", () => {
@@ -42,10 +43,7 @@ describe("matchErrorCode", () => {
 				"neon skills needs Node.js 22.20.0 or newer to run the skills CLI. This process is Node.js 22.14.0. Upgrade Node.js, then retry.",
 				"NODE_VERSION_UNSUPPORTED",
 			],
-			[
-				"neon plugins needs npx (Node.js) to run the plugins CLI. Install Node.js, then retry.",
-				"NPX_NOT_FOUND",
-			],
+			[missingNpxMessage("neon plugins", "plugins CLI"), "NPX_NOT_FOUND"],
 			[
 				"skills CLI failed:\nFailed to clone https://github.com/neondatabase/agent-skills.git: Error: spawn git ENOENT",
 				"GIT_NOT_FOUND",

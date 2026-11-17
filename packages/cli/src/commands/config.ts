@@ -531,7 +531,10 @@ export const installCommandFrom = (
 	missing: readonly string[],
 	options?: AddOptions,
 ): string => {
-	const command = formatInstallCommand(pm, [...missing], options);
+	const command = formatInstallCommand(pm, [...missing], {
+		...options,
+		dir,
+	});
 	const rel = relative(process.cwd(), dir);
 	if (rel === "") return command;
 	const target = rel.length <= dir.length ? rel : dir;
@@ -559,7 +562,7 @@ export const ensureConfigPackages = async (
 	}
 
 	const pm = props.packageManager ?? resolvePackageManager(cwd);
-	const args = installArgs(pm, missing);
+	const args = installArgs(pm, missing, { dir: cwd });
 	const installHint = installCommandFrom(cwd, pm, missing);
 	if (props.install === false) {
 		if (!props.silent) {
