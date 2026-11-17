@@ -394,7 +394,7 @@ export const operationFactories = {
 	"role_names": zod.zAddProjectJwksBody.shape["role_names"],
 	"skip_role_creation": zod.zAddProjectJwksBody.shape["skip_role_creation"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -1023,7 +1023,7 @@ export const operationFactories = {
 	"skip_auth_schema": zod.zCreateProjectBranchDataApiBody.shape["skip_auth_schema"].optional(),
 	"settings": zod.zCreateProjectBranchDataApiBody.shape["settings"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -5730,7 +5730,7 @@ export const operationFactories = {
 	"branch_id": zod.zUpdateNeonAuthEmailProviderPath.shape["branch_id"].describe("A br-... id, not a name."),
 	"body": zod.zUpdateNeonAuthEmailProviderBody.describe("Email provider configuration for the branch's Neon Auth integration."),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5761,7 +5761,7 @@ export const operationFactories = {
 	"project_id": zod.zUpdateNeonAuthEmailServerPath.shape["project_id"].describe("Project id."),
 	"body": zod.zUpdateNeonAuthEmailServerBody,
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -6073,7 +6073,7 @@ export const operationFactories = {
 	"enabled_events": zod.zUpdateNeonAuthWebhookConfigBody.shape["enabled_events"],
 	"timeout_seconds": zod.zUpdateNeonAuthWebhookConfigBody.shape["timeout_seconds"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "PUT",
