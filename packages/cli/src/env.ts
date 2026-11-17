@@ -17,6 +17,8 @@ export const getTty = () => ({
 	stdout: isatty(1),
 });
 
+export const hasTerminal = (): boolean => isatty(0) || isatty(1) || isatty(2);
+
 type KnownCliAgent =
 	| "claude-code"
 	| "codex"

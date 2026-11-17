@@ -21,6 +21,7 @@ export type ErrorCode =
 	| "NEON_INIT_FAILED"
 	| "NON_INTERACTIVE"
 	| "AUTH_TIMEOUT"
+	| "NOT_SIGNED_IN"
 	| "NODE_VERSION_UNSUPPORTED"
 	| "GIT_NOT_FOUND"
 	| "SKILLS_CLI_FAILED"
@@ -38,6 +39,10 @@ const ERROR_MATCHERS = [
 	[/^Setup did not finish\.$/, "NEON_INIT_FAILED"],
 	[/^No interactive terminal\./, "NON_INTERACTIVE"],
 	[/^Authentication timed out after /, "AUTH_TIMEOUT"],
+	[
+		/^Not signed in: .*no terminal to start a browser sign-in/,
+		"NOT_SIGNED_IN",
+	],
 	[/^neon skills needs Node\.js /, "NODE_VERSION_UNSUPPORTED"],
 	[/needs npx \(Node\.js\)/, "NPX_NOT_FOUND"],
 	[/spawn git ENOENT/, "GIT_NOT_FOUND"],
