@@ -73,6 +73,7 @@ describe("generated operation coverage", () => {
 			"auth.emailProvider.sendTest",
 			"organizations.invitations.create",
 			"organizations.spendingLimit.set",
+			"auth.webhooks.update",
 			"incidents.list",
 			"docs.search",
 			"docs.get",
