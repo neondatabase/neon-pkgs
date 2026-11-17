@@ -213,7 +213,7 @@ export const builder = (argv: yargs.Argv) =>
 							allowed: CLAIMABLE_SERVICES,
 							describe:
 								"Services to request for the claimable project",
-							also: "Postgres is always included. Services unavailable before claim are recorded and reported.",
+							also: "Postgres is always included, and auth and data-api are provisioned when requested. Before a claim, functions, object-storage, and ai-gateway are only recorded and reported in denied_capabilities; nothing is provisioned for them (`neon dev` still runs functions locally). An app that needs them should have a human sign in first (`neon login` or NEON_API_KEY) and create a regular project instead.",
 						}),
 					)
 					.option("region-id", {

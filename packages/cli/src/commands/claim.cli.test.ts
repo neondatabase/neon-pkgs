@@ -100,6 +100,27 @@ const runCli = (
 const reachedClaimableService = (stderr: string) =>
 	stderr.includes(`Could not reach Claimable Neon at ${unreachableOrigin}`);
 
+describe("claim create --help", () => {
+	test("names the services that are not provisioned before a claim", async () => {
+		const { code, stdout } = await runCli(["claim", "create", "--help"]);
+
+		expect(code).toBe(0);
+		const help = stdout.replace(/\s+/g, " ");
+		const service = help.slice(
+			help.indexOf("--service"),
+			help.indexOf("--region-id"),
+		);
+		// The value list names every service, so look only after it.
+		const [, beforeClaim = ""] = service.split("Before a claim");
+		for (const name of ["functions", "object-storage", "ai-gateway"]) {
+			expect(beforeClaim).toContain(name);
+		}
+		expect(beforeClaim).not.toContain("data-api");
+		expect(beforeClaim).toContain("denied_capabilities");
+		expect(beforeClaim).toContain("neon login");
+	});
+});
+
 describe("claim create with ambient credentials", () => {
 	test.each([
 		{ NEON_API_KEY: "napi_ambient" },
