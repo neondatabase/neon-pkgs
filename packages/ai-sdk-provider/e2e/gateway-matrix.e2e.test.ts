@@ -366,14 +366,16 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 		}, 240_000);
 	});
 
-	describe("gpt-oss harmony normalization (#308)", () => {
-		// The gateway returns gpt-oss `message.content` as a harmony parts
-		// array; the provider normalizes it to the OpenAI Chat Completions
-		// contract. Verify text comes through for both generate and stream.
-		it("generateText works and does not throw on the harmony shape", async () => {
+	describe("array content normalization on the chat route", () => {
+		// The gateway returns gemini-4-argon `message.content` as an array of
+		// text parts on every non-streaming response; the provider normalizes
+		// it to the OpenAI Chat Completions contract. Its streamed deltas are
+		// strings, so the streamText case is a sanity check on the same model.
+		// gpt-oss, which this block covered first (#308), returns a string now.
+		it("generateText works and does not throw on the array shape", async () => {
 			const result = await withRateLimitRetry(() =>
 				generateText({
-					model: neon("gpt-oss-120b"),
+					model: neon("gemini-4-argon"),
 					prompt: "Reply with exactly three words.",
 					maxOutputTokens: 512,
 				}),
@@ -381,10 +383,10 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 			expect(result.text.trim().length).toBeGreaterThan(0);
 		}, 180_000);
 
-		it("streamText works without an invalid-JSON error flood", async () => {
+		it("streamText returns text", async () => {
 			const text = await withRateLimitRetry(async () => {
 				const result = streamText({
-					model: neon("gpt-oss-120b"),
+					model: neon("gemini-4-argon"),
 					prompt: "Reply with exactly three words.",
 					maxOutputTokens: 512,
 				});
