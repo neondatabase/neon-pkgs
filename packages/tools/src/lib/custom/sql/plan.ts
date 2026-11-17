@@ -68,12 +68,6 @@ const buffers = (
 	dirtied: numberAt(node, `${prefix} Dirtied Blocks`),
 });
 
-/**
- * Query-level totals from the rows `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`
- * returns: one row whose `QUERY PLAN` column holds the plan document. They come
- * from the root plan node, because a parent node's cost, rows, and buffer
- * counters already include its children.
- */
 const planDocument = (rows: unknown) => {
 	const firstRow = Array.isArray(rows) ? rows[0] : undefined;
 	const documents = isRecord(firstRow) ? firstRow["QUERY PLAN"] : undefined;
@@ -90,6 +84,12 @@ export const hasPlanDocument = (rows: unknown): boolean => {
 	return typeof nodeType === "string" && nodeType !== "";
 };
 
+/**
+ * Query-level totals from the rows `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`
+ * returns: one row whose `QUERY PLAN` column holds the plan document. They come
+ * from the root plan node, because a parent node's cost, rows, and buffer
+ * counters already include its children.
+ */
 export const extractExecutionMetrics = (rows: unknown): QueryMetrics => {
 	const plan = planDocument(rows);
 	if (plan === undefined) {
