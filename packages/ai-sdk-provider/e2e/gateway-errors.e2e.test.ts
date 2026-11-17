@@ -40,7 +40,7 @@ describe(`e2e — Responses error surfacing (${model})`, () => {
 
 		expect(message).not.toBe("Bad Request");
 		expect(message).toContain("service_tier");
-		expect(message).toContain("not supported by Databricks");
+		expect(message).toContain("is not supported");
 	});
 
 	it("surfaces the inner error when one is wrapped as a JSON string", async () => {

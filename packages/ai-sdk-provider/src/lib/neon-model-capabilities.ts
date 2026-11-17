@@ -71,6 +71,7 @@ const GEMINI_NO_PENALTIES = new Set([
 	"gemini-3-7-flash",
 	"gemini-3-8-flash",
 	"gemini-4-argon",
+	"gemini-4-carbon",
 ]);
 
 /** Gemini models that reject `temperature` and `topP` outright. */
@@ -79,6 +80,7 @@ const GEMINI_NO_SAMPLING = new Set([
 	"gemini-3-7-flash",
 	"gemini-3-8-flash",
 	"gemini-4-argon",
+	"gemini-4-carbon",
 ]);
 
 /**
@@ -200,10 +202,16 @@ export function getNeonModelCapabilities(
 		};
 	}
 
-	// Google (Gemini): accepts standard sampling params, and does take
+	// Google (Gemini): accepts standard sampling params, and Gemini 3 takes
 	// `reasoning_effort` — the gateway maps it onto Gemini's thinking config.
 	// Measured on gemini-3-6-flash: `minimal` produces 0 reasoning tokens and
 	// `high` produces 310, against 130 with the field absent.
+	//
+	// That mapping is broken for Gemini 4: `gemini-4-argon` and
+	// `gemini-4-carbon` answer `reasoning_effort` with a 400 (`Unknown name
+	// "reasoning_effort" at 'generation_config'`). It is still forwarded to
+	// them, because dropping it needs a Gemini-specific warning (the
+	// reasoningEffort one points at Claude's effort option).
 	//
 	// Newer Gemini models are stricter, and not in a way the id predicts: the
 	// gateway rejects penalties on `gemini-3-5-flash-lite` while accepting them

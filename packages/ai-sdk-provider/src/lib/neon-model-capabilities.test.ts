@@ -8,6 +8,7 @@ describe("getNeonModelRoute", () => {
 	it("routes Anthropic and OpenAI models to their native endpoints", () => {
 		expect(getNeonModelRoute("claude-opus-4-8")).toBe("anthropic");
 		expect(getNeonModelRoute("claude-haiku-4-5")).toBe("anthropic");
+		expect(getNeonModelRoute("claude-fable-5-2")).toBe("anthropic");
 		expect(getNeonModelRoute("gpt-5")).toBe("openai");
 		expect(getNeonModelRoute("gpt-5-mini")).toBe("openai");
 		expect(getNeonModelRoute("gpt-5-3-codex")).toBe("openai");
@@ -16,6 +17,7 @@ describe("getNeonModelRoute", () => {
 	it("falls back to the unified MLflow endpoint for everything else", () => {
 		// Gemini is routed to MLflow because its native endpoint cannot stream.
 		expect(getNeonModelRoute("gemini-3-flash")).toBe("mlflow");
+		expect(getNeonModelRoute("gemini-4-carbon")).toBe("mlflow");
 		expect(getNeonModelRoute("llama-4-maverick")).toBe("mlflow");
 		expect(getNeonModelRoute("qwen35-122b-a10b")).toBe("mlflow");
 		// gpt-oss is open-weight and served on the unified endpoint, not Responses.
@@ -116,6 +118,8 @@ describe("getNeonModelCapabilities", () => {
 			"claude-opus-5",
 			"claude-sonnet-5",
 			"claude-fable-5",
+			"claude-fable-5-1",
+			"claude-fable-5-2",
 			"claude-haiku-5-5",
 			"claude-sonnet-5-5",
 		]) {
@@ -221,6 +225,7 @@ describe("getNeonModelCapabilities", () => {
 			"gemini-3-7-flash",
 			"gemini-3-8-flash",
 			"gemini-4-argon",
+			"gemini-4-carbon",
 		]) {
 			expect({
 				id,
@@ -245,7 +250,7 @@ describe("getNeonModelCapabilities", () => {
 		}
 	});
 
-	// The gateway maps reasoning_effort onto Gemini's thinking config, so dropping
+	// The gateway maps reasoning_effort onto Gemini 3's thinking config, so dropping
 	// it cost callers control they were being billed for either way.
 	it("forwards reasoningEffort to Gemini", () => {
 		for (const id of ["gemini-3-flash", "gemini-3-6-flash"]) {
@@ -296,6 +301,7 @@ describe("getNeonModelCapabilities", () => {
 			"gemini-3-7-flash",
 			"gemini-3-8-flash",
 			"gemini-4-argon",
+			"gemini-4-carbon",
 		]) {
 			const strict = getNeonModelCapabilities(id);
 			expect({
@@ -359,6 +365,7 @@ describe("getNeonModelCapabilities", () => {
 			"gpt-6-astra",
 			"gemini-3-flash",
 			"gemini-4-argon",
+			"gemini-4-carbon",
 			"llama-4-maverick",
 			"qwen35-122b-a10b",
 		];

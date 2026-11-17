@@ -73,7 +73,7 @@ These rules apply on the Anthropic Messages and Chat Completions routes. The Res
 
 | Models | Dropped |
 | --- | --- |
-| Claude 4.7 and newer (`claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-sonnet-5`, `claude-fable-5`, `claude-fable-5-1`, `claude-haiku-5-5`, `claude-sonnet-5-5`) | `temperature`, `topP` |
+| Claude 4.7 and newer (`claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-sonnet-5`, `claude-fable-5`, `claude-fable-5-1`, `claude-fable-5-2`, `claude-haiku-5-5`, `claude-sonnet-5-5`) | `temperature`, `topP` |
 | All Claude | `frequencyPenalty`, `presencePenalty`, `seed`, `reasoningEffort`, and `topP` when you set both `temperature` and `topP` (Anthropic accepts only one) |
 | `gpt-oss` | `frequencyPenalty`, `presencePenalty`, `seed`, `stopSequences` |
 | Qwen, Gemma | `frequencyPenalty`, `presencePenalty`, `seed` |
@@ -82,7 +82,7 @@ These rules apply on the Anthropic Messages and Chat Completions routes. The Res
 | Meta Llama | `frequencyPenalty`, `presencePenalty`, `seed` |
 | `gemini-3-5-flash-lite` | `frequencyPenalty`, `presencePenalty` |
 | `gemini-3-6-flash` | `temperature`, `topP`, `frequencyPenalty`, `presencePenalty` |
-| `gemini-3-7-flash`, `gemini-3-8-flash`, `gemini-4-argon` | `temperature`, `topP`, `frequencyPenalty`, `presencePenalty` |
+| `gemini-3-7-flash`, `gemini-3-8-flash`, `gemini-4-argon`, `gemini-4-carbon` | `temperature`, `topP`, `frequencyPenalty`, `presencePenalty` |
 | Every other Gemini | nothing |
 | `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-5`, `gpt-5-5-pro`, `gpt-5-6-luna`, `gpt-5-6-sol`, `gpt-5-6-terra`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-6-1-sol` (reported only; Responses strips these upstream) | `temperature`, `topP` |
 
@@ -108,7 +108,7 @@ getNeonModelCapabilities('gpt-6-astra').supportsTemperature; // false
 getNeonModelCapabilities('glm-5-2').supportsPenalties; // false
 ```
 
-**The rules are per model, not per family.** Some Gemini ids reject penalties while their siblings accept them, and `gemini-3-6-flash`, `gemini-3-7-flash`, `gemini-3-8-flash`, and `gemini-4-argon` reject `temperature` and `topP` outright, so reading a row for "Gemini" is not enough; check the id. Every dropped-options table row was measured against the gateway rather than inherited from the upstream provider's own documentation, which disagrees in both directions.
+**The rules are per model, not per family.** Some Gemini ids reject penalties while their siblings accept them, and `gemini-3-6-flash`, `gemini-3-7-flash`, `gemini-3-8-flash`, `gemini-4-argon`, and `gemini-4-carbon` reject `temperature` and `topP` outright, so reading a row for "Gemini" is not enough; check the id. `reasoningEffort` is forwarded to every Gemini id, and the gateway currently answers it with a `400` on `gemini-4-argon` and `gemini-4-carbon`, so leave it unset on those two. Every dropped-options table row was measured against the gateway rather than inherited from the upstream provider's own documentation, which disagrees in both directions.
 
 A model none of these rules match is left untouched, so a brand-new id gets the gateway's own error rather than a guess. That is also why the table can lag: an id added since the last release inherits the permissive default until someone measures it.
 
