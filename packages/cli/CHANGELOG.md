@@ -1,5 +1,18 @@
 # neon
 
+## 9.6.0
+
+### Minor Changes
+
+- 3f196cb: `neon logs query` and `neon logs field-values` accept `--source neon_auth`. `neon logs query` no longer fails a whole page with "Neon returned an invalid logs query response" when a record's `source` is one this release does not list; it prints the record.
+
+### Patch Changes
+
+- Updated dependencies [3f196cb]
+  - @neon/sdk@7.14.0
+  - @neon/config@1.14.2
+  - @neon/config-runtime@1.12.5
+
 ## 9.5.2
 
 ### Patch Changes
