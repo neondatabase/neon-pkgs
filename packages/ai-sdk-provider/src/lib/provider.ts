@@ -215,17 +215,14 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 			url: ({ path }) => `${getHost()}/v1${path}`,
 			headers: getHeaders,
 			// Two wrappers, on disjoint halves of the response: the harmony one
-			// rewrites successful gpt-oss bodies and returns early on any error,
-			// the error one only touches non-2xx bodies. This route emits the
-			// same flat `{ error_code, message }` Databricks envelope as the
-			// Responses route (an out-of-range `temperature`, say), which
-			// `errorStructure` below cannot read on its own.
+			// rewrites successful bodies whose `content` is an array and returns
+			// early on any error, the error one only touches non-2xx bodies. This
+			// route emits the same flat `{ error_code, message }` Databricks
+			// envelope as the Responses route (an out-of-range `temperature`,
+			// say), which `errorStructure` below cannot read on its own.
 			//
-			// TODO(#308): Temporary workaround for gpt-oss. The gateway returns a
-			// non-compliant "harmony" content-array shape; this wrapper normalizes it
-			// to the Chat Completions contract and is a transparent pass-through for
-			// every compliant response. Remove it (and neon-harmony-normalize.ts) once
-			// the gateway returns spec-compliant gpt-oss responses.
+			// The gateway still returns array `content` for some Gemini models on
+			// this route, so the harmony wrapper stays until it no longer does.
 			fetch: wrapFetchWithHarmonyNormalization(
 				wrapFetchWithGatewayErrorNormalization(options.fetch, "openai"),
 			),
