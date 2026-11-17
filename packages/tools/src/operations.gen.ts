@@ -5761,7 +5761,7 @@ export const operationFactories = {
 	"project_id": zod.zUpdateNeonAuthEmailServerPath.shape["project_id"].describe("Project id."),
 	"body": zod.zUpdateNeonAuthEmailServerBody,
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",

@@ -51,6 +51,7 @@ const openWorldOperations = new Set([
 	"sendNeonAuthTestEmail",
 	"setOrganizationSpendingLimit",
 	"updateNeonAuthEmailProvider",
+	"updateNeonAuthEmailServer",
 	"updateNeonAuthWebhookConfig",
 ]);
 
