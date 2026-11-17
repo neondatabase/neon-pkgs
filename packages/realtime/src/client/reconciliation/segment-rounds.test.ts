@@ -746,6 +746,17 @@ describe("segment rounds", () => {
 			).toThrow("outside its scope");
 		});
 
+		it("with a tagged row matched only by a row_key selector", () => {
+			expect(() =>
+				holed().sync("9", {
+					attempt: 2,
+					scope: selected({ row_key: B }),
+					covered: [1, 1],
+					batches: [[tagged(B, "b", T2)]],
+				}),
+			).toThrow("outside its scope");
+		});
+
 		it("returning a row the result shows under a tag outside its scope", () => {
 			const session = new Session();
 			session.subscribe("9");

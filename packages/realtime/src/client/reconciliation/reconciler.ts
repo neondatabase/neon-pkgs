@@ -492,14 +492,13 @@ export class BaselineSyncPublicationReconciler {
 					);
 				}
 			}
-			// A selected round's row belongs by its own tag or its own row key.
+			// A selected round's row belongs by its own tag or, when it has none,
+			// by its own row key: a row_key selector names an untagged row.
 			if (
 				scope &&
-				!(
-					(row.segment_tag !== undefined &&
-						scope.tags.has(row.segment_tag)) ||
-					scope.rowKeys.has(row.row_key)
-				)
+				!(row.segment_tag === undefined
+					? scope.rowKeys.has(row.row_key)
+					: scope.tags.has(row.segment_tag))
 			) {
 				throw new ProtocolError("a round row is outside its scope");
 			}
