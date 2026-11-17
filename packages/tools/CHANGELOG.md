@@ -1,5 +1,18 @@
 # @neon/tools
 
+## 2.17.0
+
+### Minor Changes
+
+- 3f196cb: `credentials.create` takes `expires_at` and sends it to the API; omit it for a credential that never expires. `logs.query` and `logs.fieldValues` accept `source: "neon_auth"`, and their `source` input says it answers `404` `telemetry_not_enabled` while the project's Neon Auth logs are not enabled. `toMcpInputSchema`, and so `registerNeonTools`, now publish `pattern: "Z$"` instead of Zod's 256-character ISO date-time pattern next to `format: "date-time"`, so MCP `tools/list` input schemas change for every date-time input. The server still validates the full date-time format.
+
+### Patch Changes
+
+- 43f2678: In `@neon/tools/effect`, a mistake a tool reports itself, such as a missing doc page or table, a missing extension, or a read-only refusal, keeps the `NeonTools.<id>` span ok instead of failing it.
+- Updated dependencies [3f196cb]
+  - @neon/sdk@7.14.0
+  - @neon/effect@0.5.3
+
 ## 2.16.0
 
 ### Minor Changes
