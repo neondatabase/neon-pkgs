@@ -1325,4 +1325,46 @@ describe("special mappings", () => {
 		const schema = z.toJSONSchema(tool.inputSchema);
 		expect(schema.properties).not.toHaveProperty("hard_delete");
 	});
+
+	test("branches.delete succeeds when cleanup fails after the branch is gone", async () => {
+		const operation = (status: string) => ({
+			id: "op-1",
+			project_id: "p",
+			branch_id: "br",
+			action: "delete_timeline",
+			status,
+			failures_count: 0,
+			created_at: "2026-01-01T00:00:00Z",
+			updated_at: "2026-01-01T00:00:00Z",
+			total_duration_ms: 0,
+		});
+		const requests: Request[] = [];
+		const tool = createNeonTool("branches.delete", {
+			apiKey: "test-key",
+			wait: { pollIntervalMs: 1 },
+			fetch: async (input, init) => {
+				const request = new Request(input, init);
+				requests.push(request);
+				if (request.method === "DELETE") {
+					return jsonResponse({
+						branch: { id: "br" },
+						operations: [operation("running")],
+					});
+				}
+				if (request.url.includes("/operations/")) {
+					return jsonResponse({ operation: operation("failed") });
+				}
+				return jsonResponse({ message: "branch not found" }, 404);
+			},
+		});
+
+		await expect(
+			tool.execute({ project_id: "p", branch_id: "br" }),
+		).resolves.toEqual({ data: null });
+		expect(requests.map((request) => request.method)).toEqual([
+			"DELETE",
+			"GET",
+			"GET",
+		]);
+	});
 });
