@@ -43,11 +43,14 @@ const approvalRequiredReads = new Set([
 // external recipients, pointing Neon at a caller-chosen external endpoint, or
 // creating a resource that can be publicly accessible.
 const openWorldOperations = new Set([
+	"addProjectJWKS",
 	"createOrganizationInvitations",
+	"createProjectBranchDataAPI",
 	"createProjectBranchBucket",
 	"sendNeonAuthEmailProviderTest",
 	"sendNeonAuthTestEmail",
 	"setOrganizationSpendingLimit",
+	"updateNeonAuthEmailProvider",
 	"updateNeonAuthWebhookConfig",
 ]);
 

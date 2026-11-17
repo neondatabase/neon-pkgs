@@ -74,6 +74,8 @@ describe("generated operation coverage", () => {
 			"organizations.invitations.create",
 			"organizations.spendingLimit.set",
 			"auth.webhooks.update",
+			"auth.emailProvider.update",
+			"postgres.dataApi.create",
 			"incidents.list",
 			"docs.search",
 			"docs.get",
