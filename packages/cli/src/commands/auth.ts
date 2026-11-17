@@ -72,7 +72,7 @@ import {
 	readContextFile,
 } from "../context.js";
 import { storeFor } from "../credential_io.js";
-import { isCi } from "../env.js";
+import { getTty, isCi } from "../env.js";
 import { log } from "../log.js";
 import { withExclusiveLock } from "../refresh_lock.js";
 import {
@@ -1004,20 +1004,35 @@ export const ensureAuth = async (
 		return;
 	}
 
+	const state =
+		loaded === null
+			? "has no stored credential"
+			: "holds a session that has expired";
+	const signInHint = `Run \`${getCliName()} login --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.`;
+
 	// `me` is how scripts and agents check who is signed in. Signing in to answer that
 	// changes the answer, and leaves the caller waiting on a browser it may not see.
 	// Signed out is a valid answer, so no ERROR prefix; the non-zero exit keeps
 	// `neon me && …` usable as a check. The handler sees no client and prints nothing.
 	if (props._[0] === "me") {
-		const state =
-			loaded === null
-				? "has no stored credential"
-				: "holds a session that has expired";
 		log.info(
-			`Not signed in: profile "${selection.profile}" ${state}. Run \`${getCliName()} login --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.`,
+			`Not signed in: profile "${selection.profile}" ${state}. ${signInHint}`,
 		);
 		process.exitCode = 1;
 		return;
+	}
+
+	// Agents and scripts run commands with stdin on /dev/null or a pipe, where nobody may be
+	// watching for a browser, so name the sign-in command instead of waiting out the
+	// 60-second timeout. `login` returned above and still opens the browser from there.
+	if (
+		!(props.forceAuth ?? props["force-auth"]) &&
+		!isCi() &&
+		!getTty().stdin
+	) {
+		throw new Error(
+			`Not signed in: profile "${selection.profile}" ${state}, and this shell has no terminal to start a browser sign-in from. ${signInHint}`,
+		);
 	}
 
 	// Use the resolved profile so `NEON_PROFILE` cannot overwrite `DEFAULT`.

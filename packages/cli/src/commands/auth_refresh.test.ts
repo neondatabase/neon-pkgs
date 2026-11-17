@@ -62,7 +62,10 @@ const readStored = (): Record<string, unknown> =>
 
 type RunResult = { code: number; stdout: string; stderr: string };
 
-const runCli = (args: string[] = ["me"]): Promise<RunResult> => {
+const forkCli = (
+	args: string[],
+	env: Record<string, string> = {},
+): ChildProcess => {
 	if (!existsSync(cliEntry())) {
 		throw new Error(
 			`Built CLI missing at ${cliEntry()}. Run pnpm --filter neon build first.`,
@@ -90,11 +93,19 @@ const runCli = (args: string[] = ["me"]): Promise<RunResult> => {
 				HOME: configDir,
 				CI: "true",
 				FORCE_COLOR: "false",
+				...env,
 			},
 		},
 	);
-
 	running.add(child);
+	return child;
+};
+
+const runCli = (
+	args: string[] = ["me"],
+	env: Record<string, string> = {},
+): Promise<RunResult> => {
+	const child = forkCli(args, env);
 
 	let stdout = "";
 	let stderr = "";
@@ -311,11 +322,78 @@ describe("no usable credential", () => {
 		expect(existsSync(credentialsFile())).toBe(true);
 	});
 
-	it("still sends other commands to the sign-in flow", async () => {
+	it("still sends other commands to the sign-in flow in CI", async () => {
 		const result = await runCli(["projects", "list"]);
 
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain("Cannot run interactive auth in CI");
+	});
+});
+
+describe("no usable credential and no terminal, outside CI", () => {
+	// The forked CLI's stdin is a pipe, as in an agent's shell. An empty PATH leaves the
+	// browser opener nothing to launch, so a regression cannot open the developer's browser.
+	const noTerminal = (): Record<string, string> => ({
+		CI: "",
+		NO_UPDATE_NOTIFIER: "1",
+		PATH: join(configDir, "empty-path"),
+	});
+
+	const untilStderr = (child: ChildProcess, text: string): Promise<string> =>
+		new Promise((resolve, reject) => {
+			let stderr = "";
+			const timer = setTimeout(() => {
+				child.kill("SIGKILL");
+				reject(new Error(`stderr never contained ${text}: ${stderr}`));
+			}, 30_000);
+			child.stderr?.on("data", (d: Buffer) => {
+				stderr += d.toString();
+				if (stderr.includes(text)) {
+					clearTimeout(timer);
+					child.kill("SIGKILL");
+					resolve(stderr);
+				}
+			});
+			child.on("close", (code) => {
+				clearTimeout(timer);
+				reject(new Error(`exited ${code} before ${text}: ${stderr}`));
+			});
+		});
+
+	it("fails with a sign-in hint instead of waiting for a browser", async () => {
+		const result = await runCli(["projects", "list"], noTerminal());
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).not.toContain("Awaiting authentication");
+		expect(result.stderr).toContain(
+			'Not signed in: profile "DEFAULT" has no stored credential, and this shell has no terminal to start a browser sign-in from. Run `neon login --profile DEFAULT` to sign in, or use an API key with --api-key or NEON_API_KEY.',
+		);
+	});
+
+	it("names an expired session that cannot be refreshed", async () => {
+		seedCredentials({
+			expires_at: Date.now() - 1000,
+			refresh_token: undefined,
+		});
+
+		const result = await runCli(["projects", "list"], noTerminal());
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(
+			'Not signed in: profile "DEFAULT" holds a session that has expired, and this shell has no terminal',
+		);
+	});
+
+	it.each([
+		["login", ["login"]],
+		["projects list --force-auth", ["projects", "list", "--force-auth"]],
+	])("still starts the browser sign-in for `neon %s`", async (_, args) => {
+		const stderr = await untilStderr(
+			forkCli(args, noTerminal()),
+			"Auth Url:",
+		);
+
+		expect(stderr).toContain("Awaiting authentication in web browser.");
 	});
 });
 
