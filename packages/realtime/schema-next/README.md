@@ -4,8 +4,8 @@
 WebSocket protocol. In v3 the server can refresh part of a live result instead
 of replacing all of it. A tick's `segments_pending` body says that some of its
 rows arrive later. They arrive in a baseline whose `scope` is `selected`, which
-names the segments it replaces. In an ordered result, the round's rows also say
-where they go, with `after_row_key`.
+names the segments it replaces. A round of an ordered result says so with
+`ordered`, and its rows say where they go with `after_row_key`.
 
 This SDK doesn't use v3 yet. It speaks protocol v2, from the active
 `../schema/realtime-protocol.schema.json`:
