@@ -562,13 +562,13 @@ export const ensureConfigPackages = async (
 	}
 
 	const pm = props.packageManager ?? resolvePackageManager(cwd);
-	// Built only when printed: at a Yarn workspace root, wording it runs `yarn --version`.
-	const installHint = () => installCommandFrom(cwd, pm, missing);
+	const args = installArgs(pm, missing, { dir: cwd });
+	const installHint = installCommandFrom(cwd, pm, missing);
 	if (props.install === false) {
 		if (!props.silent) {
 			log.info(
 				"Install the Neon config packages to use neon.ts: %s",
-				installHint(),
+				installHint,
 			);
 		}
 		return;
@@ -587,16 +587,16 @@ export const ensureConfigPackages = async (
 	if (!props.silent) {
 		log.info("Installing %s with %s…", missing.join(", "), pm);
 	}
-	const result = await run(pm, installArgs(pm, missing, { dir: cwd }), cwd);
+	const result = await run(pm, args, cwd);
 	if (!result.ok) {
 		if (props.requireInstall) {
-			throw new ConfigInstallFailed(installHint(), pm, result.detail);
+			throw new ConfigInstallFailed(installHint, pm, result.detail);
 		}
 		log.warning(
 			"Could not install the config packages automatically with %s (%s). Run by hand: %s",
 			pm,
 			result.detail,
-			installHint(),
+			installHint,
 		);
 	}
 };

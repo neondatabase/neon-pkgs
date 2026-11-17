@@ -241,16 +241,37 @@ export const recommendedCliUpgradeCommand = (
  */
 export type AddOptions = { dev?: boolean; exact?: boolean; dir?: string };
 
-const isYarnWorkspaceRoot = (dir: string): boolean => {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null;
+
+const readManifest = (dir: string): Record<string, unknown> | undefined => {
 	try {
 		const manifest: unknown = JSON.parse(
 			readFileSync(join(dir, "package.json"), "utf8"),
 		);
-		return (
-			typeof manifest === "object" &&
-			manifest !== null &&
-			"workspaces" in manifest &&
-			manifest.workspaces !== undefined
+		return isRecord(manifest) ? manifest : undefined;
+	} catch {
+		return undefined;
+	}
+};
+
+/**
+ * Whether the Yarn workspace root at `dir` uses Yarn Classic, read from its
+ * `packageManager` pin or its `yarn.lock` format. Running `yarn --version`
+ * would answer too, but in a project directory that executes whatever its
+ * `.yarnrc` `yarn-path` names, even on the print-only `--no-install` path.
+ */
+const usesYarnClassic = (
+	dir: string,
+	manifest: Record<string, unknown>,
+): boolean => {
+	const pinned = manifest.packageManager;
+	if (typeof pinned === "string" && pinned.startsWith("yarn@")) {
+		return pinned.startsWith("yarn@1.");
+	}
+	try {
+		return readFileSync(join(dir, "yarn.lock"), "utf8").includes(
+			"# yarn lockfile v1",
 		);
 	} catch {
 		return false;
@@ -266,10 +287,11 @@ const workspaceRootFlag = (pm: PackageManager, dir: string): string[] => {
 	if (pm === "pnpm") {
 		return existsSync(join(dir, "pnpm-workspace.yaml")) ? ["-w"] : [];
 	}
-	if (pm === "yarn" && isYarnWorkspaceRoot(dir) && yarnMajor(dir) === 1) {
-		return ["-W"];
-	}
-	return [];
+	if (pm !== "yarn") return [];
+	const manifest = readManifest(dir);
+	return manifest?.workspaces !== undefined && usesYarnClassic(dir, manifest)
+		? ["-W"]
+		: [];
 };
 
 /**
@@ -300,14 +322,11 @@ export const installArgs = (
 		: ["install"];
 
 /**
- * yarn's major version in `cwd`, or undefined when it can't be read. A project
- * can pin its own yarn, so ask from the directory being installed into. Only
- * consulted for a global install with yarn and for an add at a yarn workspace
- * root, so it spawns nothing for any other manager or directory.
+ * yarn's major version, or undefined when it can't be read. Only consulted on
+ * the global-install path, which already spawns.
  */
-const yarnMajor = (cwd?: string): number | undefined => {
+const yarnMajor = (): number | undefined => {
 	const result = spawnSync("yarn", ["--version"], {
-		...(cwd === undefined ? {} : { cwd }),
 		encoding: "utf8",
 		timeout: 5000,
 		// yarn ships as a .cmd shim on Windows, which needs a shell.
