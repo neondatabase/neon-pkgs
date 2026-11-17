@@ -1,5 +1,12 @@
 # @neon/tools
 
+## 2.16.0
+
+### Minor Changes
+
+- 80110a8: Every tool now reports `metadata.readOnlySafe`, and `readOnly: true` on `createNeonTools`, `createNeonTool`, or `execute` refuses the tools that are not read-only safe before they send a request. `tools` also accepts a predicate over tool metadata, such as `(tool) => tool.metadata.readOnlySafe`.
+- 4cdccca: Tools return secrets as the API returns them. `secrets: "setup"` keeps only credentials Neon issues, such as connection strings and credential tokens, and `secrets: "none"` keeps none; hidden values read `"***redacted***"`. `metadata.secretOutputFields` lists each secret's path and kind. `auth.getConfig`, `auth.emailProvider.get`, `auth.emailProvider.update`, and `auth.plugins.get` no longer blank the SMTP password and OAuth client secrets by default, and `auth.getConfig`, `auth.emailProvider.get`, and `auth.plugins.get` now require approval.
+
 ## 2.15.0
 
 ### Minor Changes
