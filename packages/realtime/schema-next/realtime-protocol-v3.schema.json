@@ -103,7 +103,11 @@
       "properties": {
         "row_key": { "$ref": "#/$defs/rowKey" },
         "values": { "type": "array", "items": { "$ref": "#/$defs/cell" } },
-        "segment_tag": { "$ref": "#/$defs/segmentTag" }
+        "segment_tag": { "$ref": "#/$defs/segmentTag" },
+        "after_row_key": {
+          "$comment": "Places a row of a selected round in an ordered result: right after the row with this key, or first when null. A round is ordered when its first row has this field; in an ordered round, a row without it goes right after the round's previous row. Rows of an 'all' baseline and of an unordered round never carry it. Placements follow move's rules: each anchor is a row still shown once the covered ticks are applied and the scope removed, or an earlier row of the round; no row is its own anchor; and no two rows have the same anchor, counting the implicit ones. The ticks an ordered round covers contain no move and add no row outside its scope.",
+          "oneOf": [{ "$ref": "#/$defs/rowKey" }, { "type": "null" }]
+        }
       },
       "additionalProperties": false
     },
