@@ -590,7 +590,7 @@ describe("adding to a workspace root", () => {
 		const ran = join(root, "yarn-ran");
 		writeFileSync(
 			join(bin, "yarn"),
-			`#!/bin/sh\ntouch "${ran}"\necho 1.22.22\n`,
+			`#!/bin/sh\n: > "${ran}"\necho 1.22.22\n`,
 			{
 				mode: 0o755,
 			},
@@ -648,6 +648,22 @@ describe("missingNpxMessage", () => {
 		expect(missingNpxMessage("neon skills", "skills CLI")).toBe(
 			"neon skills needs npx (Node.js) to run the skills CLI, but npx is not on PATH. Install npm, which provides npx (it comes with Node.js from nodejs.org), then retry.",
 		);
+	});
+
+	it("never runs yarn, even when yarn invoked the CLI", () => {
+		const ran = join(bin, "yarn-ran");
+		writeFileSync(
+			join(bin, "yarn"),
+			`#!/bin/sh\n: > "${ran}"\necho 1.22.22\n`,
+			{
+				mode: 0o755,
+			},
+		);
+		process.env.npm_config_user_agent = "yarn/1.22.22 npm/? node/v24.0.0";
+		expect(missingNpxMessage("neon skills", "skills CLI")).toBe(
+			"neon skills needs npx (Node.js) to run the skills CLI, but npx is not on PATH. Install npm, which provides npx (it comes with Node.js from nodejs.org), then retry.",
+		);
+		expect(existsSync(ran)).toBe(false);
 	});
 });
 

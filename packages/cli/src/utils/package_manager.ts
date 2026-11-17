@@ -362,7 +362,14 @@ export const globalInstallCommand = (
 	// Running `yarn --version` at all proves yarn is on PATH.
 	if (pm === "yarn" && yarnMajor() === 1)
 		return { command: "yarn", args: ["global", "add", pkg] };
+	return globalInstallWithoutYarn(pm, pkg);
+};
 
+/** {@link globalInstallCommand} without Yarn Classic, so it never runs yarn. */
+const globalInstallWithoutYarn = (
+	pm: PackageManager,
+	pkg: string,
+): { command: string; args: string[] } | undefined => {
 	// Every branch checks PATH, not just the yarn fallback: `pm` can be the
 	// `?? "npm"` default from resolveInvokingPackageManager, which is a guess
 	// about a machine nobody has looked at yet.
@@ -385,10 +392,11 @@ export const globalInstallCommand = (
  * Node.js managed by pnpm, or packaged by a Linux distribution, can come
  * without it. Keep "needs npx (Node.js)": `errors.ts` classifies it as
  * NPX_NOT_FOUND, and the skills and plugins commands print it without a retry
- * line.
+ * line. Never asks yarn for its version: in a project directory that runs the
+ * project's `.yarnrc` `yarn-path`.
  */
 export const missingNpxMessage = (command: string, tool: string): string => {
-	const install = globalInstallCommand(
+	const install = globalInstallWithoutYarn(
 		resolveInvokingPackageManager(),
 		"npm",
 	);
