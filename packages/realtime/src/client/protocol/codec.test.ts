@@ -118,10 +118,7 @@ describe("Realtime JSON codec", () => {
 		}
 	});
 
-	it.each([
-		null,
-		"c".repeat(64),
-	])("rejects round placement on a v2 row (%s)", (anchor) => {
+	it("rejects round placement on a v2 row", () => {
 		const frame = JSON.stringify({
 			type: "baseline_sync_batch",
 			live_id: "2",
@@ -132,7 +129,7 @@ describe("Realtime JSON codec", () => {
 				{
 					row_key: "a".repeat(64),
 					values: ["1"],
-					after_row_key: anchor,
+					after_row_key: "c".repeat(64),
 				},
 			],
 		});
@@ -142,6 +139,31 @@ describe("Realtime JSON codec", () => {
 		expect(() =>
 			decodeServerMessage(frame, REALTIME_SUBPROTOCOL_V2),
 		).toThrow("unexpected field after_row_key");
+	});
+
+	it.each([
+		REALTIME_SUBPROTOCOL_V2,
+		REALTIME_SUBPROTOCOL_V3,
+	] as const)("rejects a null round row anchor on %s", (protocol) => {
+		expect(() =>
+			decodeServerMessage(
+				JSON.stringify({
+					type: "baseline_sync_batch",
+					live_id: "2",
+					epoch: "1",
+					baseline_sync_attempt: "4",
+					index: 0,
+					rows: [
+						{
+							row_key: "a".repeat(64),
+							values: ["1"],
+							after_row_key: null,
+						},
+					],
+				}),
+				protocol,
+			),
+		).toThrow(ProtocolError);
 	});
 
 	it("decodes a v2 session exactly as the v2 schema accepts, in the v3 shape", () => {
@@ -228,7 +250,7 @@ describe("Realtime JSON codec", () => {
 		const covered = { from_sequence: "1", through_sequence: "2" };
 		const selected = {
 			kind: "selected",
-			selectors: [{ tag: ROW_KEY }],
+			selectors: [{ segment_tag: ROW_KEY }],
 			covered,
 		};
 		for (const frame of [

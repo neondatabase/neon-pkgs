@@ -101,7 +101,7 @@ type Frame =
 			kind: "start";
 			round: number;
 			attempt: number;
-			selectors: ({ tag: string } | { row_key: string })[];
+			selectors: ({ segment_tag: string } | { row_key: string })[];
 			covered: [number, number];
 	  }
 	| {
@@ -413,9 +413,13 @@ class Model {
 				last.rows.push(key);
 			else runs.push({ anchor: previous, rows: [key] });
 		});
-		// Independent runs may arrive in any order.
-		for (let i = runs.length - 1; i > 0; i -= 1) {
-			const j = Math.floor(this.rand() * (i + 1));
+		// A head run must arrive first: only the first row's absent anchor
+		// means head. Other independent runs can arrive in any order.
+		const firstShuffled = runs[0]?.anchor === null ? 1 : 0;
+		for (let i = runs.length - 1; i > firstShuffled; i -= 1) {
+			const j =
+				firstShuffled +
+				Math.floor(this.rand() * (i - firstShuffled + 1));
 			[runs[i], runs[j]] = [
 				runs[j] as (typeof runs)[number],
 				runs[i] as (typeof runs)[number],
@@ -433,19 +437,22 @@ class Model {
 			rows.forEach((key, i) => {
 				const row = this.rows.get(key) as SRow;
 				const explicit =
-					i === 0 || anchors[i] !== rows[i - 1] || this.rand() < 0.2;
+					anchors[i] !== null &&
+					(i === 0 ||
+						anchors[i] !== rows[i - 1] ||
+						this.rand() < 0.2);
 				wire.push({
 					row_key: key,
 					values: [row.value],
 					...(row.tag ? { segment_tag: row.tag } : {}),
 					...(explicit
-						? { after_row_key: anchors[i] as string | null }
+						? { after_row_key: anchors[i] as string }
 						: {}),
 				});
 			});
 		}
 		const selectors = [
-			...[...u.tags].map((tag) => ({ tag })),
+			...[...u.tags].map((tag) => ({ segment_tag: tag })),
 			...[...u.keys].map((row_key) => ({ row_key })),
 		];
 		const covered: [number, number] = [u.first, this.seq];

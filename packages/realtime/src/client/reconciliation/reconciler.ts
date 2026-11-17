@@ -155,6 +155,8 @@ interface TargetState {
 	holes: number;
 	heldProgress: HeldProgress[];
 	live: boolean;
+	/** Fixed by the first selected start, for this live ID across epochs. */
+	roundsOrdered?: boolean;
 }
 
 interface StagedTarget {
@@ -368,6 +370,17 @@ export class BaselineSyncPublicationReconciler {
 		if (staged && (staged.resolves || resolves)) {
 			assertSameRoundPlan(staged, resolves, message.mvcc);
 		}
+		if (resolves) {
+			if (
+				state.roundsOrdered !== undefined &&
+				state.roundsOrdered !== resolves.ordered
+			) {
+				throw new ProtocolError(
+					"selected rounds changed the live ID's ordering",
+				);
+			}
+			state.roundsOrdered = resolves.ordered;
+		}
 		state.latestBaselineSync = version;
 		state.baselineSync = {
 			version,
@@ -418,7 +431,7 @@ export class BaselineSyncPublicationReconciler {
 		const tags = new Set<string>();
 		const rowKeys = new Set<string>();
 		for (const selector of message.scope.selectors) {
-			if ("tag" in selector) tags.add(selector.tag);
+			if ("segment_tag" in selector) tags.add(selector.segment_tag);
 			else rowKeys.add(selector.row_key);
 		}
 		return {

@@ -48,6 +48,7 @@ class Session {
 	readonly reconciler = new BaselineSyncPublicationReconciler();
 	private readonly subscriptions = new Map<string, Subscription<Value>>();
 	private sequences = new Map<string, number>();
+	private epochs = new Map<string, string>();
 	private publication = 0;
 
 	subscribe(
@@ -83,6 +84,7 @@ class Session {
 			segmentRounds,
 		});
 		this.sequences.set(liveId, 0);
+		this.epochs.set(liveId, "1");
 		this.subscriptions.set(liveId, subscription);
 		return subscription;
 	}
@@ -107,7 +109,7 @@ class Session {
 	): void {
 		const version = {
 			live_id: liveId,
-			epoch: "1",
+			epoch: this.epochs.get(liveId) ?? "1",
 			baseline_sync_attempt: String(options.attempt),
 		};
 		const scope = options.scope ?? { kind: "all" };
@@ -167,7 +169,7 @@ class Session {
 			this.sequences.set(liveId, sequence);
 			const target = {
 				live_id: liveId,
-				epoch: "1",
+				epoch: this.epochs.get(liveId) ?? "1",
 				sequence: String(sequence),
 			};
 			if (changes !== undefined || !hole) {
@@ -200,6 +202,25 @@ class Session {
 			body_count: messages.length,
 			frontier: { lsn: "0/10" },
 		});
+	}
+
+	reset(liveId: string, epoch: string): void {
+		const publicationId = `p${++this.publication}`;
+		this.reconciler.accept({ type: "open", publication_id: publicationId });
+		this.reconciler.accept({
+			type: "reset_required",
+			publication_id: publicationId,
+			index: 0,
+			targets: [{ live_id: liveId, epoch, first_sequence: "1" }],
+		});
+		this.reconciler.accept({
+			type: "commit",
+			publication_id: publicationId,
+			body_count: 1,
+			frontier: { lsn: "0/10" },
+		});
+		this.epochs.set(liveId, epoch);
+		this.sequences.set(liveId, 0);
 	}
 
 	progress(txid: number): void {
@@ -235,10 +256,99 @@ async function settled(promise: Promise<void>): Promise<boolean> {
 	return done;
 }
 
-const selected = (...selectors: ({ tag: string } | { row_key: string })[]) =>
-	({ kind: "selected", selectors }) as Scope;
+const selected = (
+	...selectors: ({ segment_tag: string } | { row_key: string })[]
+) => ({ kind: "selected", selectors }) as Extract<Scope, { kind: "selected" }>;
 
 describe("segment rounds", () => {
+	for (const materialized of [false, true]) {
+		it(`accepts zero-batch baseline and selected attempts (materialized=${materialized})`, () => {
+			const session = new Session();
+			const live = session.subscribe("9", materialized);
+			const updates: RawLiveQueryUpdate<Value>[] = [];
+			live.onUpdate((update) => updates.push(update));
+			session.sync("9", { attempt: 1, batches: [] });
+			expect(updates).toHaveLength(1);
+			expect(updates[0]).toMatchObject({ type: "rows", rows: [] });
+			expect(live.getSnapshot()).toMatchObject({
+				status: "live",
+				updating: false,
+			});
+			session.tick([{ liveId: "9", hole: true }], 11);
+			session.sync("9", {
+				attempt: 2,
+				scope: { ...selected({ segment_tag: T1 }), ordered: true },
+				covered: [1, 1],
+				batches: [],
+			});
+			expect(updates).toHaveLength(2);
+			expect(updates[1]).toMatchObject({ type: "changes", changes: [] });
+			expect(live.getSnapshot()).toMatchObject({
+				status: "live",
+				updating: false,
+			});
+			if (materialized) expect(values(live)).toEqual([]);
+		});
+
+		for (const ordered of [false, true]) {
+			for (const reset of [false, true]) {
+				it(`keeps selected ordering for the live ID (ordered=${ordered}, reset=${reset}, materialized=${materialized})`, () => {
+					const session = new Session();
+					const live = session.subscribe("9", materialized);
+					const updates: RawLiveQueryUpdate<Value>[] = [];
+					live.onUpdate((update) => updates.push(update));
+					session.sync("9", { attempt: 1, batches: [] });
+					const scope = {
+						...selected({ segment_tag: T1 }),
+						...(ordered ? { ordered: true as const } : {}),
+					};
+					session.tick([{ liveId: "9", hole: true }], 11);
+					session.sync("9", {
+						attempt: 2,
+						scope,
+						covered: [1, 1],
+						batches: [],
+					});
+					// A matching round is valid before the epoch boundary.
+					session.tick([{ liveId: "9", hole: true }], 12);
+					session.sync("9", {
+						attempt: 3,
+						scope,
+						covered: [2, 2],
+						batches: [],
+					});
+					if (reset) {
+						session.reset("9", "2");
+						session.sync("9", { attempt: 1, batches: [] });
+					}
+					// The first selected start after reset must retain the old value.
+					session.tick([{ liveId: "9", hole: true }], 13);
+					const sequence = reset ? 1 : 3;
+					const attempt = reset ? 2 : 4;
+					const before = updates.length;
+					const changed = {
+						...selected({ segment_tag: T1 }),
+						...(!ordered ? { ordered: true as const } : {}),
+					};
+					const start = () =>
+						session.sync("9", {
+							attempt,
+							scope: changed,
+							covered: [sequence, sequence],
+							batches: [],
+						});
+					expect(start).toThrow(
+						new ProtocolError(
+							"selected rounds changed the live ID's ordering",
+						),
+					);
+					expect(updates).toHaveLength(before);
+					if (materialized) expect(values(live)).toEqual([]);
+				});
+			}
+		}
+	}
+
 	it("delivers a round to raw listeners as one update, removes first, never as a reset", () => {
 		const session = new Session();
 		const raw = session.subscribe("9", false);
@@ -259,7 +369,7 @@ describe("segment rounds", () => {
 
 		session.sync("9", {
 			attempt: 2,
-			scope: selected({ tag: T1 }),
+			scope: selected({ segment_tag: T1 }),
 			covered: [1, 1],
 			mvcc: mvccThrough(11),
 			batches: [[tagged(B, "b2", T1), tagged(D, "d2", T1)]],
@@ -299,7 +409,7 @@ describe("segment rounds", () => {
 		const behindNextHole = live.awaitTxId("13");
 		session.sync("9", {
 			attempt: 2,
-			scope: selected({ tag: T1 }),
+			scope: selected({ segment_tag: T1 }),
 			covered: [1, 1],
 			mvcc: mvccThrough(11),
 			batches: [[tagged(A, "a2", T1)]],
@@ -329,7 +439,7 @@ describe("segment rounds", () => {
 		});
 		session.sync("9", {
 			attempt: 2,
-			scope: selected({ tag: T1 }),
+			scope: selected({ segment_tag: T1 }),
 			covered: [1, 1],
 			batches: [[tagged(A, "a2", T1)]],
 		});
@@ -361,7 +471,7 @@ describe("segment rounds", () => {
 		expect(await settled(holedWait)).toBe(false);
 		session.sync("9", {
 			attempt: 2,
-			scope: selected({ tag: T1 }),
+			scope: selected({ segment_tag: T1 }),
 			covered: [1, 1],
 			mvcc: mvccThrough(11),
 			batches: [[]],
@@ -389,7 +499,7 @@ describe("segment rounds", () => {
 		);
 		session.sync("9", {
 			attempt: 2,
-			scope: selected({ tag: T1 }),
+			scope: selected({ segment_tag: T1 }),
 			covered: [1, 1],
 			batches: [[tagged(B, "b-round", T1)]],
 		});
@@ -428,7 +538,7 @@ describe("segment rounds", () => {
 		expect(values(live)).toEqual(["a1", "b1"]);
 		session.sync("9", {
 			attempt: 2,
-			scope: selected({ tag: T1 }),
+			scope: selected({ segment_tag: T1 }),
 			covered: [2, 2],
 			batches: [[tagged(A, "a2", T1)]],
 		});
@@ -443,7 +553,7 @@ describe("segment rounds", () => {
 		session.tick([{ liveId: "9", hole: true }], 11);
 		const round = {
 			attempt: 2,
-			scope: selected({ tag: T1 }),
+			scope: selected({ segment_tag: T1 }),
 			covered: [1, 1] as const,
 		};
 		session.sync("9", {
@@ -470,7 +580,7 @@ describe("segment rounds", () => {
 			session.sync("9", { attempt: 1, batches: [[tagged(A, "a1", T1)]] });
 			session.tick([{ liveId: "9", hole: true }], 11);
 			const plan = {
-				scope: selected({ tag: T1 }),
+				scope: selected({ segment_tag: T1 }),
 				covered: [1, 1] as const,
 				batches: [],
 			};
@@ -488,7 +598,7 @@ describe("segment rounds", () => {
 		session.tick([{ liveId: "9", hole: true }], 11);
 		session.sync("9", {
 			attempt: 2,
-			scope: selected({ tag: T1 }),
+			scope: selected({ segment_tag: T1 }),
 			covered: [1, 2],
 			batches: [[tagged(A, "a2", T1)]],
 		});
@@ -509,13 +619,13 @@ describe("segment rounds", () => {
 		// Round 2 ends before tick 2 arrives, and round 3 starts behind it.
 		session.sync("9", {
 			attempt: 2,
-			scope: selected({ tag: T1 }),
+			scope: selected({ segment_tag: T1 }),
 			covered: [1, 2],
 			batches: [[tagged(A, "a2", T1)]],
 		});
 		session.sync("9", {
 			attempt: 3,
-			scope: selected({ tag: T2 }),
+			scope: selected({ segment_tag: T2 }),
 			covered: [3, 3],
 			batches: [[tagged(B, "b3", T2)]],
 		});
@@ -535,14 +645,14 @@ describe("segment rounds", () => {
 		session.tick([{ liveId: "9", hole: true }], 11);
 		session.sync("9", {
 			attempt: 2,
-			scope: selected({ tag: T1 }),
+			scope: selected({ segment_tag: T1 }),
 			covered: [1, 2],
 			batches: [[]],
 		});
 		expect(() =>
 			session.sync("9", {
 				attempt: 3,
-				scope: selected({ tag: T1 }),
+				scope: selected({ segment_tag: T1 }),
 				covered: [2, 3],
 				batches: [[]],
 			}),
@@ -611,16 +721,16 @@ describe("segment rounds", () => {
 			const session = new Session();
 			session.subscribe("9");
 			session.sync("9", { attempt: 1, batches: [[]] });
-			expect(() => start(session, selected({ tag: T1 }), [1, 1])).toThrow(
-				ProtocolError,
-			);
+			expect(() =>
+				start(session, selected({ segment_tag: T1 }), [1, 1]),
+			).toThrow(ProtocolError);
 		});
 
 		it("whose covered range starts elsewhere or has no covered range", () => {
-			expect(() => start(holed(), selected({ tag: T1 }), [2, 2])).toThrow(
-				ProtocolError,
-			);
-			expect(() => start(holed(), selected({ tag: T1 }))).toThrow(
+			expect(() =>
+				start(holed(), selected({ segment_tag: T1 }), [2, 2]),
+			).toThrow(ProtocolError);
+			expect(() => start(holed(), selected({ segment_tag: T1 }))).toThrow(
 				ProtocolError,
 			);
 		});
@@ -629,7 +739,7 @@ describe("segment rounds", () => {
 			expect(() =>
 				holed().sync("9", {
 					attempt: 2,
-					scope: selected({ tag: T1 }),
+					scope: selected({ segment_tag: T1 }),
 					covered: [1, 1],
 					batches: [[tagged(B, "b", T2)]],
 				}),
@@ -644,7 +754,7 @@ describe("segment rounds", () => {
 			expect(() =>
 				session.sync("9", {
 					attempt: 2,
-					scope: selected({ tag: T1 }),
+					scope: selected({ segment_tag: T1 }),
 					covered: [1, 1],
 					batches: [[tagged(A, "a2", T1)]],
 				}),
@@ -653,11 +763,11 @@ describe("segment rounds", () => {
 
 		it("accepts a greater attempt before end as a retry", () => {
 			const session = holed();
-			start(session, selected({ tag: T1 }), [1, 1]);
+			start(session, selected({ segment_tag: T1 }), [1, 1]);
 			expect(() =>
 				session.sync("9", {
 					attempt: 3,
-					scope: selected({ tag: T1 }),
+					scope: selected({ segment_tag: T1 }),
 					covered: [1, 1],
 					batches: [],
 				}),
@@ -678,7 +788,7 @@ describe("segment rounds", () => {
 				session.tick([{ liveId: "9", changes: [] }], 12);
 				session.sync("9", {
 					attempt: 4,
-					scope: selected({ tag: T1 }, { tag: T2 }),
+					scope: selected({ segment_tag: T1 }, { segment_tag: T2 }),
 					covered: [1, 1],
 					mvcc: mvccThrough(11),
 					batches: [[tagged(A, "a2", T1)]],
@@ -688,7 +798,7 @@ describe("segment rounds", () => {
 			}
 			const retry = (overrides: object) => ({
 				attempt: 5,
-				scope: selected({ tag: T1 }, { tag: T2 }),
+				scope: selected({ segment_tag: T1 }, { segment_tag: T2 }),
 				covered: [1, 1] as const,
 				mvcc: mvccThrough(11),
 				batches: [[tagged(A, "a2", T1)]],
@@ -699,14 +809,22 @@ describe("segment rounds", () => {
 				const session = staged();
 				session.sync(
 					"9",
-					retry({ scope: selected({ tag: T2 }, { tag: T1 }) }),
+					retry({
+						scope: selected(
+							{ segment_tag: T2 },
+							{ segment_tag: T1 },
+						),
+					}),
 				);
 				expect(values(session.live("9"))).toEqual(["a2"]);
 			});
 
 			it("rejects a narrower scope", () => {
 				expect(() =>
-					staged().sync("9", retry({ scope: selected({ tag: T1 }) })),
+					staged().sync(
+						"9",
+						retry({ scope: selected({ segment_tag: T1 }) }),
+					),
 				).toThrow("a retry changed its round's scope");
 			});
 
@@ -788,7 +906,7 @@ describe("segment rounds", () => {
 				expect(() =>
 					session.sync("9", {
 						attempt: 2,
-						scope: selected({ tag: T1 }),
+						scope: selected({ segment_tag: T1 }),
 						covered: [1, 1],
 						batches: [[tagged(A, "a2", T1)]],
 					}),
@@ -822,7 +940,7 @@ describe("segment rounds", () => {
 
 describe("ordered segment rounds", () => {
 	const orderedSelected = (
-		...selectors: ({ tag: string } | { row_key: string })[]
+		...selectors: ({ segment_tag: string } | { row_key: string })[]
 	): Scope =>
 		({
 			...selected(...selectors),
@@ -830,7 +948,7 @@ describe("ordered segment rounds", () => {
 		}) as Scope;
 	const E = key("e");
 	const F = key("f");
-	const placed = (row: WireRow, after: string | null): WireRow => ({
+	const placed = (row: WireRow, after: string): WireRow => ({
 		...row,
 		after_row_key: after,
 	});
@@ -855,7 +973,7 @@ describe("ordered segment rounds", () => {
 		{
 			name: "replaces a block in the middle across batches",
 			initial,
-			scope: orderedSelected({ tag: T1 }),
+			scope: orderedSelected({ segment_tag: T1 }),
 			batches: [
 				[],
 				[placed(tagged(E, "e", T1), A)],
@@ -875,8 +993,8 @@ describe("ordered segment rounds", () => {
 		{
 			name: "inserts a new block at the head",
 			initial: [tagged(A, "a"), tagged(D, "d")],
-			scope: orderedSelected({ tag: T1 }),
-			batches: [[placed(tagged(E, "e", T1), null), tagged(F, "f", T1)]],
+			scope: orderedSelected({ segment_tag: T1 }),
+			batches: [[tagged(E, "e", T1), tagged(F, "f", T1)]],
 			order: ["e", "f", "a", "d"],
 			changes: [put(E, "e"), put(F, "f"), move(E, null), move(F, E)],
 		},
@@ -888,7 +1006,7 @@ describe("ordered segment rounds", () => {
 				tagged(C, "c", T2),
 				tagged(D, "d"),
 			],
-			scope: orderedSelected({ tag: T1 }, { tag: T2 }),
+			scope: orderedSelected({ segment_tag: T1 }, { segment_tag: T2 }),
 			batches: [[placed(tagged(E, "e", T1), A)], [tagged(F, "f", T2)]],
 			order: ["a", "e", "f", "d"],
 			changes: [
@@ -903,7 +1021,7 @@ describe("ordered segment rounds", () => {
 		{
 			name: "accepts an explicit anchor equal to the implicit one",
 			initial,
-			scope: orderedSelected({ tag: T1 }),
+			scope: orderedSelected({ segment_tag: T1 }),
 			batches: [
 				[placed(tagged(E, "e", T1), A), placed(tagged(F, "f", T1), E)],
 			],
@@ -925,7 +1043,7 @@ describe("ordered segment rounds", () => {
 				tagged(C, "c", T2),
 				tagged(D, "d"),
 			],
-			scope: orderedSelected({ tag: T1 }, { tag: T2 }),
+			scope: orderedSelected({ segment_tag: T1 }, { segment_tag: T2 }),
 			batches: [[placed(tagged(E, "e", T1), A)]],
 			order: ["a", "e", "d"],
 			changes: [remove(B), remove(C), put(E, "e"), move(E, A)],
@@ -938,7 +1056,7 @@ describe("ordered segment rounds", () => {
 				tagged(C, "c", T2),
 				tagged(D, "d"),
 			],
-			scope: orderedSelected({ tag: T1 }, { tag: T2 }),
+			scope: orderedSelected({ segment_tag: T1 }, { segment_tag: T2 }),
 			batches: [
 				[placed(tagged(E, "e", T1), A)],
 				[placed(tagged(F, "f", T2), D)],
@@ -965,14 +1083,14 @@ describe("ordered segment rounds", () => {
 			name: "places a one-row segment selected by row key",
 			initial: [tagged(D, "d"), tagged(A, "a")],
 			scope: orderedSelected({ row_key: A }),
-			batches: [[placed(tagged(A, "a2"), null)]],
+			batches: [[tagged(A, "a2")]],
 			order: ["a2", "d"],
 			changes: [put(A, "a2"), move(A, null)],
 		},
 		{
 			name: "upserts and moves a retained row key without removing it",
 			initial,
-			scope: orderedSelected({ tag: T1 }),
+			scope: orderedSelected({ segment_tag: T1 }),
 			batches: [[placed(tagged(B, "b2", T1), A)]],
 			order: ["a", "b2", "d"],
 			changes: [remove(C), put(B, "b2"), move(B, A)],
@@ -1037,7 +1155,7 @@ describe("ordered segment rounds", () => {
 				);
 				session.sync("9", {
 					attempt: 2,
-					scope: orderedSelected({ tag: T1 }),
+					scope: orderedSelected({ segment_tag: T1 }),
 					covered: [1, 1],
 					batches: [[placed(tagged(E, "e", T1), A)]],
 				});
@@ -1067,7 +1185,7 @@ describe("ordered segment rounds", () => {
 				session.tick([{ liveId: "9", hole: true }], 13);
 				session.sync("9", {
 					attempt: 3,
-					scope: orderedSelected({ tag: T2 }),
+					scope: orderedSelected({ segment_tag: T2 }),
 					covered: [3, 3],
 					batches: [[]],
 				});
@@ -1117,7 +1235,7 @@ describe("ordered segment rounds", () => {
 				session.progress(14);
 				session.sync("9", {
 					attempt: 2,
-					scope: orderedSelected({ tag: T1 }),
+					scope: orderedSelected({ segment_tag: T1 }),
 					covered: [1, 1],
 					mvcc: mvccThrough(11),
 					batches: [[placed(tagged(E, "e", T1), A)]],
@@ -1137,7 +1255,7 @@ describe("ordered segment rounds", () => {
 					);
 				session.sync("9", {
 					attempt: 3,
-					scope: orderedSelected({ tag: T1 }),
+					scope: orderedSelected({ segment_tag: T1 }),
 					covered: [3, 3],
 					mvcc: mvccThrough(13),
 					batches: [[placed(tagged(E, "e2", T1), A)]],
@@ -1172,7 +1290,7 @@ describe("ordered segment rounds", () => {
 				live.onUpdate((update) => updates.push(update));
 				session.sync("9", { attempt: 1, batches: [initial] });
 				session.tick([{ liveId: "9", hole: true }], 11);
-				// The scan must look past the first later tick to find the move.
+				// An empty later tick must not hide the following move-bearing tick.
 				session.tick([{ liveId: "9", changes: [] }], 12);
 				const changes: WireChange[] = [upsert(F, "f", T2)];
 				if (hasMove)
@@ -1186,8 +1304,8 @@ describe("ordered segment rounds", () => {
 					session.sync("9", {
 						attempt: 2,
 						scope: hasMove
-							? orderedSelected({ tag: T1 })
-							: selected({ tag: T1 }),
+							? orderedSelected({ segment_tag: T1 })
+							: selected({ segment_tag: T1 }),
 						covered: [1, 1],
 						batches: [],
 					}),
@@ -1278,7 +1396,7 @@ describe("ordered segment rounds", () => {
 					);
 				session.sync("9", {
 					attempt: 2,
-					scope: orderedSelected({ tag: T1 }),
+					scope: orderedSelected({ segment_tag: T1 }),
 					covered: [1, 1],
 					batches: [[]],
 				});
@@ -1333,7 +1451,7 @@ describe("ordered segment rounds", () => {
 				expect(() =>
 					session.sync("9", {
 						attempt: 2,
-						scope: orderedSelected({ tag: T1 }),
+						scope: orderedSelected({ segment_tag: T1 }),
 						covered: [1, 2],
 						batches: [[placed(tagged(B, "b2", T1), A)]],
 					}),
@@ -1372,7 +1490,7 @@ describe("ordered segment rounds", () => {
 				expect(() =>
 					session.sync("9", {
 						attempt: 2,
-						scope: orderedSelected({ tag: T1 }),
+						scope: orderedSelected({ segment_tag: T1 }),
 						covered: [1, 3],
 						batches: [[placed(tagged(B, "b2", T1), A)]],
 					}),
@@ -1401,16 +1519,16 @@ describe("ordered segment rounds", () => {
 					...plan,
 					attempt: 2,
 					scope: ordered
-						? orderedSelected({ tag: T1 })
-						: selected({ tag: T1 }),
+						? orderedSelected({ segment_tag: T1 })
+						: selected({ segment_tag: T1 }),
 				});
 				expect(() =>
 					session.sync("9", {
 						...plan,
 						attempt: 3,
 						scope: ordered
-							? selected({ tag: T1 })
-							: orderedSelected({ tag: T1 }),
+							? selected({ segment_tag: T1 })
+							: orderedSelected({ segment_tag: T1 }),
 					}),
 				).toThrow("a retry changed its round's ordering");
 			});
@@ -1436,7 +1554,7 @@ describe("ordered segment rounds", () => {
 				expect(() =>
 					session.sync("9", {
 						attempt: 2,
-						scope: selected({ tag: T1 }),
+						scope: selected({ segment_tag: T1 }),
 						covered: [1, 1],
 						batches: [[tagged(E, "e", T1)]],
 					}),
@@ -1529,8 +1647,8 @@ describe("ordered segment rounds", () => {
 						attempt: 2,
 						scope:
 							"unordered" in test
-								? selected({ tag: T1 })
-								: orderedSelected({ tag: T1 }),
+								? selected({ segment_tag: T1 })
+								: orderedSelected({ segment_tag: T1 }),
 						covered: [1, 1],
 						batches,
 					}),
@@ -1547,7 +1665,7 @@ describe("ordered segment rounds", () => {
 				expect(() =>
 					session.sync("9", {
 						attempt: 1,
-						batches: [[placed(tagged(A, "a"), null)]],
+						batches: [[placed(tagged(A, "a"), B)]],
 					}),
 				).toThrow("an all baseline row carries placement");
 				expect(update).not.toHaveBeenCalled();

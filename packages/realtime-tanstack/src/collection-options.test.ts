@@ -858,7 +858,7 @@ describe("Realtime TanStack DB collection", () => {
 				{
 					scope: {
 						kind: "selected",
-						selectors: [{ tag: T1 }, { tag: T2 }],
+						selectors: [{ segment_tag: T1 }, { segment_tag: T2 }],
 					},
 					covered: [1, 1],
 				},
@@ -895,7 +895,10 @@ describe("Realtime TanStack DB collection", () => {
 					segmentRow("2", 12, "third", T1),
 				],
 				{
-					scope: { kind: "selected", selectors: [{ tag: T1 }] },
+					scope: {
+						kind: "selected",
+						selectors: [{ segment_tag: T1 }],
+					},
 					covered: [1, 1],
 				},
 			);
@@ -978,7 +981,7 @@ describe("Realtime TanStack DB collection", () => {
 				scope: {
 					kind: "selected",
 					ordered: true,
-					selectors: [{ tag: T1 }],
+					selectors: [{ segment_tag: T1 }],
 				},
 				covered: [1, scenario === "handoff" ? 3 : 1],
 			});
@@ -1019,7 +1022,7 @@ describe("Realtime TanStack DB collection", () => {
 				scope: {
 					kind: "selected",
 					ordered: true,
-					selectors: [{ tag: T1 }],
+					selectors: [{ segment_tag: T1 }],
 				},
 				covered: [1, 1],
 			});

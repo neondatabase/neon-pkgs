@@ -443,7 +443,7 @@ class ModelRun {
 			scope: {
 				kind: "selected",
 				selectors: [
-					...[...tags].map((tag) => ({ tag })),
+					...[...tags].map((tag) => ({ segment_tag: tag })),
 					...[...keys].map((row_key) => ({ row_key })),
 				],
 			} as Scope,
@@ -563,7 +563,7 @@ class ModelRun {
 				: open.scope.kind === "all"
 					? ({
 							kind: "selected",
-							selectors: [{ tag: TAGS.T1 }],
+							selectors: [{ segment_tag: TAGS.T1 }],
 						} as Scope)
 					: open.scope.selectors.length > 1
 						? ({
