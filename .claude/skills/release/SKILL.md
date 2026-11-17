@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut version bumps + changelogs for maintained packages in this monorepo. Detects which packages changed since their published npm version (git-vs-npm), reconciles against pending Changesets, runs `changeset version` to bump + cascade dependents, and opens a PR. This repo only produces version-bump commits; the npm publish is then triggered manually from a separate Databricks releases repo. Use when asked to "release", "cut a release", "bump versions", or "check what needs releasing".
+description: Cut version bumps + changelogs for the published packages in this monorepo, deprecated ones included. Detects which packages changed since their published npm version (git-vs-npm), reconciles against pending Changesets, runs `changeset version` to bump + cascade dependents, and opens a PR. This repo only produces version-bump commits; the npm publish is then triggered manually from a separate Databricks releases repo. Use when asked to "release", "cut a release", "bump versions", or "check what needs releasing".
 ---
 
 # Release: version bumps + changelogs
@@ -33,11 +33,20 @@ A package is *deprecated* if its `README.md` opens with a deprecation banner (co
 heading containing `DEPRECATED`, e.g. `# ⚠️ DEPRECATED: <name>`); otherwise it's *maintained*. The
 top-level `README.md` lists only maintained packages, as a convenience index.
 
-So enumerate maintained packages as: every `packages/*/` with a `package.json` that is published
-(`"private"` absent or false) and whose `README.md` has **no** `DEPRECATED` banner.
+The banner only decides maintained versus deprecated. Release every `packages/*/` with a
+`package.json` that is published (`"private"` absent or false), whichever it is.
 
 Folders under `packages/` with only `dist/`/`node_modules/` and no `package.json` are build
 artifacts — ignore them.
+
+**Deprecated packages still go through every step below.** "Maintained" decides what the
+top-level `README.md` lists, not what gets released. A deprecated package is bumped to change what
+its users see — a new deprecation notice, a new successor, a newer dependency it forwards to — and
+none of that reaches them until npm serves it. Left unpublished, npm keeps showing the old notice.
+That happened with the move to `neon claim create`: `main` bumped `get-db`, `neondb`,
+`vite-plugin-db` and `@neondatabase/vite-plugin-postgres` to versions pointing straight at it, but
+only `neon-new` and `vite-plugin-neon-new` were published. `npx get-db@latest` kept saying "renamed
+to neon-new", and users reached the current command only through a second deprecation notice.
 
 ### The CLI package (`packages/cli`)
 
@@ -61,7 +70,7 @@ differ from the rest of the repo:
 
 ### 1. Detect what needs a release (git-vs-npm)
 
-For each maintained package:
+For each published package, maintained or deprecated:
 
 ```bash
 # npm latest (published)
@@ -77,7 +86,8 @@ A package **needs a release** if either:
 - there are **source** commits to its folder after its last npm release.
 
 **Ignore packaging/CI-only commits** (e.g. `publishConfig.provenance` flips, lockfile-only,
-test-config-only changes) — they don't warrant a user-facing release.
+test-config-only changes) — they don't warrant a user-facing release. A change to a deprecated
+package's `deprecated` field, README, or CLI output is user-facing, not packaging-only.
 
 ### 2. Reconcile against pending changesets
 
@@ -92,6 +102,9 @@ Each changeset's frontmatter lists `"<pkg>": <major|minor|patch>`. Cross-check:
   Write a user-facing summary.
 - A pending changeset for a package the detector did **not** flag → investigate (already-bumped
   or duplicate); surface it, don't silently proceed.
+- A deprecated package whose own files changed needs its own changeset saying so, even when a
+  dependency's release would bump it anyway. Otherwise its changelog says only "Updated
+  dependencies".
 
 ### 3. Bump
 
@@ -124,10 +137,13 @@ the listed packages still need that external publish:
 1. **Bumped in this run** — `name: old → new` for each package `changeset version` touched (mark
    which are dependent-cascade bumps). These get published once the bump PR merges **and** the
    publish workflow (step 7) runs.
-2. **Publish backlog** — every maintained package whose `main` version is now *ahead of* npm
-   latest (`npm view <pkg> version`). This is what is actually awaiting publish: it includes the
-   packages bumped in this run **plus** any from earlier merges not yet published
-   (e.g. `main` at 0.4.0 while npm is at 0.1.1). Report it as `name: npm <published> → main <pending>`.
+2. **Publish backlog** — every published package, deprecated ones included, whose `main` version
+   is now *ahead of* npm latest (`npm view <pkg> version`). This is what is actually awaiting
+   publish: it includes the packages bumped in this run **plus** any from earlier merges not yet
+   published (e.g. `main` at 0.4.0 while npm is at 0.1.1). Report it as
+   `name: npm <published> → main <pending>`, and mark any package that is not a `package` choice in
+   the publish workflow (step 7): it cannot be published until the workflow lists it. If you
+   cannot read the workflow, say so rather than guess.
 
 Don't claim a package is "released" — at this stage it's *bumped and awaiting the external npm publish*.
 
@@ -165,12 +181,24 @@ gh workflow run neon-pkgs.yml --repo databricks/secure-public-registry-releases-
 > `npm publish --dry-run`), so it *looks* successful while npm stays on the old version. So for a
 > multi-package release, **dispatch this once per bumped package** (e.g. `@neon/env`, then
 > `@neon/functions`, then `@neon/ai-sdk-provider`). Valid `package` values are the
-> choices in the workflow's `workflow_dispatch` input (each maintained package, plus `dry-run`).
+> choices in the workflow's `workflow_dispatch` input (including the default `dry-run`, which
+> publishes nothing).
+
+Check every package in the publish backlog against those choices before dispatching. A package that
+is not one of them, deprecated ones included, cannot be published from here: get it added to the
+workflow rather than leaving the bump on `main`. As a stopgap, a package owner can run
+`npm deprecate <pkg> "<the package's deprecated field>"`. It rewrites the npm install warning on
+every published version without a publish, but the old tarballs still run their old code against
+their pinned dependencies, so it does not replace publishing. It is a public registry change like a
+publish: propose it, don't run it unasked.
 
 **Publish order: leaf deps first, the CLI last.** The build packs from source (every internal dep
 is `workspace:*`), so ordering doesn't affect whether a run *succeeds* — but for npm consumers to
 resolve cleanly, publish a dependency before its dependents:
 `@neon/config` → `@neon/config-runtime` / `@neon/env` → `neon` → `neonctl`.
+The deprecated aliases forward to their successor with the same exact pin as `neonctl`:
+`neon-new` → `get-db` / `neondb`, and `vite-plugin-neon-new` → `vite-plugin-db` /
+`@neondatabase/vite-plugin-postgres`.
 Publishing `neon` also ships the standalone binaries and GitHub release.
 
 **Always publish `neon` before `neonctl`.** `neonctl` wraps `neon`: `pnpm pack` turns its
