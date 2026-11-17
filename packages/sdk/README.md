@@ -682,10 +682,10 @@ scopes.
 | Method | Returns | Notes |
 | --- | --- | --- |
 | `list({ projectId, branchId })` | `CredentialMeta[]` | |
-| `create({ projectId, branchId, …input })` | `CreateCredentialResponse` | `input`: `{ name?, scopes, principal_type: "user" }` |
+| `create({ projectId, branchId, …input })` | `CreateCredentialResponse` | `input`: `{ name?, scopes, principal_type: "user", expires_at? }`. `expires_at` is 1 minute to 365 days from now (else 400); omit it for a credential that never expires |
 | `revoke({ projectId, branchId, tokenId })` | **→void** | |
 | `reveal({ projectId, branchId, tokenId })` | `CredentialSecret` | `{ token_id, api_token, s3_secret_access_key }` — no `branch_id`. 404 if revoked, expired, or wrong project. 409 if issued before secret retrieval; rotate to obtain one |
-| `rotate({ projectId, branchId, tokenId })` | `RotateCredentialResponse` | Not idempotent. A lost 200 already committed; create a replacement and revoke this one. After rotate, a replica may briefly accept the old secret |
+| `rotate({ projectId, branchId, tokenId })` | `RotateCredentialResponse` | Not idempotent. A lost 200 already committed; create a replacement and revoke this one. After rotate, a replica may briefly accept the old secret. Keeps the credential's `expires_at`; an expired credential can't be rotated |
 
 ```ts
 const { data: created, error: createError } = await neon.credentials.create(
@@ -757,20 +757,24 @@ enable Realtime on the new branch.
 ### `neon.logs`
 
 Branch-scoped logs from the services running on a branch — Neon Functions, object
-storage, and Postgres computes (private beta).
+storage, Postgres computes, and Neon Auth (private beta).
 
-Being private beta shows, and all three calls behave the same way on a given branch:
+Being private beta shows. On a given branch the three calls answer the same way, except that
+`fields` takes no `source`:
 
 | Branch state | Response |
 | --- | --- |
 | Telemetry not available in the branch's region | `404`, `reason: "telemetry_not_enabled"` |
+| `source: "neon_auth"` (on `query` or `fieldValues`) while the project's Neon Auth logs are not enabled | `404`, `reason: "telemetry_not_enabled"` |
 | Project or branch missing, or no access to it | `404`, `reason: "branch_not_found"` |
 | Telemetry available, nothing recorded in the window | `200` with an empty `logs` / `values` array |
 | Telemetry available, backend down | `503`, which the client retries on by default |
 
 **The two 404s need different handling, and only `reason` tells them apart.** Telemetry is
-region-gated and the region is fixed at project creation, so `telemetry_not_enabled` is a
-permanent property of the branch and an ordinary outcome to design around.
+region-gated and the region is fixed at project creation, so without `source: "neon_auth"`,
+`telemetry_not_enabled` is a permanent property of the branch and an ordinary outcome to
+design around. With `source: "neon_auth"` it means only that the project's Neon Auth logs
+are not enabled; the other sources can still return logs, and the answer can change.
 `branch_not_found` is a real error — a wrong id or a key without access — and should not
 be absorbed into the same path. Both arrive as `NeonNotFoundError`, and `reason` is not
 lifted onto the error, so it has to be read off the API's body, which the SDK keeps as
@@ -795,8 +799,9 @@ if (error) {
 ```
 
 Two more limits worth knowing, because the spec is wider than the backend. `source` is a
-three-value enum, but only `function` and `storage` were observed emitting; no branch
-produced a `pg_endpoint` record. And `minimum_severity` can be rejected outright with a
+four-value enum, but only `function` and `storage` were observed emitting; no branch
+produced a `pg_endpoint` record, and `neon_auth` has so far answered only with the `404`
+above. And `minimum_severity` can be rejected outright with a
 `400` (`NeonApiError`, `kind: "api"`) reading
 `"minimum_severity is not supported by this branch's log backend"` — so filter on
 `severity_text` if you need it to work everywhere.

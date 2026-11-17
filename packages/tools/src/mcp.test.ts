@@ -789,7 +789,7 @@ describe("MCP catalog size", () => {
 				(sum, value) => sum + JSON.stringify(value).length,
 				0,
 			) / 4;
-		// About 43,700 tokens with a description on every input, including the custom tools.
+		// About 43,000 tokens with a description on every input, including the custom tools.
 		expect(
 			tokens(listed.map(({ outputSchema: _output, ...tool }) => tool)),
 		).toBeLessThan(43_800);

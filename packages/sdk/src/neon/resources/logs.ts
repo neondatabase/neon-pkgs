@@ -48,16 +48,17 @@ export type LogsFieldValuesParams = {
 
 /**
  * Branch-scoped logs emitted by the services running on a branch — Neon Functions,
- * object storage, and Postgres computes. Grouped under `neon.logs.*` alongside the
- * other branch-scoped product surfaces.
+ * object storage, Postgres computes, and Neon Auth. Grouped under `neon.logs.*`
+ * alongside the other branch-scoped product surfaces.
  *
  * Private Beta. Telemetry is region-gated, so a branch outside an enabled region answers
  * `404` with `reason: "telemetry_not_enabled"` rather than an empty result — treat that
- * as an ordinary outcome. A branch that has telemetry but nothing recorded answers `200`
- * with an empty array, and one whose backend is down answers `503`, which the client
- * retries on by default.
+ * as an ordinary outcome. `source: "neon_auth"` answers the same `404` while the
+ * project's Neon Auth logs are not enabled, even when the other sources return logs. A
+ * branch that has telemetry but nothing recorded answers `200` with an empty array, and
+ * one whose backend is down answers `503`, which the client retries on by default.
  *
- * The spec is wider than the backend: of the three `source` values only `function` and
+ * The spec is wider than the backend: of the four `source` values only `function` and
  * `storage` were observed emitting, and `minimum_severity` can be rejected as unsupported
  * by a branch's log backend, where `severity_text` still works.
  */

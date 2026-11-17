@@ -1127,6 +1127,48 @@ describe("special mappings", () => {
 		);
 	});
 
+	test("credentials.create sends expires_at in the body", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["credentials.create"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({
+					token_id: "nak_live_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					token_id_short: "aaaaaaaaaaaa",
+					api_token: "nt_live_new",
+					s3_secret_access_key: "nsk_live_new",
+					scopes: ["storage:read"],
+					branch_id: "branch-id",
+					created_at: "2026-09-10T00:00:00Z",
+					expires_at: "2026-09-11T00:00:00Z",
+				});
+			},
+		});
+
+		const result = await tools["credentials.create"].execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			scopes: ["storage:read"],
+			principal_type: "user",
+			expires_at: "2026-09-11T00:00:00Z",
+		});
+
+		expect(result.data).toMatchObject({
+			expires_at: "2026-09-11T00:00:00Z",
+		});
+		expect(requests[0].method).toBe("POST");
+		expect(requests[0].url).toContain(
+			"/projects/project-id/branches/branch-id/credentials",
+		);
+		expect(await requests[0].json()).toEqual({
+			scopes: ["storage:read"],
+			principal_type: "user",
+			expires_at: "2026-09-11T00:00:00Z",
+		});
+	});
+
 	test("rotate maps path ids and is marked non-idempotent", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({

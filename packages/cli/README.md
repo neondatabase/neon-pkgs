@@ -1208,7 +1208,7 @@ neon inspect db stalled-queries --output json
 
 ## Logs (`logs`)
 
-`neon logs` reads the log records the services on a branch emit — Neon Functions, object storage, and Postgres computes. **Logs are currently available only for projects in `aws-us-east-2`, `aws-us-east-1`, `aws-eu-central-1`, and `aws-ap-southeast-1`.**
+`neon logs` reads the log records the services on a branch emit — Neon Functions, object storage, Postgres computes, and Neon Auth. **Logs are currently available only for projects in `aws-us-east-2`, `aws-us-east-1`, `aws-eu-central-1`, and `aws-ap-southeast-1`.** `--source neon_auth` fails with a 404 until Neon Auth logs are enabled for the project, even when the other sources return logs.
 
 Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect), and takes `--branch <id|name>`, defaulting to the project's default branch. `logs query` searches the previous hour by default; `logs field-values` searches the previous six hours. The maximum time window is seven days.
 

@@ -4717,6 +4717,9 @@ export const getProjectBranchAiGateway = <ThrowOnError extends boolean = false>(
  * apply, because those bound the query rather than form part of the
  * expression.
  *
+ * `source=neon_auth` returns a 404 `telemetry_not_enabled` response when
+ * Neon Auth logs are not enabled for this project.
+ *
  * Give the window either as `since` — a duration ending at `end_time`, or
  * at the current time when `end_time` is omitted — or as an explicit
  * `start_time`. Supplying both is rejected.

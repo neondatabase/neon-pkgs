@@ -8,7 +8,8 @@
 		"org_id": "Organization id from {{user.organizations}}; required with a personal API key."
 	},
 	"createCredential": {
-		"scopes": "Capabilities to grant. The credential may only perform actions in these scopes."
+		"scopes": "Capabilities to grant. The credential may only perform actions in these scopes.",
+		"expires_at": "When the credential stops working, 1 minute to 365 days from now. Omit for a credential that never expires."
 	},
 	"createProjectBranchFunctionDeployment": {
 		"runtime": "The Node.js runtime for the deployment.",
@@ -41,10 +42,14 @@
 		"delimiter": "Groups keys up to this delimiter, usually /, into folders."
 	},
 	"listProjectBranchLogFieldValues": {
-		"field_name": "A field name from {{logs.fields}}."
+		"field_name": "A field name from {{logs.fields}}.",
+		"source": "Only consider records emitted by this Neon service. neon_auth returns 404 telemetry_not_enabled when the project's Neon Auth logs are not enabled, even when other sources return logs."
 	},
 	"listProjects": {
 		"org_id": "Organization id from {{user.organizations}}; required with a personal API key."
+	},
+	"queryProjectBranchLogs": {
+		"source": "Only records emitted by this Neon service. neon_auth returns 404 telemetry_not_enabled when the project's Neon Auth logs are not enabled, even when other sources return logs."
 	},
 	"registerProjectBranchCustomDomain": {
 		"entity_id": "The function slug from {{functions.list}}."
