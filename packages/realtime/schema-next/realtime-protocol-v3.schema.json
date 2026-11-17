@@ -26,7 +26,7 @@
     "rowKey": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "segmentTag": {
       "type": "string",
-      "$comment": "The 32-byte digest that names a multi-row segment, as lowercase hex. Opaque to applications. A row or upsert carries it exactly when the row belongs to a multi-row segment, and an upsert's tag replaces the row's earlier one. A row key never changes between carrying a tag and carrying none; a frame that would is a protocol error.",
+      "$comment": "The 32-byte digest that names a multi-row segment, as lowercase hex. Opaque to applications. A row or upsert carries it exactly when the row belongs to a multi-row segment, and an upsert's tag replaces the row's earlier one. Within an epoch, a row key never changes between carrying a tag and carrying none; a frame that would is a protocol error.",
       "pattern": "^[0-9a-f]{64}$"
     },
     "selector": {
@@ -47,7 +47,7 @@
     },
     "scope": {
       "type": "object",
-      "$comment": "What a baseline replaces. 'all' replaces the whole result and is the scope of an epoch's first baseline. 'selected' is a round: it replaces the named segments, including those that turn out empty, and resolves the holes in covered. Every row of a round belongs to a selector, by its segment_tag or its row_key, and its row keys do not repeat. A round installs once its baseline_sync_end and every covered tick have arrived: the client applies the covered ticks in order, removes the scope's rows (every row whose segment_tag a selector names, after those ticks, and every row a row_key selector names), inserts the round's rows, applies the later held ticks up to the next unresolved hole, and shows the result in one step, at the round's mvcc. An absent scope never means 'all'.",
+      "$comment": "What a baseline replaces. 'all' replaces the whole result and is the scope of an epoch's first baseline. 'selected' is a round: it replaces the named segments, including those that turn out empty, and resolves the holes in covered. Every row of a round belongs to a selector, by its segment_tag or, for a row without one, its row_key, and its row keys do not repeat. A returned row that, after the covered ticks, is shown under a segment_tag the scope does not name is a protocol error. A round installs at its baseline_sync_end: the client applies the covered ticks in order, removes the scope's rows (every row whose segment_tag a selector names, after those ticks, and every row a row_key selector names), inserts the round's rows, and applies the later held ticks up to the next unresolved hole. It shows the result in one step: the visible snapshot becomes the round's mvcc, then any held progress the install releases. An absent scope never means 'all'.",
       "discriminator": { "propertyName": "kind" },
       "oneOf": [
         {
@@ -364,7 +364,7 @@
         },
         {
           "type": "object",
-          "$comment": "A publication body that commits a hole: some of each target's rows for this tick arrive later, in a round. From a target's first unresolved hole on, the client holds this tick and every later one for that target and shows none of them until a selected round covering the hole installs; a first baseline replays held ticks only up to the first hole. It lists no segments, does not change the epoch, and counts in commit's body_count. Every keyed_results and segments_pending body for one live ID in one publication carries the same sequence and the same txids, and a target has at most one hole body per publication. The sequence advances once, at commit. segments_pending and reset_required never target the same live ID in one publication.",
+          "$comment": "A publication body that commits a hole: some of each target's rows for this tick arrive later, in a round. From a target's first unresolved hole on, the client holds this tick and every later one for that target and shows none of them until a selected round covering the hole installs, or a reset_required discards them; a first baseline replays held ticks only up to the first hole. It lists no segments, does not change the epoch, and counts in commit's body_count. Every keyed_results and segments_pending body for one live ID in one publication carries the same sequence and the same txids, and a target has at most one hole body per publication. The sequence advances once, at commit. segments_pending and reset_required never target the same live ID in one publication.",
           "required": ["type", "publication_id", "index", "txids", "targets"],
           "properties": {
             "type": { "const": "segments_pending" },
