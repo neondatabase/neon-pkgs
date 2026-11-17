@@ -1,5 +1,14 @@
 # @neon/tools
 
+## 2.17.2
+
+### Patch Changes
+
+- 804880e: `branches.delete` with readiness polling on no longer throws `NeonOperationError` when a cleanup operation fails after the branch is already deleted. It reads the branch back and resolves on 404. Through `@neon/tools`, this also fixes the `delete_branch`, `migrations.complete`, and `queryTuning.complete` tools.
+- Updated dependencies [804880e]
+  - @neon/sdk@7.14.1
+  - @neon/effect@0.5.4
+
 ## 2.17.1
 
 ### Patch Changes

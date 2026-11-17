@@ -1,5 +1,12 @@
 # @neondatabase/config
 
+## 1.14.3
+
+### Patch Changes
+
+- Updated dependencies [804880e]
+  - @neon/sdk@7.14.1
+
 ## 1.14.2
 
 ### Patch Changes
