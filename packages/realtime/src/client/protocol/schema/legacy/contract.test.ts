@@ -15,7 +15,7 @@ type Fixture = Readonly<Record<string, unknown>>;
 
 /**
  * A shared fixture as protocols before v3 send it: without the baseline
- * sync's round, scope and covered range, and without segment tags.
+ * sync's scope (including its covered range), and without segment tags.
  */
 function beforeV3(fixture: Fixture): Fixture {
 	const {
@@ -69,9 +69,17 @@ describe("Legacy Realtime protocol compatibility", () => {
 		for (const fixture of [
 			...protocolFixtures.invalid,
 			...orderedFixtures.invalid,
-			...segmentRoundFixtures.valid,
 		]) {
 			expect(validate(fixture), JSON.stringify(fixture)).toBe(false);
+		}
+		// v3 batches without tags and every end frame now share v2's shape.
+		for (const fixture of segmentRoundFixtures.valid) {
+			const shared =
+				fixture.type === "baseline_sync_end" ||
+				(fixture.type === "baseline_sync_batch" &&
+					Array.isArray(fixture.rows) &&
+					fixture.rows.every((row) => !("segment_tag" in row)));
+			expect(validate(fixture), JSON.stringify(fixture)).toBe(shared);
 		}
 	});
 

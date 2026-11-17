@@ -70,7 +70,6 @@ function batchWithBase64Cell(base64: string): object {
 		live_id: "9",
 		epoch: "1",
 		baseline_sync_attempt: "1",
-		round: "1",
 		index: 0,
 		rows: [{ row_key: ROW_KEY, values: [{ base64 }] }],
 	};
@@ -185,10 +184,55 @@ describe("Realtime JSON codec", () => {
 		);
 		expect(start).toMatchObject({
 			type: "baseline_sync_start",
-			round: "1",
 			scope: { kind: "all" },
 		});
 		expect(start).not.toHaveProperty("covered");
+		expect(start).not.toHaveProperty("round");
+	});
+
+	it("rejects removed v3 baseline fields", () => {
+		const start = {
+			type: "baseline_sync_start",
+			live_id: "9",
+			epoch: "1",
+			baseline_sync_attempt: "4",
+			scope: { kind: "all" },
+			mvcc: { xmin: "1", xmax: "2", xip: [] },
+		};
+		const covered = { from_sequence: "1", through_sequence: "2" };
+		const selected = {
+			kind: "selected",
+			selectors: [{ tag: ROW_KEY }],
+			covered,
+		};
+		for (const frame of [
+			{ ...start, round: "1" },
+			{ ...start, scope: selected, covered },
+			{
+				...start,
+				scope: { kind: "selected", selectors: selected.selectors },
+				covered,
+			},
+			{
+				...start,
+				scope: {
+					...selected,
+					covered: { first_sequence: "1", last_sequence: "2" },
+				},
+			},
+			{ ...start, scope: { kind: "all", covered } },
+		])
+			rejectServerMessage(frame);
+		for (const type of ["baseline_sync_batch", "baseline_sync_end"]) {
+			const frame = fixtures.valid.find(
+				(fixture) => fixture.type === type,
+			);
+			rejectServerMessage({ ...frame, round: "1" });
+		}
+		expect(decode(JSON.stringify({ ...start, scope: selected }))).toEqual({
+			...start,
+			scope: selected,
+		});
 	});
 
 	it("rejects malformed and noncanonical server messages", () => {
@@ -221,7 +265,6 @@ describe("Realtime JSON codec", () => {
 					live_id: "1",
 					epoch: "1",
 					baseline_sync_attempt: "1",
-					round: "1",
 					index: 0,
 					rows: [
 						{
@@ -256,7 +299,6 @@ describe("Realtime JSON codec", () => {
 					live_id: "9",
 					epoch: "1",
 					baseline_sync_attempt: "1",
-					round: "1",
 					index: 0,
 					rows: [
 						{ row_key: ROW_KEY, values: ['"key":{[', "\\"] },
@@ -298,7 +340,6 @@ describe("Realtime JSON codec", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
-			round: "1",
 			scope: { kind: "all" },
 			mvcc: {
 				xmin: "1",
@@ -347,7 +388,6 @@ describe("Realtime JSON codec", () => {
 				live_id: "1",
 				epoch: "1",
 				baseline_sync_attempt: "1",
-				round: "1",
 				scope: { kind: "all" },
 			},
 		];
@@ -391,7 +431,6 @@ describe("Realtime JSON codec", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
-			round: "1",
 			index: 0,
 			rows: [{ row_key: ROW_KEY, values: [{ base64 }] }],
 		});
@@ -455,7 +494,6 @@ describe("Realtime JSON codec", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
-			round: "1",
 			index: 0,
 			rows: [{ row_key: ROW_KEY, values: [], extra: true }],
 		});
@@ -464,7 +502,6 @@ describe("Realtime JSON codec", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
-			round: "1",
 			index: 0,
 			rows: [{ row_key: "zz", values: [] }],
 		});
@@ -473,7 +510,6 @@ describe("Realtime JSON codec", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
-			round: "1",
 			index: 0,
 			rows: [{ row_key: ROW_KEY, values: [123] }],
 		});

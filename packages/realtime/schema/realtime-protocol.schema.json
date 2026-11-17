@@ -29,10 +29,6 @@
       "$comment": "The 32-byte digest that names a multi-row segment, as lowercase hex. Opaque to applications.",
       "pattern": "^[0-9a-f]{64}$"
     },
-    "round": {
-      "$ref": "#/$defs/u64",
-      "$comment": "Identifies one recomputation of a live ID's result. A new round of the same live ID gets a new value."
-    },
     "selector": {
       "type": "object",
       "$comment": "One segment a selected round replaces: a multi-row segment by tag, or a one-row segment by its row key.",
@@ -51,7 +47,7 @@
     },
     "scope": {
       "type": "object",
-      "$comment": "What a round replaces. 'all' replaces the whole result; 'selected' replaces the named segments, including those that turn out empty. An absent scope never means 'all'.",
+      "$comment": "What a baseline replaces. 'all' replaces the whole result and is the scope of an epoch's first baseline. 'selected' is a round: it replaces the named segments, including those that turn out empty, and resolves the holes in covered. An absent scope never means 'all'.",
       "discriminator": { "propertyName": "kind" },
       "oneOf": [
         {
@@ -62,10 +58,11 @@
         },
         {
           "type": "object",
-          "required": ["kind", "selectors"],
+          "required": ["kind", "selectors", "covered"],
           "properties": {
             "kind": { "const": "selected" },
-            "selectors": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/selector" } }
+            "selectors": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/selector" } },
+            "covered": { "$ref": "#/$defs/covered" }
           },
           "additionalProperties": false
         }
@@ -73,11 +70,11 @@
     },
     "covered": {
       "type": "object",
-      "$comment": "The change sequences a round resolves: from the live ID's first unresolved hole through the tick of the round's snapshot. Semantic validation requires first_sequence <= last_sequence.",
-      "required": ["first_sequence", "last_sequence"],
+      "$comment": "The change sequences a round resolves: from the live ID's first unresolved hole through the tick of the round's snapshot. Semantic validation requires from_sequence <= through_sequence.",
+      "required": ["from_sequence", "through_sequence"],
       "properties": {
-        "first_sequence": { "$ref": "#/$defs/u64" },
-        "last_sequence": { "$ref": "#/$defs/u64" }
+        "from_sequence": { "$ref": "#/$defs/u64" },
+        "through_sequence": { "$ref": "#/$defs/u64" }
       },
       "additionalProperties": false
     },
@@ -297,30 +294,27 @@
         },
         {
           "type": "object",
-          "$comment": "Starts one attempt of a round, sent with the round's first batch. A higher baseline_sync_attempt of the same round supersedes the earlier attempt. A different round in the same epoch starts only after the previous round's baseline_sync_end, unless reset_required changed the epoch first. A selected round arrives while the live ID is live, in its current epoch, and carries covered; a round that starts an epoch carries none.",
-          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "round", "scope", "mvcc"],
+          "$comment": "Starts one baseline attempt, sent with its first batch. Within an epoch of a live ID, each attempt has a greater baseline_sync_attempt than the one before. A start before the current attempt's baseline_sync_end retries that baseline and supersedes the earlier attempt. A start after baseline_sync_end, in the same epoch, begins a selected round while the live ID is live.",
+          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "scope", "mvcc"],
           "properties": {
             "type": { "const": "baseline_sync_start" },
             "live_id": { "$ref": "#/$defs/u64" },
             "epoch": { "$ref": "#/$defs/u64" },
             "baseline_sync_attempt": { "$ref": "#/$defs/u64" },
-            "round": { "$ref": "#/$defs/round" },
             "scope": { "$ref": "#/$defs/scope" },
-            "mvcc": { "$ref": "#/$defs/mvcc" },
-            "covered": { "$ref": "#/$defs/covered" }
+            "mvcc": { "$ref": "#/$defs/mvcc" }
           },
           "additionalProperties": false
         },
         {
           "type": "object",
           "$comment": "Batch indices start at 0 in each attempt.",
-          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "round", "index", "rows"],
+          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "index", "rows"],
           "properties": {
             "type": { "const": "baseline_sync_batch" },
             "live_id": { "$ref": "#/$defs/u64" },
             "epoch": { "$ref": "#/$defs/u64" },
             "baseline_sync_attempt": { "$ref": "#/$defs/u64" },
-            "round": { "$ref": "#/$defs/round" },
             "index": { "$ref": "#/$defs/u32" },
             "rows": { "type": "array", "items": { "$ref": "#/$defs/row" } }
           },
@@ -328,13 +322,12 @@
         },
         {
           "type": "object",
-          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "round", "batch_count"],
+          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "batch_count"],
           "properties": {
             "type": { "const": "baseline_sync_end" },
             "live_id": { "$ref": "#/$defs/u64" },
             "epoch": { "$ref": "#/$defs/u64" },
             "baseline_sync_attempt": { "$ref": "#/$defs/u64" },
-            "round": { "$ref": "#/$defs/round" },
             "batch_count": { "$ref": "#/$defs/u32" }
           },
           "additionalProperties": false

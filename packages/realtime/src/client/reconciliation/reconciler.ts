@@ -86,13 +86,11 @@ const SILENT_RECONCILIATION_EVENTS: ReconciliationEventSink = Object.freeze({
 
 interface BaselineSyncVersion {
 	readonly epoch: bigint;
-	readonly round: bigint;
 	readonly attempt: bigint;
 }
 
 /** What a round that resolves holes replaces. */
 interface RoundScope {
-	readonly all: boolean;
 	readonly tags: ReadonlySet<string>;
 	readonly rowKeys: ReadonlySet<string>;
 }
@@ -341,40 +339,22 @@ export class BaselineSyncPublicationReconciler {
 		if (!state.active) return;
 		const version = baselineSyncVersion(
 			message.epoch,
-			message.round,
 			message.baseline_sync_attempt,
 		);
-		if (
-			version.epoch < state.epoch ||
-			isOlder(version, state.latestBaselineSync)
-		)
-			return;
+		if (version.epoch < state.epoch) return;
 		if (
 			version.epoch !== state.epoch ||
-			sameVersion(version, state.latestBaselineSync)
+			(state.latestBaselineSync !== undefined &&
+				version.attempt <= state.latestBaselineSync.attempt)
 		) {
 			throw new ProtocolError("invalid baseline sync start");
 		}
-		// A higher attempt of the same round supersedes the staged attempt. A
-		// different round starts only after the previous round's end, and a
-		// round that has ended does not start again.
+		// Before end, a greater attempt retries the pending baseline and drops
+		// its staging. After end, it begins a new selected round while live.
 		const staged = state.baselineSync;
-		if (staged && staged.version.round !== version.round) {
-			throw new ProtocolError(
-				"a round started before the previous round ended",
-			);
-		}
-		const resolving =
-			message.scope.kind === "selected" || message.covered !== undefined;
+		const resolving = message.scope.kind === "selected";
 		if (!resolving && state.live) {
 			throw new ProtocolError("invalid baseline sync start");
-		}
-		if (
-			!staged &&
-			state.latestBaselineSync?.epoch === version.epoch &&
-			state.latestBaselineSync.round === version.round
-		) {
-			throw new ProtocolError("a round started again after its end");
 		}
 		const resolves = resolving
 			? this.resolvedHoles(state, message)
@@ -411,12 +391,12 @@ export class BaselineSyncPublicationReconciler {
 				"a round arrived without an installed result",
 			);
 		}
-		if (message.covered === undefined) {
+		if (message.scope.kind !== "selected") {
 			throw new ProtocolError("a selected round has no covered range");
 		}
 		const covered = {
-			first: BigInt(message.covered.first_sequence),
-			last: BigInt(message.covered.last_sequence),
+			first: BigInt(message.scope.covered.from_sequence),
+			last: BigInt(message.scope.covered.through_sequence),
 		};
 		// Behind a round that still waits for its covered ticks, the first
 		// unresolved hole is known only once that round installs, and the
@@ -433,19 +413,13 @@ export class BaselineSyncPublicationReconciler {
 				"a covered range must start at the first unresolved hole",
 			);
 		}
-		if (message.scope.kind === "all") {
-			return {
-				scope: { all: true, tags: new Set(), rowKeys: new Set() },
-				covered,
-			};
-		}
 		const tags = new Set<string>();
 		const rowKeys = new Set<string>();
 		for (const selector of message.scope.selectors) {
 			if ("tag" in selector) tags.add(selector.tag);
 			else rowKeys.add(selector.row_key);
 		}
-		return { scope: { all: false, tags, rowKeys }, covered };
+		return { scope: { tags, rowKeys }, covered };
 	}
 
 	private baselineSyncBatch(
@@ -458,7 +432,6 @@ export class BaselineSyncPublicationReconciler {
 		if (!state.active) return;
 		const version = baselineSyncVersion(
 			message.epoch,
-			message.round,
 			message.baseline_sync_attempt,
 		);
 		if (
@@ -491,7 +464,6 @@ export class BaselineSyncPublicationReconciler {
 			// A selected round's row belongs by its own tag or its own row key.
 			if (
 				scope &&
-				!scope.all &&
 				!(
 					(row.segment_tag !== undefined &&
 						scope.tags.has(row.segment_tag)) ||
@@ -513,7 +485,6 @@ export class BaselineSyncPublicationReconciler {
 		if (!state.active) return;
 		const version = baselineSyncVersion(
 			message.epoch,
-			message.round,
 			message.baseline_sync_attempt,
 		);
 		if (
@@ -584,8 +555,7 @@ export class BaselineSyncPublicationReconciler {
 	 * covered tick have arrived.
 	 *
 	 * Work is proportional to the buffered ticks it replays, the rows it
-	 * removes and the rows it inserts; a round with scope `all` removes every
-	 * visible row.
+	 * removes and the rows it inserts.
 	 */
 	private installWaiting(state: TargetState): void {
 		for (
@@ -672,25 +642,19 @@ export class BaselineSyncPublicationReconciler {
 		// does not remove it.
 		for (const row of round.rows)
 			index.checkKind(row.row_key, row.segment_tag);
-		if (!scope.all) {
-			for (const row of round.rows) {
-				const tag = index.tagOf(row.row_key);
-				if (tag !== undefined && !scope.tags.has(tag)) {
-					throw new ProtocolError(
-						"a round row is shown under a tag outside its scope",
-					);
-				}
+		for (const row of round.rows) {
+			const tag = index.tagOf(row.row_key);
+			if (tag !== undefined && !scope.tags.has(tag)) {
+				throw new ProtocolError(
+					"a round row is shown under a tag outside its scope",
+				);
 			}
 		}
-		// 3. Remove the scope's rows.
-		if (scope.all) {
-			for (const rowKey of index.keys()) remove(rowKey);
-		} else {
-			for (const tag of scope.tags)
-				for (const rowKey of index.keysOf(tag)) remove(rowKey);
-			for (const rowKey of scope.rowKeys)
-				if (index.has(rowKey)) remove(rowKey);
-		}
+		// 3. Remove the selected scope's rows.
+		for (const tag of scope.tags)
+			for (const rowKey of index.keysOf(tag)) remove(rowKey);
+		for (const rowKey of scope.rowKeys)
+			if (index.has(rowKey)) remove(rowKey);
 		// 4. Insert the round's rows.
 		for (const row of round.rows) {
 			touch(row.row_key);
@@ -1041,7 +1005,6 @@ function assertSameRoundPlan(
 	if (
 		!before ||
 		!resolves ||
-		before.scope.all !== resolves.scope.all ||
 		!sameSet(before.scope.tags, resolves.scope.tags) ||
 		!sameSet(before.scope.rowKeys, resolves.scope.rowKeys)
 	) {
@@ -1083,12 +1046,10 @@ function wireRow(
 
 function baselineSyncVersion(
 	epoch: string,
-	round: string,
 	attempt: string,
 ): BaselineSyncVersion {
 	return {
 		epoch: BigInt(epoch),
-		round: BigInt(round),
 		attempt: BigInt(attempt),
 	};
 }
@@ -1100,12 +1061,11 @@ function sameVersion(
 	return (
 		right !== undefined &&
 		left.epoch === right.epoch &&
-		left.round === right.round &&
 		left.attempt === right.attempt
 	);
 }
 
-/** Rounds advance within an epoch, and attempts within a round. */
+/** Attempts advance across every baseline within an epoch. */
 function isOlder(
 	candidate: BaselineSyncVersion,
 	current: BaselineSyncVersion | undefined,
@@ -1113,8 +1073,6 @@ function isOlder(
 	if (current === undefined) return false;
 	if (candidate.epoch !== current.epoch)
 		return candidate.epoch < current.epoch;
-	if (candidate.round !== current.round)
-		return candidate.round < current.round;
 	return candidate.attempt < current.attempt;
 }
 

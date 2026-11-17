@@ -28,7 +28,6 @@ describe("baseline-sync reconciliation", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
-			round: "1",
 			scope: { kind: "all" },
 			mvcc: { xmin: "100", xmax: "105", xip: ["103"] },
 		});
@@ -101,7 +100,9 @@ describe("baseline-sync reconciliation", () => {
 			...baselineSyncStart("1", "2"),
 			mvcc: appliedMvcc,
 		});
-		accept(reconciler, baselineSyncStart("1", "1"));
+		expect(() => accept(reconciler, baselineSyncStart("1", "1"))).toThrow(
+			"invalid baseline sync start",
+		);
 		accept(reconciler, baselineSyncBatch(0, [row(ROW_A, "old")], "1", "1"));
 		accept(reconciler, baselineSyncEnd(0, "1", "2"));
 
@@ -110,6 +111,19 @@ describe("baseline-sync reconciliation", () => {
 		expect(state.baselineSyncCompleted).toHaveBeenCalledWith(0);
 		expect(state.publishReset).toHaveBeenCalledOnce();
 		expect(state.publishReset).toHaveBeenCalledWith([], appliedMvcc);
+	});
+
+	it.each([
+		"2",
+		"3",
+	])("rejects a non-increasing attempt %s before end", (attempt) => {
+		const state = target();
+		const reconciler = subscribed(state);
+		accept(reconciler, baselineSyncStart("1", "3"));
+		expect(() =>
+			accept(reconciler, baselineSyncStart("1", attempt)),
+		).toThrow("invalid baseline sync start");
+		expect(state.baselineSyncStarted).toHaveBeenCalledOnce();
 	});
 
 	it("does not complete a baseline sync whose rows fail to install", () => {
@@ -203,7 +217,6 @@ describe("baseline-sync reconciliation", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
-			round: "1",
 			scope: { kind: "all" },
 			mvcc: { xmin: "100", xmax: "105", xip: [] },
 		});

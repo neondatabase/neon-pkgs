@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SILENT_CLIENT_EVENTS } from "../diagnostics.js";
 import { createParserRegistry } from "../postgres/parsers.js";
-import { ProtocolError } from "../protocol/codec.js";
+import { decodeServerMessage, ProtocolError } from "../protocol/codec.js";
 import type {
 	ServerMessage,
 	WireChange,
@@ -13,7 +13,13 @@ import type { LiveQueryChange, RawLiveQueryUpdate } from "../types.js";
 import { BaselineSyncPublicationReconciler } from "./reconciler.js";
 
 type Value = { readonly value: string };
-type Scope = Extract<ServerMessage, { type: "baseline_sync_start" }>["scope"];
+type WireScope = Extract<
+	ServerMessage,
+	{ type: "baseline_sync_start" }
+>["scope"];
+type Scope =
+	| { kind: "all" }
+	| Omit<Extract<WireScope, { kind: "selected" }>, "covered">;
 
 const key = (char: string) => char.repeat(64);
 const A = key("a");
@@ -91,8 +97,7 @@ class Session {
 	sync(
 		liveId: string,
 		options: {
-			readonly round: number;
-			readonly attempt?: number;
+			readonly attempt: number;
 			readonly scope?: Scope;
 			readonly covered?: readonly [number, number];
 			readonly mvcc?: ReturnType<typeof mvccThrough>;
@@ -103,23 +108,33 @@ class Session {
 		const version = {
 			live_id: liveId,
 			epoch: "1",
-			baseline_sync_attempt: String(options.attempt ?? options.round),
-			round: String(options.round),
+			baseline_sync_attempt: String(options.attempt),
 		};
-		this.reconciler.accept({
-			type: "baseline_sync_start",
-			...version,
-			scope: options.scope ?? { kind: "all" },
-			mvcc: options.mvcc ?? mvccThrough(0),
-			...(options.covered
-				? {
-						covered: {
-							first_sequence: String(options.covered[0]),
-							last_sequence: String(options.covered[1]),
-						},
-					}
-				: {}),
-		});
+		const scope = options.scope ?? { kind: "all" };
+		this.reconciler.accept(
+			decodeServerMessage(
+				JSON.stringify({
+					type: "baseline_sync_start",
+					...version,
+					scope:
+						scope.kind === "selected" && options.covered
+							? {
+									...scope,
+									covered: {
+										from_sequence: String(
+											options.covered[0],
+										),
+										through_sequence: String(
+											options.covered[1],
+										),
+									},
+								}
+							: scope,
+					mvcc: options.mvcc ?? mvccThrough(0),
+				}),
+				"neon.realtime.v3",
+			) as Extract<ServerMessage, { type: "baseline_sync_start" }>,
+		);
 		options.batches.forEach((rows, index) => {
 			this.reconciler.accept({
 				type: "baseline_sync_batch",
@@ -230,7 +245,7 @@ describe("segment rounds", () => {
 		const updates: RawLiveQueryUpdate<Value>[] = [];
 		raw.onUpdate((update) => updates.push(update));
 		session.sync("9", {
-			round: 1,
+			attempt: 1,
 			batches: [
 				[tagged(A, "a1", T1), tagged(B, "b1", T1), tagged(C, "c1", T2)],
 			],
@@ -243,7 +258,7 @@ describe("segment rounds", () => {
 		expect(updates).toHaveLength(1);
 
 		session.sync("9", {
-			round: 2,
+			attempt: 2,
 			scope: selected({ tag: T1 }),
 			covered: [1, 1],
 			mvcc: mvccThrough(11),
@@ -269,7 +284,7 @@ describe("segment rounds", () => {
 	it("resolves awaitTxId only when the covering round lands", async () => {
 		const session = new Session();
 		const live = session.subscribe("9");
-		session.sync("9", { round: 1, batches: [[tagged(A, "a1", T1)]] });
+		session.sync("9", { attempt: 1, batches: [[tagged(A, "a1", T1)]] });
 		session.tick([{ liveId: "9", hole: true }], 11);
 		session.tick([{ liveId: "9", changes: [upsert(B, "b2")] }], 12);
 		const hole = live.awaitTxId("11");
@@ -283,7 +298,7 @@ describe("segment rounds", () => {
 		session.tick([{ liveId: "9", hole: true }], 13);
 		const behindNextHole = live.awaitTxId("13");
 		session.sync("9", {
-			round: 2,
+			attempt: 2,
 			scope: selected({ tag: T1 }),
 			covered: [1, 1],
 			mvcc: mvccThrough(11),
@@ -300,7 +315,7 @@ describe("segment rounds", () => {
 		const live = session.subscribe("9");
 		const updating: (boolean | undefined)[] = [];
 		live.onChange((snapshot) => updating.push(snapshot.updating));
-		session.sync("9", { round: 1, batches: [[tagged(A, "a1", T1)]] });
+		session.sync("9", { attempt: 1, batches: [[tagged(A, "a1", T1)]] });
 		expect(live.getSnapshot()).toMatchObject({
 			status: "live",
 			updating: false,
@@ -313,7 +328,7 @@ describe("segment rounds", () => {
 			data: [{ value: "a1" }],
 		});
 		session.sync("9", {
-			round: 2,
+			attempt: 2,
 			scope: selected({ tag: T1 }),
 			covered: [1, 1],
 			batches: [[tagged(A, "a2", T1)]],
@@ -330,8 +345,8 @@ describe("segment rounds", () => {
 		const session = new Session();
 		const holed = session.subscribe("9");
 		const exact = session.subscribe("10");
-		session.sync("9", { round: 1, batches: [[tagged(A, "a1", T1)]] });
-		session.sync("10", { round: 1, batches: [[tagged(A, "a1")]] });
+		session.sync("9", { attempt: 1, batches: [[tagged(A, "a1", T1)]] });
+		session.sync("10", { attempt: 1, batches: [[tagged(A, "a1")]] });
 		session.tick(
 			[
 				{ liveId: "9", hole: true },
@@ -345,7 +360,7 @@ describe("segment rounds", () => {
 		expect(await settled(exactWait)).toBe(true);
 		expect(await settled(holedWait)).toBe(false);
 		session.sync("9", {
-			round: 2,
+			attempt: 2,
 			scope: selected({ tag: T1 }),
 			covered: [1, 1],
 			mvcc: mvccThrough(11),
@@ -359,7 +374,7 @@ describe("segment rounds", () => {
 		const session = new Session();
 		const live = session.subscribe("9");
 		session.sync("9", {
-			round: 1,
+			attempt: 1,
 			batches: [[tagged(A, "a1", T1), tagged(B, "b1", T2)]],
 		});
 		session.tick(
@@ -373,7 +388,7 @@ describe("segment rounds", () => {
 			11,
 		);
 		session.sync("9", {
-			round: 2,
+			attempt: 2,
 			scope: selected({ tag: T1 }),
 			covered: [1, 1],
 			batches: [[tagged(B, "b-round", T1)]],
@@ -381,21 +396,22 @@ describe("segment rounds", () => {
 		expect(values(live)).toEqual(["a2", "b-round"]);
 	});
 
-	it("replaces the whole result with a same-epoch round of scope all", () => {
+	it("rejects a same-epoch all start after the baseline ended", () => {
 		const session = new Session();
 		const live = session.subscribe("9");
 		session.sync("9", {
-			round: 1,
+			attempt: 1,
 			batches: [[tagged(A, "a1", T1), tagged(B, "b1")]],
 		});
 		session.tick([{ liveId: "9", hole: true }], 11);
-		session.sync("9", {
-			round: 2,
-			scope: { kind: "all" },
-			covered: [1, 1],
-			batches: [[tagged(C, "c1")]],
-		});
-		expect(values(live)).toEqual(["c1"]);
+		expect(() =>
+			session.sync("9", {
+				attempt: 2,
+				scope: { kind: "all" },
+				batches: [[tagged(C, "c1")]],
+			}),
+		).toThrow(ProtocolError);
+		expect(values(live)).toEqual(["a1", "b1"]);
 	});
 
 	it("installs a first baseline up to a hole that arrived during it", () => {
@@ -404,14 +420,14 @@ describe("segment rounds", () => {
 		session.tick([{ liveId: "9", changes: [upsert(B, "b1")] }], 11);
 		session.tick([{ liveId: "9", hole: true }], 12);
 		session.tick([{ liveId: "9", changes: [upsert(C, "c1")] }], 13);
-		session.sync("9", { round: 1, batches: [[tagged(A, "a1", T1)]] });
+		session.sync("9", { attempt: 1, batches: [[tagged(A, "a1", T1)]] });
 		expect(live.getSnapshot()).toMatchObject({
 			status: "live",
 			updating: true,
 		});
 		expect(values(live)).toEqual(["a1", "b1"]);
 		session.sync("9", {
-			round: 2,
+			attempt: 2,
 			scope: selected({ tag: T1 }),
 			covered: [2, 2],
 			batches: [[tagged(A, "a2", T1)]],
@@ -423,10 +439,10 @@ describe("segment rounds", () => {
 	it("drops an earlier attempt's rows when a retry supersedes it", () => {
 		const session = new Session();
 		const live = session.subscribe("9");
-		session.sync("9", { round: 1, batches: [[tagged(A, "a1", T1)]] });
+		session.sync("9", { attempt: 1, batches: [[tagged(A, "a1", T1)]] });
 		session.tick([{ liveId: "9", hole: true }], 11);
 		const round = {
-			round: 2,
+			attempt: 2,
 			scope: selected({ tag: T1 }),
 			covered: [1, 1] as const,
 		};
@@ -444,13 +460,34 @@ describe("segment rounds", () => {
 		expect(values(live)).toEqual(["b2"]);
 	});
 
+	it.each([
+		false,
+		true,
+	])("rejects non-increasing attempts after a selected start (ended: %s)", (end) => {
+		for (const attempt of [1, 2]) {
+			const session = new Session();
+			session.subscribe("9");
+			session.sync("9", { attempt: 1, batches: [[tagged(A, "a1", T1)]] });
+			session.tick([{ liveId: "9", hole: true }], 11);
+			const plan = {
+				scope: selected({ tag: T1 }),
+				covered: [1, 1] as const,
+				batches: [],
+			};
+			session.sync("9", { ...plan, attempt: 2, end });
+			expect(() => session.sync("9", { ...plan, attempt })).toThrow(
+				"invalid baseline sync start",
+			);
+		}
+	});
+
 	it("waits for every covered tick before installing", () => {
 		const session = new Session();
 		const live = session.subscribe("9");
-		session.sync("9", { round: 1, batches: [[tagged(A, "a1", T1)]] });
+		session.sync("9", { attempt: 1, batches: [[tagged(A, "a1", T1)]] });
 		session.tick([{ liveId: "9", hole: true }], 11);
 		session.sync("9", {
-			round: 2,
+			attempt: 2,
 			scope: selected({ tag: T1 }),
 			covered: [1, 2],
 			batches: [[tagged(A, "a2", T1)]],
@@ -465,19 +502,19 @@ describe("segment rounds", () => {
 		const session = new Session();
 		const live = session.subscribe("9");
 		session.sync("9", {
-			round: 1,
+			attempt: 1,
 			batches: [[tagged(A, "a1", T1), tagged(B, "b1", T2)]],
 		});
 		session.tick([{ liveId: "9", hole: true }], 11);
 		// Round 2 ends before tick 2 arrives, and round 3 starts behind it.
 		session.sync("9", {
-			round: 2,
+			attempt: 2,
 			scope: selected({ tag: T1 }),
 			covered: [1, 2],
 			batches: [[tagged(A, "a2", T1)]],
 		});
 		session.sync("9", {
-			round: 3,
+			attempt: 3,
 			scope: selected({ tag: T2 }),
 			covered: [3, 3],
 			batches: [[tagged(B, "b3", T2)]],
@@ -494,17 +531,17 @@ describe("segment rounds", () => {
 	it("rejects a round behind a waiting one that covers its ticks again", () => {
 		const session = new Session();
 		session.subscribe("9");
-		session.sync("9", { round: 1, batches: [[tagged(A, "a1", T1)]] });
+		session.sync("9", { attempt: 1, batches: [[tagged(A, "a1", T1)]] });
 		session.tick([{ liveId: "9", hole: true }], 11);
 		session.sync("9", {
-			round: 2,
+			attempt: 2,
 			scope: selected({ tag: T1 }),
 			covered: [1, 2],
 			batches: [[]],
 		});
 		expect(() =>
 			session.sync("9", {
-				round: 3,
+				attempt: 3,
 				scope: selected({ tag: T1 }),
 				covered: [2, 3],
 				batches: [[]],
@@ -515,7 +552,7 @@ describe("segment rounds", () => {
 	it("discards holes and the staged round at a reset", () => {
 		const session = new Session();
 		const live = session.subscribe("9");
-		session.sync("9", { round: 1, batches: [[tagged(A, "a1", T1)]] });
+		session.sync("9", { attempt: 1, batches: [[tagged(A, "a1", T1)]] });
 		session.tick([{ liveId: "9", hole: true }], 11);
 		session.reconciler.accept({ type: "open", publication_id: "reset" });
 		session.reconciler.accept({
@@ -555,7 +592,7 @@ describe("segment rounds", () => {
 			covered?: [number, number],
 		) =>
 			session.sync("9", {
-				round: 2,
+				attempt: 2,
 				scope,
 				covered,
 				batches: [],
@@ -565,7 +602,7 @@ describe("segment rounds", () => {
 		function holed(): Session {
 			const session = new Session();
 			session.subscribe("9");
-			session.sync("9", { round: 1, batches: [[tagged(A, "a1", T1)]] });
+			session.sync("9", { attempt: 1, batches: [[tagged(A, "a1", T1)]] });
 			session.tick([{ liveId: "9", hole: true }], 11);
 			return session;
 		}
@@ -573,7 +610,7 @@ describe("segment rounds", () => {
 		it("without an unresolved hole", () => {
 			const session = new Session();
 			session.subscribe("9");
-			session.sync("9", { round: 1, batches: [[]] });
+			session.sync("9", { attempt: 1, batches: [[]] });
 			expect(() => start(session, selected({ tag: T1 }), [1, 1])).toThrow(
 				ProtocolError,
 			);
@@ -591,7 +628,7 @@ describe("segment rounds", () => {
 		it("with a row outside its scope", () => {
 			expect(() =>
 				holed().sync("9", {
-					round: 2,
+					attempt: 2,
 					scope: selected({ tag: T1 }),
 					covered: [1, 1],
 					batches: [[tagged(B, "b", T2)]],
@@ -602,11 +639,11 @@ describe("segment rounds", () => {
 		it("returning a row the result shows under a tag outside its scope", () => {
 			const session = new Session();
 			session.subscribe("9");
-			session.sync("9", { round: 1, batches: [[tagged(A, "a1", T2)]] });
+			session.sync("9", { attempt: 1, batches: [[tagged(A, "a1", T2)]] });
 			session.tick([{ liveId: "9", hole: true }], 11);
 			expect(() =>
 				session.sync("9", {
-					round: 2,
+					attempt: 2,
 					scope: selected({ tag: T1 }),
 					covered: [1, 1],
 					batches: [[tagged(A, "a2", T1)]],
@@ -614,17 +651,17 @@ describe("segment rounds", () => {
 			).toThrow("outside its scope");
 		});
 
-		it("starting a different round before the previous one ends", () => {
+		it("accepts a greater attempt before end as a retry", () => {
 			const session = holed();
 			start(session, selected({ tag: T1 }), [1, 1]);
 			expect(() =>
 				session.sync("9", {
-					round: 3,
+					attempt: 3,
 					scope: selected({ tag: T1 }),
 					covered: [1, 1],
 					batches: [],
 				}),
-			).toThrow(ProtocolError);
+			).not.toThrow();
 		});
 
 		describe("from a retry that changes its round's plan", () => {
@@ -634,13 +671,12 @@ describe("segment rounds", () => {
 				const session = new Session();
 				session.subscribe("9");
 				session.sync("9", {
-					round: 1,
+					attempt: 1,
 					batches: [[tagged(A, "a1", T1), tagged(B, "b1", T2)]],
 				});
 				session.tick([{ liveId: "9", hole: true }], 11);
 				session.tick([{ liveId: "9", changes: [] }], 12);
 				session.sync("9", {
-					round: 2,
 					attempt: 4,
 					scope: selected({ tag: T1 }, { tag: T2 }),
 					covered: [1, 1],
@@ -651,7 +687,6 @@ describe("segment rounds", () => {
 				return session;
 			}
 			const retry = (overrides: object) => ({
-				round: 2,
 				attempt: 5,
 				scope: selected({ tag: T1 }, { tag: T2 }),
 				covered: [1, 1] as const,
@@ -687,12 +722,20 @@ describe("segment rounds", () => {
 				).toThrow("a retry changed its round's snapshot");
 			});
 
-			it("rejects an attempt of a round that has ended", () => {
+			it("accepts a selected round after end with a greater attempt", () => {
 				const session = staged();
 				session.sync("9", retry({}));
-				expect(() =>
-					session.sync("9", retry({ attempt: 6, end: false })),
-				).toThrow("a round started again after its end");
+				session.tick([{ liveId: "9", hole: true }], 13);
+				session.sync(
+					"9",
+					retry({
+						attempt: 6,
+						covered: [3, 3],
+						mvcc: mvccThrough(13),
+						batches: [[tagged(B, "b3", T2)]],
+					}),
+				);
+				expect(values(session.live("9"))).toEqual(["b3"]);
 			});
 		});
 
@@ -700,7 +743,7 @@ describe("segment rounds", () => {
 			it("from a covered patch, before a one-row selector removes it", () => {
 				const session = new Session();
 				session.subscribe("9");
-				session.sync("9", { round: 1, batches: [[tagged(A, "a1")]] });
+				session.sync("9", { attempt: 1, batches: [[tagged(A, "a1")]] });
 				session.tick(
 					[
 						{
@@ -713,7 +756,7 @@ describe("segment rounds", () => {
 				);
 				expect(() =>
 					session.sync("9", {
-						round: 2,
+						attempt: 2,
 						scope: selected({ row_key: A }),
 						covered: [1, 1],
 						batches: [[]],
@@ -725,7 +768,7 @@ describe("segment rounds", () => {
 				const session = new Session();
 				const live = session.subscribe("9");
 				session.sync("9", {
-					round: 1,
+					attempt: 1,
 					batches: [[tagged(A, "a1", T1)]],
 				});
 				expect(() =>
@@ -740,11 +783,11 @@ describe("segment rounds", () => {
 			it("from a round row", () => {
 				const session = new Session();
 				session.subscribe("9");
-				session.sync("9", { round: 1, batches: [[tagged(A, "a1")]] });
+				session.sync("9", { attempt: 1, batches: [[tagged(A, "a1")]] });
 				session.tick([{ liveId: "9", hole: true }], 11);
 				expect(() =>
 					session.sync("9", {
-						round: 2,
+						attempt: 2,
 						scope: selected({ tag: T1 }),
 						covered: [1, 1],
 						batches: [[tagged(A, "a2", T1)]],

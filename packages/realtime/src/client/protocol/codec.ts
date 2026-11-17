@@ -108,20 +108,11 @@ export function decodeServerFrame(
 }
 
 /**
- * Every v2 baseline sync is the one round that starts its epoch, so it names
- * one round per epoch. Any valid round ID would do; this is the smallest.
- */
-const V2_ROUND = "1";
-
-/**
  * Express a v2 frame in the v3 shape before v3 validation.
  *
- * Protocol v3 is v2 plus `segments_pending`, a round and scope on baseline
- * syncs, and optional segment tags on rows. A v2 frame carries none of
- * them, and a v2 baseline sync is a round with scope `all` and no covered
- * range. Rejecting the v3 additions here and in {@link rejectSegmentTags},
- * then adding that round and scope, makes v3 validation accept exactly the
- * frames the v2 schema accepts.
+ * Protocol v3 adds `segments_pending`, scope on baseline starts, and optional
+ * segment tags on rows. Reject those additions on v2 frames, then add the
+ * implicit `all` scope so the shared validator accepts the v2 baseline.
  */
 function liftV2Frame(value: unknown): unknown {
 	if (value === null || typeof value !== "object" || Array.isArray(value))
@@ -141,8 +132,8 @@ function liftV2Frame(value: unknown): unknown {
 				}
 			}
 			return frame.type === "baseline_sync_start"
-				? { ...frame, round: V2_ROUND, scope: { kind: "all" } }
-				: { ...frame, round: V2_ROUND };
+				? { ...frame, scope: { kind: "all" } }
+				: frame;
 		}
 		default:
 			return frame;

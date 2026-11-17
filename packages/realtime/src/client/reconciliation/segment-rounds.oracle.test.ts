@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SILENT_CLIENT_EVENTS } from "../diagnostics.js";
 import { createParserRegistry } from "../postgres/parsers.js";
-import { ProtocolError } from "../protocol/codec.js";
+import { decodeServerMessage, ProtocolError } from "../protocol/codec.js";
 import type {
 	ServerMessage,
 	WireChange,
@@ -26,9 +26,9 @@ import { BaselineSyncPublicationReconciler } from "./reconciler.js";
  * segment selected by row key, or no segment, so the server always patches
  * the row. The server can also withhold publications and release them later,
  * so a round can end before its covered ticks arrive, retry a round, and reset
- * the epoch. Two server moves break the protocol and must be rejected: a
- * retry that changes its round's scope, covered range or snapshot, and a
- * patch that gives a shown row key another kind of segment.
+ * the epoch. Three server moves break the protocol and must be rejected: a
+ * same-epoch all round, a retry that changes its round's scope, covered range
+ * or snapshot, and a patch that gives a shown row key another kind of segment.
  */
 
 type Kind = "multi" | "one" | "none";
@@ -193,11 +193,16 @@ describe("segment round reconciliation against a table history", () => {
 	});
 });
 
-type Scope = Extract<ServerMessage, { type: "baseline_sync_start" }>["scope"];
+type WireScope = Extract<
+	ServerMessage,
+	{ type: "baseline_sync_start" }
+>["scope"];
+type Scope =
+	| { kind: "all" }
+	| Omit<Extract<WireScope, { kind: "selected" }>, "covered">;
 type Mvcc = Extract<ServerMessage, { type: "progress" }>["mvcc"];
 
 interface OpenRound {
-	readonly round: number;
 	attempt: number;
 	readonly scope: Scope;
 	readonly covered: { readonly first: number; readonly last: number };
@@ -226,7 +231,6 @@ class ModelRun {
 	private ended: { readonly first: number; readonly last: number }[] = [];
 	private dirtyTags = new Set<string>();
 	private dirtyKeys = new Set<string>();
-	private nextRound = 2;
 	private nextAttempt = 2;
 	private open?: OpenRound;
 	private readonly resolved = new Set<number>();
@@ -385,13 +389,11 @@ class ModelRun {
 		const rows = [
 			...(this.history[this.epochStart] ?? new Map()).entries(),
 		].map(([key, row]) => this.wireRow(key, row));
-		const round = this.epoch === 1 ? 1 : this.nextRound++;
 		const attempt = this.epoch === 1 ? 1 : this.nextAttempt++;
 		const version = {
 			live_id: LIVE_ID,
 			epoch: String(this.epoch),
 			baseline_sync_attempt: String(attempt),
-			round: String(round),
 		};
 		this.send({
 			type: "baseline_sync_start",
@@ -409,6 +411,19 @@ class ModelRun {
 		// The client checks the first covered hole against what it received,
 		// unless an earlier round still waits for its ticks.
 		if (first > this.received && !this.waiting()) return;
+		if (all) {
+			this.expectRejected(() =>
+				this.send({
+					type: "baseline_sync_start",
+					live_id: LIVE_ID,
+					epoch: String(this.epoch),
+					baseline_sync_attempt: String(this.nextAttempt++),
+					scope: { kind: "all" },
+					mvcc: snapshotThrough(this.epochStart + this.sequence),
+				}),
+			);
+			return;
+		}
 		// The round pins the table now and closes the keys of the holes so far.
 		const last = this.sequence;
 		const tags = this.dirtyTags;
@@ -417,7 +432,6 @@ class ModelRun {
 		this.dirtyKeys = new Set();
 		const rows = [...this.table.entries()]
 			.filter(([key, row]) => {
-				if (all) return true;
 				const kind = this.kind(key);
 				return kind === "one"
 					? keys.has(key)
@@ -425,17 +439,14 @@ class ModelRun {
 			})
 			.map(([key, row]) => this.wireRow(key, row));
 		this.open = {
-			round: this.nextRound++,
 			attempt: this.nextAttempt++,
-			scope: all
-				? { kind: "all" }
-				: ({
-						kind: "selected",
-						selectors: [
-							...[...tags].map((tag) => ({ tag })),
-							...[...keys].map((row_key) => ({ row_key })),
-						],
-					} as Scope),
+			scope: {
+				kind: "selected",
+				selectors: [
+					...[...tags].map((tag) => ({ tag })),
+					...[...keys].map((row_key) => ({ row_key })),
+				],
+			} as Scope,
 			covered: { first, last },
 			mvcc: snapshotThrough(this.epochStart + last),
 			rows,
@@ -645,9 +656,10 @@ class ModelRun {
 
 	private send(message: ServerMessage): void {
 		this.reconciler.accept(
-			message as Parameters<
-				BaselineSyncPublicationReconciler["accept"]
-			>[0],
+			decodeServerMessage(
+				JSON.stringify(message),
+				"neon.realtime.v3",
+			) as Parameters<BaselineSyncPublicationReconciler["accept"]>[0],
 		);
 	}
 
@@ -655,12 +667,17 @@ class ModelRun {
 		this.send({
 			type: "baseline_sync_start",
 			...this.version(open),
-			scope: open.scope,
+			scope:
+				open.scope.kind === "selected"
+					? {
+							...open.scope,
+							covered: {
+								from_sequence: String(open.covered.first),
+								through_sequence: String(open.covered.last),
+							},
+						}
+					: open.scope,
 			mvcc: open.mvcc,
-			covered: {
-				first_sequence: String(open.covered.first),
-				last_sequence: String(open.covered.last),
-			},
 		});
 		const size = Math.ceil(open.rows.length / open.parts);
 		for (let index = 0; index < open.parts; index += 1) {
@@ -678,7 +695,6 @@ class ModelRun {
 			live_id: LIVE_ID,
 			epoch: String(this.epoch),
 			baseline_sync_attempt: String(open.attempt),
-			round: String(open.round),
 		};
 	}
 

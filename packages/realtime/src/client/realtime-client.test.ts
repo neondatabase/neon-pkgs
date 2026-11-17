@@ -399,7 +399,7 @@ describe("RealtimeClient", () => {
 			type: "subscribed",
 			request_id: request.request_id,
 			live_id: "41",
-			epoch: "1",
+			epoch: "2",
 			first_sequence: "1",
 			columns: [
 				{
@@ -413,10 +413,11 @@ describe("RealtimeClient", () => {
 		socket.receive({
 			type: "baseline_sync_start",
 			live_id: "41",
-			epoch: "1",
+			epoch: "2",
 			baseline_sync_attempt: "2",
 			mvcc: { xmin: "1", xmax: "2", xip: [] },
 		});
+		// Frames from an old epoch are ignored without logging a new attempt.
 		socket.receive({
 			type: "baseline_sync_start",
 			live_id: "41",
@@ -434,7 +435,7 @@ describe("RealtimeClient", () => {
 		socket.receive({
 			type: "baseline_sync_batch",
 			live_id: "41",
-			epoch: "1",
+			epoch: "2",
 			baseline_sync_attempt: "2",
 			index: 0,
 			rows: [{ row_key: ROW_KEY, values: ["private-value"] }],
@@ -442,7 +443,7 @@ describe("RealtimeClient", () => {
 		socket.receive({
 			type: "baseline_sync_end",
 			live_id: "41",
-			epoch: "1",
+			epoch: "2",
 			baseline_sync_attempt: "2",
 			batch_count: 1,
 		});
