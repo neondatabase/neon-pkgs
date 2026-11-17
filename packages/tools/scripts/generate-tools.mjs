@@ -40,13 +40,19 @@ const approvalRequiredReads = new Set([
 ]);
 
 // These operations reach outside the authenticated account by contacting
-// external recipients or creating a resource that can be publicly accessible.
+// external recipients, pointing Neon at a caller-chosen external endpoint, or
+// creating a resource that can be publicly accessible.
 const openWorldOperations = new Set([
+	"addProjectJWKS",
 	"createOrganizationInvitations",
+	"createProjectBranchDataAPI",
 	"createProjectBranchBucket",
 	"sendNeonAuthEmailProviderTest",
 	"sendNeonAuthTestEmail",
 	"setOrganizationSpendingLimit",
+	"updateNeonAuthEmailProvider",
+	"updateNeonAuthEmailServer",
+	"updateNeonAuthWebhookConfig",
 ]);
 
 const resolveReference = (reference) => {
