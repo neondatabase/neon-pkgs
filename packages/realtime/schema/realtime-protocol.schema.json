@@ -62,7 +62,11 @@
           "properties": {
             "kind": { "const": "selected" },
             "selectors": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/selector" } },
-            "covered": { "$ref": "#/$defs/covered" }
+            "covered": { "$ref": "#/$defs/covered" },
+            "ordered": {
+              "const": true,
+              "$comment": "Present on every round of an ordered result, including one that returns no rows; a retry keeps it. Its rows say where they go with after_row_key. The ticks it covers contain no move and add no row outside its scope; ticks after its covered range may contain moves."
+            }
           },
           "additionalProperties": false
         }
@@ -105,7 +109,7 @@
         "values": { "type": "array", "items": { "$ref": "#/$defs/cell" } },
         "segment_tag": { "$ref": "#/$defs/segmentTag" },
         "after_row_key": {
-          "$comment": "Places a row of a selected round in an ordered result: right after the row with this key, or first when null. A round is ordered when its first row has this field; in an ordered round, a row without it goes right after the round's previous row. Rows of an 'all' baseline and of an unordered round never carry it. Placements follow move's rules: each anchor is a row still shown once the covered ticks are applied and the scope removed, or an earlier row of the round; no row is its own anchor; and no two rows have the same anchor, counting the implicit ones. The ticks an ordered round covers contain no move and add no row outside its scope.",
+          "$comment": "Places a row of an ordered round (a selected scope with ordered) in its result: right after the row with this key, or first when null. A row without it goes right after the round's previous row, or first when it is the round's first row. Rows of an unordered round and of an 'all' baseline never carry it. Placements follow move's rules: each anchor is a row still shown once the covered ticks are applied and the scope removed, or an earlier row of the round; no row is its own anchor; and no two rows have the same anchor, counting the implicit ones.",
           "oneOf": [{ "$ref": "#/$defs/rowKey" }, { "type": "null" }]
         }
       },

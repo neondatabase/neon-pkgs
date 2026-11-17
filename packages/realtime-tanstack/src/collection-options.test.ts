@@ -911,6 +911,122 @@ describe("Realtime TanStack DB collection", () => {
 			expect(collection.size).toBe(3);
 			expect(collection.status).toBe("ready");
 		});
+		it.each([
+			"renumber",
+			"swap",
+			"handoff",
+		])("applies an ordered content-key transfer (%s)", async (scenario) => {
+			const { wire, collection, preload } = await segmentCollection(
+				`ordered-${scenario}`,
+			);
+			wire.sync(1, [
+				segmentRow("a", 10, "first", T1),
+				segmentRow("b", 11, "second", T1),
+				segmentRow("c", 12, "third", T1),
+				segmentRow("d", 20, "other", T2),
+			]);
+			await preload;
+			wire.tick("61", {
+				hole: true,
+				...(scenario === "handoff"
+					? {
+							changes: [
+								{
+									op: "upsert",
+									...segmentRow("a", 30, "temporary", T1),
+								},
+							],
+						}
+					: {}),
+			});
+			if (scenario === "handoff") {
+				wire.tick("62", {
+					changes: [
+						{
+							op: "upsert",
+							...segmentRow("d", 10, "first moved", T2),
+						},
+					],
+				});
+				wire.tick("63", {
+					changes: [
+						{
+							op: "upsert",
+							...segmentRow("a", 20, "other moved", T1),
+						},
+					],
+				});
+			}
+			const roundRows =
+				scenario === "renumber"
+					? [
+							segmentRow("a", 11, "second", T1),
+							segmentRow("b", 12, "third", T1),
+						]
+					: scenario === "swap"
+						? [
+								segmentRow("a", 11, "second swapped", T1),
+								segmentRow("b", 10, "first swapped", T1),
+								segmentRow("c", 12, "third", T1),
+							]
+						: [
+								segmentRow("a", 20, "other moved", T1),
+								segmentRow("b", 11, "second", T1),
+								segmentRow("c", 12, "third", T1),
+							];
+			wire.sync(2, roundRows, {
+				scope: {
+					kind: "selected",
+					ordered: true,
+					selectors: [{ tag: T1 }],
+				},
+				covered: [1, scenario === "handoff" ? 3 : 1],
+			});
+			await expect(
+				collection.utils.awaitTxId("61", 10_000),
+			).resolves.toBe(true);
+			await eventually(() => {
+				expect(collection.status).toBe("ready");
+				expect(collection.size).toBe(scenario === "renumber" ? 3 : 4);
+				expect(collection.get(11)).toMatchObject({
+					title: scenario === "swap" ? "second swapped" : "second",
+				});
+				if (scenario === "renumber")
+					expect(collection.has(10)).toBe(false);
+				else
+					expect(collection.get(10)).toMatchObject({
+						title:
+							scenario === "swap"
+								? "first swapped"
+								: "first moved",
+					});
+				expect(collection.get(20)).toMatchObject({
+					title: scenario === "handoff" ? "other moved" : "other",
+				});
+			});
+		});
+
+		it("rejects a true duplicate in an ordered round", async () => {
+			const { wire, collection, preload } =
+				await segmentCollection("ordered-duplicate");
+			wire.sync(1, [
+				segmentRow("a", 10, "first", T1),
+				segmentRow("d", 20, "other", T2),
+			]);
+			await preload;
+			wire.tick("61", { hole: true });
+			wire.sync(2, [segmentRow("a", 20, "duplicate", T1)], {
+				scope: {
+					kind: "selected",
+					ordered: true,
+					selectors: [{ tag: T1 }],
+				},
+				covered: [1, 1],
+			});
+			await eventually(() => expect(collection.status).toBe("error"));
+			expect(collection.get(10)).toMatchObject({ title: "first" });
+			expect(collection.get(20)).toMatchObject({ title: "other" });
+		});
 	});
 });
 
@@ -961,21 +1077,20 @@ function segmentWire() {
 				live_id: "1",
 				epoch: "1",
 				baseline_sync_attempt: String(round),
-				round: String(round),
 			};
 			wire.receive({
 				type: "baseline_sync_start",
 				...version,
-				scope: resolves?.scope ?? { kind: "all" },
-				mvcc: { xmin: "1", xmax: "1", xip: [] },
-				...(resolves
+				scope: resolves
 					? {
+							...resolves.scope,
 							covered: {
-								first_sequence: String(resolves.covered[0]),
-								last_sequence: String(resolves.covered[1]),
+								from_sequence: String(resolves.covered[0]),
+								through_sequence: String(resolves.covered[1]),
 							},
 						}
-					: {}),
+					: { kind: "all" },
+				mvcc: { xmin: "1", xmax: "1", xip: [] },
 			});
 			wire.receive({
 				type: "baseline_sync_batch",

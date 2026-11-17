@@ -821,6 +821,13 @@ describe("segment rounds", () => {
 });
 
 describe("ordered segment rounds", () => {
+	const orderedSelected = (
+		...selectors: ({ tag: string } | { row_key: string })[]
+	): Scope =>
+		({
+			...selected(...selectors),
+			ordered: true,
+		}) as Scope;
 	const E = key("e");
 	const F = key("f");
 	const placed = (row: WireRow, after: string | null): WireRow => ({
@@ -848,7 +855,7 @@ describe("ordered segment rounds", () => {
 		{
 			name: "replaces a block in the middle across batches",
 			initial,
-			scope: selected({ tag: T1 }),
+			scope: orderedSelected({ tag: T1 }),
 			batches: [
 				[],
 				[placed(tagged(E, "e", T1), A)],
@@ -868,7 +875,7 @@ describe("ordered segment rounds", () => {
 		{
 			name: "inserts a new block at the head",
 			initial: [tagged(A, "a"), tagged(D, "d")],
-			scope: selected({ tag: T1 }),
+			scope: orderedSelected({ tag: T1 }),
 			batches: [[placed(tagged(E, "e", T1), null), tagged(F, "f", T1)]],
 			order: ["e", "f", "a", "d"],
 			changes: [put(E, "e"), put(F, "f"), move(E, null), move(F, E)],
@@ -881,7 +888,7 @@ describe("ordered segment rounds", () => {
 				tagged(C, "c", T2),
 				tagged(D, "d"),
 			],
-			scope: selected({ tag: T1 }, { tag: T2 }),
+			scope: orderedSelected({ tag: T1 }, { tag: T2 }),
 			batches: [[placed(tagged(E, "e", T1), A)], [tagged(F, "f", T2)]],
 			order: ["a", "e", "f", "d"],
 			changes: [
@@ -896,7 +903,7 @@ describe("ordered segment rounds", () => {
 		{
 			name: "accepts an explicit anchor equal to the implicit one",
 			initial,
-			scope: selected({ tag: T1 }),
+			scope: orderedSelected({ tag: T1 }),
 			batches: [
 				[placed(tagged(E, "e", T1), A), placed(tagged(F, "f", T1), E)],
 			],
@@ -918,7 +925,7 @@ describe("ordered segment rounds", () => {
 				tagged(C, "c", T2),
 				tagged(D, "d"),
 			],
-			scope: selected({ tag: T1 }, { tag: T2 }),
+			scope: orderedSelected({ tag: T1 }, { tag: T2 }),
 			batches: [[placed(tagged(E, "e", T1), A)]],
 			order: ["a", "e", "d"],
 			changes: [remove(B), remove(C), put(E, "e"), move(E, A)],
@@ -931,7 +938,7 @@ describe("ordered segment rounds", () => {
 				tagged(C, "c", T2),
 				tagged(D, "d"),
 			],
-			scope: selected({ tag: T1 }, { tag: T2 }),
+			scope: orderedSelected({ tag: T1 }, { tag: T2 }),
 			batches: [
 				[placed(tagged(E, "e", T1), A)],
 				[placed(tagged(F, "f", T2), D)],
@@ -947,9 +954,17 @@ describe("ordered segment rounds", () => {
 			],
 		},
 		{
+			name: "places the first row at the head when its anchor is omitted",
+			initial: [tagged(D, "d"), tagged(A, "a")],
+			scope: orderedSelected({ row_key: A }),
+			batches: [[tagged(A, "a2")]],
+			order: ["a2", "d"],
+			changes: [put(A, "a2"), move(A, null)],
+		},
+		{
 			name: "places a one-row segment selected by row key",
 			initial: [tagged(D, "d"), tagged(A, "a")],
-			scope: selected({ row_key: A }),
+			scope: orderedSelected({ row_key: A }),
 			batches: [[placed(tagged(A, "a2"), null)]],
 			order: ["a2", "d"],
 			changes: [put(A, "a2"), move(A, null)],
@@ -957,7 +972,7 @@ describe("ordered segment rounds", () => {
 		{
 			name: "upserts and moves a retained row key without removing it",
 			initial,
-			scope: selected({ tag: T1 }),
+			scope: orderedSelected({ tag: T1 }),
 			batches: [[placed(tagged(B, "b2", T1), A)]],
 			order: ["a", "b2", "d"],
 			changes: [remove(C), put(B, "b2"), move(B, A)],
@@ -1022,7 +1037,7 @@ describe("ordered segment rounds", () => {
 				);
 				session.sync("9", {
 					attempt: 2,
-					scope: selected({ tag: T1 }),
+					scope: orderedSelected({ tag: T1 }),
 					covered: [1, 1],
 					batches: [[placed(tagged(E, "e", T1), A)]],
 				});
@@ -1052,7 +1067,7 @@ describe("ordered segment rounds", () => {
 				session.tick([{ liveId: "9", hole: true }], 13);
 				session.sync("9", {
 					attempt: 3,
-					scope: selected({ tag: T2 }),
+					scope: orderedSelected({ tag: T2 }),
 					covered: [3, 3],
 					batches: [[]],
 				});
@@ -1102,7 +1117,7 @@ describe("ordered segment rounds", () => {
 				session.progress(14);
 				session.sync("9", {
 					attempt: 2,
-					scope: selected({ tag: T1 }),
+					scope: orderedSelected({ tag: T1 }),
 					covered: [1, 1],
 					mvcc: mvccThrough(11),
 					batches: [[placed(tagged(E, "e", T1), A)]],
@@ -1122,7 +1137,7 @@ describe("ordered segment rounds", () => {
 					);
 				session.sync("9", {
 					attempt: 3,
-					scope: selected({ tag: T1 }),
+					scope: orderedSelected({ tag: T1 }),
 					covered: [3, 3],
 					mvcc: mvccThrough(13),
 					batches: [[placed(tagged(E, "e2", T1), A)]],
@@ -1170,7 +1185,9 @@ describe("ordered segment rounds", () => {
 				expect(() =>
 					session.sync("9", {
 						attempt: 2,
-						scope: selected({ tag: T1 }),
+						scope: hasMove
+							? orderedSelected({ tag: T1 })
+							: selected({ tag: T1 }),
 						covered: [1, 1],
 						batches: [],
 					}),
@@ -1215,6 +1232,179 @@ describe("ordered segment rounds", () => {
 				expect(live.getSnapshot().updating).toBe(false);
 			});
 
+			it.each([
+				"covered",
+				"later",
+			])("keeps an in-place row's order with an empty ordered round (P8/P9: %s)", (where) => {
+				const session = new Session();
+				const live = session.subscribe("9", materialized);
+				const updates: RawLiveQueryUpdate<Value>[] = [];
+				const rawRows = new Map<string, Value>();
+				live.onUpdate((update) => {
+					updates.push(update);
+					if (update.type === "rows") {
+						for (const { rowId, row } of update.rows)
+							rawRows.set(rowId, row);
+					} else {
+						for (const change of update.changes) {
+							if (change.type === "remove")
+								rawRows.delete(change.rowId);
+							else if (change.type === "upsert")
+								rawRows.set(change.rowId, change.row);
+						}
+					}
+				});
+				session.sync("9", {
+					attempt: 1,
+					batches: [
+						[tagged(A, "a"), tagged(B, "b", T1), tagged(D, "d")],
+					],
+				});
+				session.tick(
+					[
+						{
+							liveId: "9",
+							hole: true,
+							changes:
+								where === "covered" ? [upsert(A, "a2")] : [],
+						},
+					],
+					11,
+				);
+				if (where === "later")
+					session.tick(
+						[{ liveId: "9", changes: [upsert(A, "a2")] }],
+						12,
+					);
+				session.sync("9", {
+					attempt: 2,
+					scope: orderedSelected({ tag: T1 }),
+					covered: [1, 1],
+					batches: [[]],
+				});
+				expect(updates.slice(1)).toEqual(
+					where === "covered"
+						? [
+								{
+									type: "changes",
+									changes: [remove(B), put(A, "a2")],
+									batch: { txids: ["11"] },
+								},
+							]
+						: [
+								{
+									type: "changes",
+									changes: [remove(B)],
+									batch: { txids: ["11"] },
+								},
+								{
+									type: "changes",
+									changes: [put(A, "a2")],
+									batch: { txids: ["12"] },
+								},
+							],
+				);
+				const expected = [{ value: "a2" }, { value: "d" }];
+				expect([...rawRows.values()]).toEqual(expected);
+				if (materialized)
+					expect(live.getSnapshot().data).toEqual(expected);
+			});
+
+			it("rejects a covered entrant retagged out of scope (F4)", () => {
+				const session = new Session();
+				const live = session.subscribe("9", materialized);
+				const update = vi.fn();
+				live.onUpdate(update);
+				session.sync("9", { attempt: 1, batches: [initial] });
+				session.tick(
+					[
+						{
+							liveId: "9",
+							hole: true,
+							changes: [upsert(E, "e", T1)],
+						},
+					],
+					11,
+				);
+				session.tick(
+					[{ liveId: "9", changes: [upsert(E, "e2", T2)] }],
+					12,
+				);
+				expect(() =>
+					session.sync("9", {
+						attempt: 2,
+						scope: orderedSelected({ tag: T1 }),
+						covered: [1, 2],
+						batches: [[placed(tagged(B, "b2", T1), A)]],
+					}),
+				).toThrow("ordered entrant has no move");
+				expect(update).toHaveBeenCalledTimes(1);
+				if (materialized)
+					expect(live.getSnapshot().data).toEqual(
+						["a", "b", "c", "d"].map((value) => ({ value })),
+					);
+			});
+
+			it.each([
+				true,
+				false,
+			])("rejects a retry switching ordered from %s", (ordered) => {
+				const session = new Session();
+				session.subscribe("9", materialized);
+				session.sync("9", { attempt: 1, batches: [initial] });
+				session.tick([{ liveId: "9", hole: true }], 11);
+				const plan = {
+					covered: [1, 1] as const,
+					batches: [],
+					end: false,
+				};
+				session.sync("9", {
+					...plan,
+					attempt: 2,
+					scope: ordered
+						? orderedSelected({ tag: T1 })
+						: selected({ tag: T1 }),
+				});
+				expect(() =>
+					session.sync("9", {
+						...plan,
+						attempt: 3,
+						scope: ordered
+							? selected({ tag: T1 })
+							: orderedSelected({ tag: T1 }),
+					}),
+				).toThrow("a retry changed its round's ordering");
+			});
+
+			it("rejects a later move after an unordered round", () => {
+				const session = new Session();
+				const live = session.subscribe("9", materialized);
+				const update = vi.fn();
+				live.onUpdate(update);
+				session.sync("9", { attempt: 1, batches: [initial] });
+				session.tick([{ liveId: "9", hole: true }], 11);
+				session.tick(
+					[
+						{
+							liveId: "9",
+							changes: [
+								{ op: "move", row_key: D, after_row_key: null },
+							],
+						},
+					],
+					12,
+				);
+				expect(() =>
+					session.sync("9", {
+						attempt: 2,
+						scope: selected({ tag: T1 }),
+						covered: [1, 1],
+						batches: [[tagged(E, "e", T1)]],
+					}),
+				).toThrow("a round cannot replay an ordered move");
+				expect(update).toHaveBeenCalledTimes(1);
+			});
+
 			const invalid = [
 				{
 					name: "a covered tick with a move",
@@ -1230,6 +1420,7 @@ describe("ordered segment rounds", () => {
 				},
 				{
 					name: "a later batch introducing placement into an unordered round",
+					unordered: true,
 					batches: [
 						[tagged(E, "e", T1)],
 						[placed(tagged(F, "f", T1), E)],
@@ -1297,7 +1488,10 @@ describe("ordered segment rounds", () => {
 				expect(() =>
 					session.sync("9", {
 						attempt: 2,
-						scope: selected({ tag: T1 }),
+						scope:
+							"unordered" in test
+								? selected({ tag: T1 })
+								: orderedSelected({ tag: T1 }),
 						covered: [1, 1],
 						batches,
 					}),

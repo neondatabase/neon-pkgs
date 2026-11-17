@@ -107,6 +107,7 @@ interface PendingBaselineSync {
 	readonly resolves?: {
 		readonly scope: RoundScope;
 		readonly covered: CoveredRange;
+		readonly ordered: boolean;
 	};
 	nextBatch: number;
 	rows: WireRow[];
@@ -201,8 +202,8 @@ type ReconciliationMessage = Extract<
  * before it applies at once. From the first unresolved hole on, ticks are
  * buffered until a round that covers the hole lands; its install replays the
  * covered ticks, replaces the round's scope with the round's rows, replays
- * the later ticks up to the next hole, and publishes the result. Rounds with
- * placements or later moves publish each later tick separately.
+ * the later ticks up to the next hole, and publishes the result. Ordered
+ * rounds, including empty ones, publish each later tick separately.
  */
 export class BaselineSyncPublicationReconciler {
 	private readonly targets = new Map<string, TargetState>();
@@ -420,7 +421,11 @@ export class BaselineSyncPublicationReconciler {
 			if ("tag" in selector) tags.add(selector.tag);
 			else rowKeys.add(selector.row_key);
 		}
-		return { scope: { tags, rowKeys }, covered };
+		return {
+			scope: { tags, rowKeys },
+			covered,
+			ordered: message.scope.ordered === true,
+		};
 	}
 
 	private baselineSyncBatch(
@@ -468,10 +473,7 @@ export class BaselineSyncPublicationReconciler {
 						"an all baseline row carries placement",
 					);
 				}
-				if (
-					baselineSync.rows.length > 0 &&
-					baselineSync.rows[0]?.after_row_key === undefined
-				) {
+				if (!baselineSync.resolves?.ordered) {
 					throw new ProtocolError(
 						"an unordered round row carries placement",
 					);
@@ -592,8 +594,7 @@ export class BaselineSyncPublicationReconciler {
 		if (!resolves || round.batchCount === undefined || !index) {
 			throw new ProtocolError("a round cannot install without its plan");
 		}
-		const { scope, covered } = resolves;
-		const ordered = round.rows[0]?.after_row_key !== undefined;
+		const { scope, covered, ordered } = resolves;
 		const first = state.backlog[0];
 		if (!first?.hole || first.sequence !== covered.first) {
 			throw new ProtocolError(
@@ -715,24 +716,28 @@ export class BaselineSyncPublicationReconciler {
 			delta.set(row.row_key, row);
 			index.set(row.row_key, row.segment_tag);
 		}
-		// 5. Keep later ticks separate when either the round places rows or a
-		// later tick moves one. An empty round has no placement marker, but
-		// its later ticks can still carry moves that cannot be merged.
-		let separateLater = ordered;
-		for (let position = replayed; !separateLater; position += 1) {
-			const tick = state.backlog[position];
-			if (!tick || tick.hole) break;
-			separateLater = tick.batch.changes.some(
-				(change) => change.op === "move",
-			);
+		// Ordered entrants need placements even when the round is empty. A
+		// covered tick can introduce a row inside the scope, then retag it out;
+		// check its final membership, not only each individual covered patch.
+		if (ordered) {
+			for (const [rowKey, row] of delta) {
+				if (
+					row !== null &&
+					!visibleBefore.get(rowKey) &&
+					!round.rowKeys.has(rowKey)
+				) {
+					throw new ProtocolError("ordered entrant has no move");
+				}
+			}
 		}
+		// 5. Later ticks of an ordered round remain separate programs.
 		const later: ReconciledBatch[] = [];
 		for (
 			let tick = state.backlog[replayed];
 			tick && !tick.hole;
 			tick = state.backlog[replayed]
 		) {
-			if (separateLater) {
+			if (ordered) {
 				index.apply(tick.batch.changes);
 				later.push(tick.batch);
 				replayed += 1;
@@ -1082,6 +1087,9 @@ function assertSameRoundPlan(
 		!sameSet(before.scope.rowKeys, resolves.scope.rowKeys)
 	) {
 		throw new ProtocolError("a retry changed its round's scope");
+	}
+	if (before.ordered !== resolves.ordered) {
+		throw new ProtocolError("a retry changed its round's ordering");
 	}
 	if (
 		before.covered.first !== resolves.covered.first ||

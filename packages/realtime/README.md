@@ -504,16 +504,28 @@ Over protocol v3 the server can recompute part of a result instead of patching
 it. While such a refresh is pending, a materialized snapshot has
 `updating: true` and keeps showing the last complete result, with `status`
 unchanged. Changes committed in the meantime wait with it: they become visible
-together when the refresh lands, as one update, and `awaitTxId()` resolves for
-them only then. A snapshot that is not refreshing has `updating: false`.
+together when the refresh lands, and `awaitTxId()` resolves for them only then.
+A snapshot that is not refreshing has `updating: false`.
 
-Raw subscriptions receive a landed refresh as one `changes` update, never as a
-`rows` replacement: first a `remove` for every row the refresh replaces or
-removes, then an `upsert` for every row it shows. A consumer that keys rows by
+For an unordered result, raw subscriptions receive a landed refresh as one
+`changes` update, never as a `rows` replacement: first a `remove` for every row
+the refresh replaces or removes, then an `upsert` for every row it shows. A consumer that keys rows by
 their contents can therefore apply the batch in order without seeing two row
 IDs claim one key. The batch's `txids` list every transaction it makes visible.
 Rows of an unordered result have no defined position, so a materialized array
 lists replaced rows wherever its map puts them.
+
+For an ordered result, the refresh removes only rows that leave the result,
+upserts every row it shows, then moves each returned round row into place.
+A row that keeps its row ID receives an upsert without a remove. Each later
+buffered tick arrives as its own `changes` update, even when the refresh returns
+no rows. The materialized snapshot already includes those later ticks when
+update callbacks run.
+
+A row ID can receive contents another row ID held before the update. A consumer
+keying rows by contents must therefore apply each update as a whole, checking
+key ownership in its final state, as the official adapters do. This also applies
+to ordinary ticks that exchange keys between rows.
 
 Costs, for a result of N rows in G non-empty multi-row segments: each live
 query on protocol v3 keeps a segment index of Θ(N + G) space, raw
