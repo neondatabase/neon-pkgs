@@ -74,7 +74,7 @@ export const toolDescriptions: Readonly<Partial<Record<NeonToolId, string>>> = {
 	"credentials.rotate": "Replaces a scoped credential's secrets in place and returns them once; token_id stays. Not idempotent: if the response is lost, create a new credential ({{credentials.create}}) and revoke this one instead of retrying.",
 	"aiGateway.get": "Gets a branch's AI Gateway host; a 404 says why it is unavailable.",
 	"realtime.get": "Gets a branch's Realtime state, URL, and allowed origins; the secret comes from {{realtime.secret}}.",
-	"realtime.enable": "Enables Realtime on a branch, or changes its allowed origins, and waits until it is applied.",
+	"realtime.enable": "Enables Realtime on a branch, or changes its allowed origins, and waits until it is applied. Enabling turns on logical replication for the whole project, which cannot be turned off, and suspends every compute in the project, dropping active connections. NEVER run autonomously; always ask the user first.",
 	"realtime.disable": "Disables Realtime on a branch, discarding its secret, and waits until it is applied.",
 	"realtime.secret": "Gets the secret the application backend issues Realtime tokens with; 404 until {{realtime.enable}} has run.",
 	"realtime.rotateSecret": "Replaces a branch's Realtime secret and waits until the old one stops working. NEVER run autonomously; always ask the user first. Then update the application backend from {{realtime.secret}}.",

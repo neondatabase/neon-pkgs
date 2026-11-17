@@ -219,7 +219,7 @@ export const describeBranchTool = (options: ToolClientOptions) => {
 			id: publishedId("branches.describe"),
 			title: "Describe Branch",
 			description:
-				"Returns a branch summary, its database names, and a tree of one database's schemas, tables, views, indexes, sequences, and functions. Starts a suspended compute. Branch record only: {{branches.get}}; table names: {{schema.listTables}}; columns: {{schema.describeTable}}.",
+				"Returns a branch summary, its database names, and a tree of one database's schemas, tables, views, indexes, sequences, and functions. Read-only: one catalog query in a READ ONLY transaction, so it changes no data; a suspended compute wakes to run it. Branch record only: {{branches.get}}; table names: {{schema.listTables}}; columns: {{schema.describeTable}}.",
 			inputSchema: describeBranchInputSchema,
 			outputSchema: describeBranchOutputSchema,
 			annotations: sqlReadAnnotations,
