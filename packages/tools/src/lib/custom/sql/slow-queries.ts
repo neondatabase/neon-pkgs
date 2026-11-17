@@ -1,5 +1,5 @@
-import { NeonClientError } from "@neon/sdk";
 import * as z from "zod";
+import { NeonToolCallerError } from "../../caller-error.js";
 import {
 	bindTool,
 	publishedId,
@@ -98,7 +98,7 @@ export const listSlowQueriesTool = (options: ToolClientOptions) =>
 			const sql = sqlClient(connection.uri, signal);
 			const [extension] = await sql.query(EXTENSION_CHECK_SQL);
 			if (extension?.extension_exists !== true) {
-				throw new NeonClientError(
+				throw new NeonToolCallerError(
 					"pg_stat_statements extension is not installed on the database. Please install it using the following command: CREATE EXTENSION pg_stat_statements;",
 				);
 			}

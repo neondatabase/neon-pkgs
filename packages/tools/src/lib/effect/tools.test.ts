@@ -1,3 +1,5 @@
+import { once } from "node:events";
+import { createServer } from "node:http";
 import { NeonAuthError, NeonNetworkError } from "@neon/effect";
 import { NeonClientError as SdkClientError } from "@neon/sdk";
 import { NeonDbError } from "@neondatabase/serverless";
@@ -450,6 +452,45 @@ describe("tool spans", () => {
 
 		expect(error._tag).toBe("NeonClientError");
 		expect(toolSpan("list_objects")?.exit?._tag).toBe("Failure");
+	});
+
+	test("keeps the span ok when a tool reports the caller's mistake, such as a missing doc page", async () => {
+		const docs = createServer((_req, res) => {
+			res.writeHead(404).end();
+		});
+		docs.listen(0, "127.0.0.1");
+		await once(docs, "listening");
+		const address = docs.address();
+		if (address === null || typeof address === "string") {
+			throw new Error("expected a TCP address");
+		}
+		const { tracer, toolSpan } = recordingTracer();
+		const tools = toEffectTools(
+			createNeonTools({
+				tools: ["docs.get"] as const,
+				docsBaseUrl: `http://127.0.0.1:${address.port}`,
+			}),
+		);
+
+		try {
+			const error = await Effect.runPromise(
+				Effect.flip(
+					tools["docs.get"]
+						.execute({ slug: "docs/missing-page" })
+						.pipe(Effect.withTracer(tracer)),
+				),
+			);
+
+			expect(error._tag).toBe("NeonClientError");
+			expect(error.message).toContain("Doc page not found");
+			expect(error.cause.name).toBe("NeonClientError");
+			expect(toolSpan(tools["docs.get"].id)?.exit?._tag).toBe("Success");
+			expect(
+				toolSpan(tools["docs.get"].id)?.attributes.get("error.type"),
+			).toBe("NeonClientError");
+		} finally {
+			docs.close();
+		}
 	});
 
 	test("records the attempts and the failure a retry recovered from", async () => {

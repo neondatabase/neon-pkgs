@@ -1,4 +1,5 @@
 import { Effect, Predicate, Ref, Result, Schedule } from "effect";
+import { NeonToolCallerError } from "../caller-error.js";
 import type {
 	NeonToolAnnotations,
 	NeonToolExecutionContext,
@@ -100,8 +101,9 @@ const SERVER_SQLSTATE_CLASSES = new Set([
 	"XX",
 ]);
 
-// Mistakes in the call: invalid input, a statement Postgres rejected, and any
-// 4xx from the Neon API. `NeonClientError` covers both SDK-side validation and
+// Mistakes in the call: invalid input, a statement Postgres rejected, a
+// mistake a tool reports as `NeonToolCallerError`, and any 4xx from the Neon
+// API. Any other `NeonClientError` covers both SDK-side validation and
 // malformed responses, so it counts as the server's.
 const isCallerError = (error: NeonToolError): boolean => {
 	if (Predicate.isTagged(error, "NeonSqlError")) {
@@ -110,6 +112,8 @@ const isCallerError = (error: NeonToolError): boolean => {
 
 	return (
 		Predicate.isTagged(error, "NeonToolInputError") ||
+		(Predicate.isTagged(error, "NeonClientError") &&
+			error.cause instanceof NeonToolCallerError) ||
 		("status" in error &&
 			typeof error.status === "number" &&
 			error.status < 500)

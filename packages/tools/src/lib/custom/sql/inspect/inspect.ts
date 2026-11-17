@@ -1,6 +1,6 @@
-import { NeonClientError } from "@neon/sdk";
 import { NeonDbError } from "@neondatabase/serverless";
 import * as z from "zod";
+import { NeonToolCallerError } from "../../../caller-error.js";
 import {
 	bindTool,
 	publishedId,
@@ -108,7 +108,7 @@ const runInspectOnDatabase = async (
 			]),
 		);
 		if (installed.length === 0) {
-			throw new NeonClientError(
+			throw new NeonToolCallerError(
 				`The "${check}" check needs the "${extension}" extension, which is not installed on database "${databaseName}". Installing it writes to the user's database, so ask the user first, then run \`CREATE EXTENSION IF NOT EXISTS ${extension};\`.`,
 			);
 		}
@@ -194,7 +194,7 @@ export const inspectDatabaseTool = (options: ToolClientOptions) =>
 					(database) => database.name,
 				);
 				if (branchDatabases.length === 0) {
-					throw new NeonClientError(
+					throw new NeonToolCallerError(
 						"No databases found in your project branch",
 					);
 				}

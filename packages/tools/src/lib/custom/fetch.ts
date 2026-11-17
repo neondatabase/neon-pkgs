@@ -1,5 +1,6 @@
-import { type NeonClient, NeonClientError, type Paginated } from "@neon/sdk";
+import type { NeonClient, Paginated } from "@neon/sdk";
 import * as z from "zod";
+import { NeonToolCallerError } from "../caller-error.js";
 import {
 	bindTool,
 	publishedId,
@@ -176,7 +177,7 @@ const fetchSnapshot = async (
 	);
 	const snapshot = snapshots.find((candidate) => candidate.id === snapshotId);
 	if (snapshot === undefined) {
-		throw new NeonClientError(
+		throw new NeonToolCallerError(
 			`Snapshot ${snapshotId} not found in project ${projectId}`,
 		);
 	}
@@ -203,7 +204,7 @@ ${JSON.stringify(snapshot, null, 2)}
 };
 
 const invalidId = (id: string) =>
-	new NeonClientError(
+	new NeonToolCallerError(
 		`Invalid ID format: "${id}". Expected format: org:*, project:*, branch:<project>/<branch>, endpoint:<project>/<endpoint>, or snapshot:<project>/<snapshot>`,
 	);
 

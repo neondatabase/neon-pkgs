@@ -1,4 +1,4 @@
-import { NeonClientError } from "@neon/sdk";
+import { NeonToolCallerError } from "../../../caller-error.js";
 
 export type InspectQueryScope = "database" | "compute";
 
@@ -23,7 +23,7 @@ export const selectInspectTargets = (
 ): InspectTargetSelection => {
 	if (input.databaseName !== undefined) {
 		if (input.databaseName === "") {
-			throw new NeonClientError(
+			throw new NeonToolCallerError(
 				"database_name cannot be empty. Omit it to cover every database.",
 			);
 		}
@@ -33,7 +33,7 @@ export const selectInspectTargets = (
 		};
 	}
 	if (input.branchDatabases.length === 0) {
-		throw new NeonClientError("No databases found for the branch");
+		throw new NeonToolCallerError("No databases found for the branch");
 	}
 	if (input.scope === "compute") {
 		return {

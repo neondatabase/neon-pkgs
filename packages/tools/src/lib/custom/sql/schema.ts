@@ -1,5 +1,5 @@
-import { NeonClientError } from "@neon/sdk";
 import * as z from "zod";
+import { NeonToolCallerError } from "../../caller-error.js";
 import {
 	bindTool,
 	publishedId,
@@ -181,7 +181,7 @@ const describeTable = async (
 	const [table, ...others] = candidates;
 	if (table === undefined) return null;
 	if (others.length > 0) {
-		throw new NeonClientError(
+		throw new NeonToolCallerError(
 			`Table name ${tableName} matches ${candidates.length} tables. Pass one of these quoted names: ${candidates.map((candidate) => candidate.quoted_name).join(", ")}`,
 		);
 	}
@@ -264,7 +264,7 @@ export const describeTableAt = async (
 ) => {
 	const description = await describeTable(uri, tableName, signal);
 	if (description === null) {
-		throw new NeonClientError(`Table not found: ${tableName}`);
+		throw new NeonToolCallerError(`Table not found: ${tableName}`);
 	}
 	return {
 		raw: description,

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { NeonClientError } from "@neon/sdk";
 import * as z from "zod";
 import { pathInputDescriptions } from "../../../descriptions.gen.js";
+import { NeonToolCallerError } from "../../caller-error.js";
 import {
 	bindTool,
 	publishedId,
@@ -140,7 +140,7 @@ export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 					);
 					const tables = extractTablesFromPlan(executionPlan);
 					if (tables.length === 0) {
-						throw new NeonClientError(
+						throw new NeonToolCallerError(
 							"No tables found in execution plan. Cannot proceed with optimization.",
 						);
 					}

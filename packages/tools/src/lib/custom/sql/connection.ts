@@ -1,7 +1,8 @@
-import { type NeonClient, NeonClientError } from "@neon/sdk";
+import type { NeonClient } from "@neon/sdk";
 import { neon } from "@neondatabase/serverless";
 import * as z from "zod";
 import { pathInputDescriptions } from "../../../descriptions.gen.js";
+import { NeonToolCallerError } from "../../caller-error.js";
 import type {
 	NeonToolExecutionContext,
 	NeonToolMetadataInput,
@@ -83,7 +84,9 @@ export const defaultDatabase = async (
 	});
 	const first = databases[0];
 	if (first === undefined) {
-		throw new NeonClientError("No databases found in your project branch");
+		throw new NeonToolCallerError(
+			"No databases found in your project branch",
+		);
 	}
 	return (
 		databases.find(
@@ -107,7 +110,7 @@ export const resolveConnection = async (
 	const pinnedRole = context.postgresRole;
 	if (pinnedRole !== undefined) {
 		if (roleName !== undefined && roleName !== pinnedRole) {
-			throw new NeonClientError(
+			throw new NeonToolCallerError(
 				`This connection is pinned to Postgres role "${pinnedRole}"; role_name "${roleName}" is not allowed.`,
 			);
 		}
