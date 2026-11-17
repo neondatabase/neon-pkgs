@@ -72,7 +72,7 @@ import {
 	readContextFile,
 } from "../context.js";
 import { storeFor } from "../credential_io.js";
-import { getTty, isCi } from "../env.js";
+import { hasTerminal, isCi } from "../env.js";
 import { log } from "../log.js";
 import { withExclusiveLock } from "../refresh_lock.js";
 import {
@@ -1022,13 +1022,14 @@ export const ensureAuth = async (
 		return;
 	}
 
-	// Agents and scripts run commands with stdin on /dev/null or a pipe, where nobody may be
-	// watching for a browser, so name the sign-in command instead of waiting out the
-	// 60-second timeout. `login` returned above and still opens the browser from there.
+	// Agents and scripts run commands with every stdio stream on a pipe or file, where nobody
+	// may be watching for a browser, so name the sign-in command instead of waiting out the
+	// 60-second timeout. One terminal stream is enough to keep `neon psql < q.sql` signing in.
+	// `login` returned above and still opens the browser from there.
 	if (
 		!(props.forceAuth ?? props["force-auth"]) &&
 		!isCi() &&
-		!getTty().stdin
+		!hasTerminal()
 	) {
 		throw new Error(
 			`Not signed in: profile "${selection.profile}" ${state}, and this shell has no terminal to start a browser sign-in from. ${signInHint}`,

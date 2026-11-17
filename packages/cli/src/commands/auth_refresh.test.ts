@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { matchErrorCode } from "../errors.js";
 import { passesOutput } from "../test_utils/fixtures.js";
 import {
 	type NeonApiServer,
@@ -331,7 +332,7 @@ describe("no usable credential", () => {
 });
 
 describe("no usable credential and no terminal, outside CI", () => {
-	// The forked CLI's stdin is a pipe, as in an agent's shell. An empty PATH leaves the
+	// The forked CLI's stdio streams are all pipes, as in an agent's shell. An empty PATH leaves the
 	// browser opener nothing to launch, so a regression cannot open the developer's browser.
 	const noTerminal = (): Record<string, string> => ({
 		CI: "",
@@ -368,6 +369,10 @@ describe("no usable credential and no terminal, outside CI", () => {
 		expect(result.stderr).toContain(
 			'Not signed in: profile "DEFAULT" has no stored credential, and this shell has no terminal to start a browser sign-in from. Run `neon login --profile DEFAULT` to sign in, or use an API key with --api-key or NEON_API_KEY.',
 		);
+		const message = result.stderr.slice(
+			result.stderr.indexOf("Not signed in:"),
+		);
+		expect(matchErrorCode(message)).toBe("NOT_SIGNED_IN");
 	});
 
 	it("names an expired session that cannot be refreshed", async () => {
