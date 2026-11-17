@@ -2,12 +2,12 @@
 
 import { intro, isCancel, log, outro, spinner, text } from "@clack/prompts";
 import { cristal } from "gradient-string";
-import { bold } from "yoctocolors";
 import { claim } from "./lib/claim-command.js";
 import { instantPostgres } from "./lib/instant-postgres.js";
 import { INTRO_ART, messages } from "./lib/texts.js";
 import type { Defaults } from "./lib/types.js";
 import { DEFAULTS, getArgs } from "./lib/utils/args.js";
+import { redactConnectionString } from "./lib/utils/format.js";
 import { prepEnv } from "./lib/utils/fs.js";
 import { validateEnvKey, validateEnvPath } from "./lib/utils/validate.js";
 
@@ -36,6 +36,8 @@ async function main() {
 	const userInput: Partial<Defaults> = {};
 
 	let connString: string;
+	let dotEnvPath: string;
+	let dotEnvKey: string;
 
 	if (shouldUseDefaults) {
 		const envPath = flags.env || DEFAULTS.dotEnvPath;
@@ -61,6 +63,8 @@ async function main() {
 			},
 		});
 		connString = databaseUrl;
+		dotEnvPath = envPath;
+		dotEnvKey = envKey;
 	} else {
 		/**
 		 * Get Env file path (e.g.: .env)
@@ -187,9 +191,17 @@ async function main() {
 			},
 		});
 		connString = databaseUrl;
+		dotEnvPath = userInput.dotEnvPath;
+		dotEnvKey = userInput.dotEnvKey;
 	}
 	s.stop("Done!");
-	outro(`${bold("Connection String")}:\n\t${connString}`);
+	outro(
+		messages.connectionStringSaved(
+			redactConnectionString(connString),
+			dotEnvPath,
+			dotEnvKey,
+		),
+	);
 }
 
 await main();

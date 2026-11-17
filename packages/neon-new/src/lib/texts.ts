@@ -26,6 +26,12 @@ export const messages = {
 	welcome: `Let's get you set with a Postgres database on ${bgBlack(greenBright(bold(" Neon ")))}.`,
 	nonInteractive: "`neon-new --yes` for non-interactive flow with defaults.",
 	generating: "Generating your database... ",
+	connectionStringSaved: (
+		redactedConnString: string,
+		dotEnvPath: string,
+		dotEnvKey: string,
+	) =>
+		`${bold("Connection String")} (password hidden):\n\t${redactedConnString}\nSaved to ${dotEnvPath} as ${dotEnvKey} (pooled) and ${dotEnvKey}_DIRECT (direct).`,
 	envKeyExistsExit:
 		"Please try again or select a different key for your connection string.",
 	questions: {

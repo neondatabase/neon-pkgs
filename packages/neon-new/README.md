@@ -45,6 +45,8 @@ Options:
 -   `-L, --logical-replication` Enable logical replication (default: false)
 -   `-h, --help` Show help
 
+The CLI writes the full connection strings to the env file only. The summary it prints shows the pooled connection string with its password masked.
+
 ---
 
 ## SDK/API Usage
