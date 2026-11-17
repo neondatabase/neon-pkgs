@@ -96,6 +96,42 @@ describe("applyNeonCapabilities warnings", () => {
 		}
 	});
 
+	it("drops the sampling and penalty options gemini-4-carbon rejects, and keeps seed and stop", () => {
+		const { options, warnings } = applyNeonCapabilities(
+			"gemini-4-carbon",
+			call({
+				temperature: 0.2,
+				topP: 0.9,
+				frequencyPenalty: 0.5,
+				presencePenalty: 0.5,
+				seed: 42,
+				stopSequences: ["zzz"],
+			}),
+		);
+
+		expect(warnings.map((w) => ("feature" in w ? w.feature : ""))).toEqual([
+			"temperature",
+			"topP",
+			"frequencyPenalty",
+			"presencePenalty",
+		]);
+		expect({
+			temperature: options.temperature,
+			topP: options.topP,
+			frequencyPenalty: options.frequencyPenalty,
+			presencePenalty: options.presencePenalty,
+			seed: options.seed,
+			stopSequences: options.stopSequences,
+		}).toEqual({
+			temperature: undefined,
+			topP: undefined,
+			frequencyPenalty: undefined,
+			presencePenalty: undefined,
+			seed: 42,
+			stopSequences: ["zzz"],
+		});
+	});
+
 	it("points a Claude caller at the effort option when reasoningEffort is dropped", () => {
 		const [warning] = detailsFor("claude-opus-5", {
 			providerOptions: { neon: { reasoningEffort: "high" } },

@@ -1,5 +1,11 @@
 # @neon/ai-sdk-provider
 
+## 1.4.0
+
+### Minor Changes
+
+- Add `claude-fable-5-2` and `gemini-4-carbon` to the known model ids, so they autocomplete in `neon("…")`, and stop sending `temperature`, `topP`, `frequencyPenalty`, and `presencePenalty` to `gemini-4-carbon`, which rejects them; each is dropped with a warning.
+
 ## 1.3.2
 
 ### Patch Changes

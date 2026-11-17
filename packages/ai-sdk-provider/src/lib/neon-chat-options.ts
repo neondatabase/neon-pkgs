@@ -19,6 +19,7 @@ export const NEON_MODELS_DEV_IDS = [
 	// Anthropic (native Messages API)
 	"claude-fable-5",
 	"claude-fable-5-1",
+	"claude-fable-5-2",
 	"claude-haiku-4-5",
 	"claude-haiku-5-5",
 	"claude-opus-4-1",
@@ -64,6 +65,7 @@ export const NEON_MODELS_DEV_IDS = [
 	"gemini-3-8-flash",
 	"gemini-3-flash",
 	"gemini-4-argon",
+	"gemini-4-carbon",
 	"gemma-3-12b",
 	// Meta (unified MLflow endpoint)
 	"llama-4-maverick",
