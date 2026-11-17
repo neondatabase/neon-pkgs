@@ -1023,7 +1023,12 @@ describe("Realtime TanStack DB collection", () => {
 				},
 				covered: [1, 1],
 			});
-			await eventually(() => expect(collection.status).toBe("error"));
+			// After the initial load, TanStack DB reports a sync failure through the
+			// collection's health and its waiting transactions, not its status.
+			await expect(
+				collection.utils.awaitTxId("61", 10_000),
+			).rejects.toThrow("Realtime upserted an existing key: 20");
+			expect(collection.health.error).not.toBeNull();
 			expect(collection.get(10)).toMatchObject({ title: "first" });
 			expect(collection.get(20)).toMatchObject({ title: "other" });
 		});
