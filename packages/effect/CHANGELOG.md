@@ -1,5 +1,11 @@
 # @neon/effect
 
+## 0.5.2
+
+### Patch Changes
+
+- 210bf07: `toNeonEffectError` maps errors thrown by another copy of `@neon/sdk` to their tagged classes instead of rethrowing them as defects, so `@neon/effect` composes with libraries that resolve a different SDK version.
+
 ## 0.5.1
 
 ### Patch Changes

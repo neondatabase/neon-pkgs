@@ -135,6 +135,20 @@ const rethrowInspectError = (
 	throw new Error(wrapped, { cause: error });
 };
 
+const inspectDatabaseOutputSchema = z.looseObject({
+	check: z.string().describe("The check that ran."),
+	describe: z.string().describe("What the check reports."),
+	projectId: z.string(),
+	branchId: z.string(),
+	databaseName: z.string().nullish(),
+	databases: z.array(z.string()).describe("Databases the check covered."),
+	fields: z.array(z.string()).describe("Column names in rows."),
+	totalRowCount: z.number(),
+	rows: z.array(z.record(z.string(), z.unknown())),
+	truncated: z.boolean(),
+	note: z.string().nullish(),
+});
+
 export const inspectDatabaseTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
@@ -145,6 +159,7 @@ export const inspectDatabaseTool = (options: ToolClientOptions) =>
 			description:
 				"Runs one read-only neon inspect db check; some are compute-wide. outliers ranks queries by total time and calls by count, both via pg_stat_statements; lfc-hit-rate and working-set need the neon extension. If one is missing, the error gives the CREATE EXTENSION; ask before running it. Other SQL: {{sql.run}}; one plan: {{sql.explain}}; new indexes: {{queryTuning.prepare}}.",
 			inputSchema: inspectDatabaseInputSchema,
+			outputSchema: inspectDatabaseOutputSchema,
 			annotations: sqlReadAnnotations,
 			requiresApproval: false,
 			metadata: SQL_METADATA,

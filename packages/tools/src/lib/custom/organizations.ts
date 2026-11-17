@@ -1,4 +1,5 @@
 import * as z from "zod";
+import * as output from "../../generated/output.gen.js";
 import {
 	bindTool,
 	publishedId,
@@ -33,6 +34,7 @@ export const userOrganizationsTool = (options: ToolClientOptions) =>
 			description:
 				"Lists the organizations the user belongs to; an organization API key gets its own organization. search filters by name or id.",
 			inputSchema: userOrganizationsInputSchema,
+			outputSchema: z.array(output.Organization),
 			annotations: { readOnlyHint: true, openWorldHint: false },
 			requiresApproval: false,
 			metadata: {

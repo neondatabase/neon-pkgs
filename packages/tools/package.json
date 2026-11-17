@@ -1,6 +1,6 @@
 {
 	"name": "@neon/tools",
-	"version": "2.14.4",
+	"version": "2.15.0",
 	"description": "Agent tools for the Neon SDK ergonomic client, compatible with MCP, Eve, and Mastra.",
 	"keywords": [
 		"neon",
@@ -74,7 +74,7 @@
 	],
 	"scripts": {
 		"build": "tsc --noEmit && tsdown && tsc -p tsconfig.build.json",
-		"generate": "openapi-ts && node scripts/generate-tools.mjs",
+		"generate": "openapi-ts && node scripts/generate-tools.mjs && node scripts/generate-outputs.mjs",
 		"generate:check": "pnpm generate && git diff --exit-code -- src/generated src/operations.gen.ts src/schemas.ts src/descriptions.gen.ts",
 		"prepare": "npm run build",
 		"test": "vitest --passWithNoTests",

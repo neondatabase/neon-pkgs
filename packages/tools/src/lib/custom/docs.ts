@@ -148,6 +148,22 @@ const validateDocSlug = (slug: string) => {
 	}
 };
 
+const searchDocsOutputSchema = z.looseObject({
+	hits: z
+		.array(
+			z.looseObject({
+				title: z.string(),
+				url: z.string(),
+				slug: z.string(),
+				category: z.string(),
+				breadcrumb: z.array(z.string()),
+				heading: z.string(),
+				excerpt: z.string(),
+			}),
+		)
+		.describe("Matching doc sections."),
+});
+
 export const searchDocsTool = (options: ToolClientOptions) => {
 	const url = options.siteSearchUrl ?? DEFAULT_SITE_SEARCH_URL;
 	const fetchImpl = options.fetch ?? fetch;
@@ -159,6 +175,7 @@ export const searchDocsTool = (options: ToolClientOptions) => {
 			description:
 				"Searches neon.com docs, API reference, PostgreSQL tutorial, guides, FAQs, changelog, and blog for ranked pages with the slug {{docs.get}} reads.",
 			inputSchema: searchDocsInputSchema,
+			outputSchema: searchDocsOutputSchema,
 			annotations: docsAnnotations,
 			requiresApproval: false,
 			metadata: {
@@ -208,6 +225,11 @@ export const searchDocsTool = (options: ToolClientOptions) => {
 	);
 };
 
+const getDocOutputSchema = z.looseObject({
+	url: z.string(),
+	markdown: z.string().describe("The page as markdown."),
+});
+
 export const getDocTool = (options: ToolClientOptions) => {
 	const baseUrl = options.docsBaseUrl ?? DEFAULT_DOCS_BASE_URL;
 	const fetchImpl = options.fetch ?? fetch;
@@ -219,6 +241,7 @@ export const getDocTool = (options: ToolClientOptions) => {
 			description:
 				"Returns one neon.com page as markdown, by the slug of a {{docs.search}} hit.",
 			inputSchema: getDocInputSchema,
+			outputSchema: getDocOutputSchema,
 			annotations: docsAnnotations,
 			requiresApproval: false,
 			metadata: {
