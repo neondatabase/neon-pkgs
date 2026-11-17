@@ -201,8 +201,8 @@ type ReconciliationMessage = Extract<
  * before it applies at once. From the first unresolved hole on, ticks are
  * buffered until a round that covers the hole lands; its install replays the
  * covered ticks, replaces the round's scope with the round's rows, replays
- * the later ticks up to the next hole, and publishes the result. Ordered rounds
- * publish each later tick separately to preserve its moves.
+ * the later ticks up to the next hole, and publishes the result. Rounds with
+ * placements or later moves publish each later tick separately.
  */
 export class BaselineSyncPublicationReconciler {
 	private readonly targets = new Map<string, TargetState>();
@@ -715,15 +715,24 @@ export class BaselineSyncPublicationReconciler {
 			delta.set(row.row_key, row);
 			index.set(row.row_key, row.segment_tag);
 		}
-		// 5. Later ticks of an ordered round remain separate programs, so
-		// their moves apply after the round's placements.
+		// 5. Keep later ticks separate when either the round places rows or a
+		// later tick moves one. An empty round has no placement marker, but
+		// its later ticks can still carry moves that cannot be merged.
+		let separateLater = ordered;
+		for (let position = replayed; !separateLater; position += 1) {
+			const tick = state.backlog[position];
+			if (!tick || tick.hole) break;
+			separateLater = tick.batch.changes.some(
+				(change) => change.op === "move",
+			);
+		}
 		const later: ReconciledBatch[] = [];
 		for (
 			let tick = state.backlog[replayed];
 			tick && !tick.hole;
 			tick = state.backlog[replayed]
 		) {
-			if (ordered) {
+			if (separateLater) {
 				index.apply(tick.batch.changes);
 				later.push(tick.batch);
 				replayed += 1;

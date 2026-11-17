@@ -1147,6 +1147,74 @@ describe("ordered segment rounds", () => {
 					);
 			});
 
+			it.each([
+				true,
+				false,
+			])("installs an empty round with later moves: %s", (hasMove) => {
+				const session = new Session();
+				const live = session.subscribe("9", materialized);
+				const updates: RawLiveQueryUpdate<Value>[] = [];
+				live.onUpdate((update) => updates.push(update));
+				session.sync("9", { attempt: 1, batches: [initial] });
+				session.tick([{ liveId: "9", hole: true }], 11);
+				// The scan must look past the first later tick to find the move.
+				session.tick([{ liveId: "9", changes: [] }], 12);
+				const changes: WireChange[] = [upsert(F, "f", T2)];
+				if (hasMove)
+					changes.push({
+						op: "move",
+						row_key: F,
+						after_row_key: null,
+					});
+				session.tick([{ liveId: "9", changes }], 13);
+				expect(() =>
+					session.sync("9", {
+						attempt: 2,
+						scope: selected({ tag: T1 }),
+						covered: [1, 1],
+						batches: [],
+					}),
+				).not.toThrow();
+				expect(updates.slice(1)).toEqual(
+					hasMove
+						? [
+								{
+									type: "changes",
+									changes: [remove(B), remove(C)],
+									batch: { txids: ["11"] },
+								},
+								{
+									type: "changes",
+									changes: [],
+									batch: { txids: ["12"] },
+								},
+								{
+									type: "changes",
+									changes: [put(F, "f"), move(F, null)],
+									batch: { txids: ["13"] },
+								},
+							]
+						: [
+								{
+									type: "changes",
+									changes: [
+										remove(B),
+										remove(C),
+										put(F, "f"),
+									],
+									batch: { txids: ["11", "12", "13"] },
+								},
+							],
+				);
+				if (materialized)
+					expect(live.getSnapshot().data).toEqual(
+						(hasMove ? ["f", "a", "d"] : ["a", "d", "f"]).map(
+							(value) => ({ value }),
+						),
+					);
+				expect(live.getSnapshot().updating).toBe(false);
+			});
+
 			const invalid = [
 				{
 					name: "a covered tick with a move",
