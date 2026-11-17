@@ -491,6 +491,30 @@ describe("skillsTelemetry", () => {
 		});
 	});
 
+	test("reports a skills 1.8 hash as current and an empty project hash as outdated", () => {
+		const project = (hash: string) =>
+			skillsTelemetry(
+				{ global: none, project: installed(neon("project", hash)) },
+				cache({
+					[KEY]: {
+						tree: TREE,
+						content: NEW_CONTENT,
+						contentCrlf: NEW_CONTENT_CRLF,
+						contentV2: NEW_CONTENT_V2,
+					},
+				}),
+			).project;
+
+		expect(project(NEW_CONTENT_V2)).toEqual({
+			installed: true,
+			skills: { neon: { hash: NEW_CONTENT_V2, outdated: false } },
+		});
+		expect(project("")).toEqual({
+			installed: true,
+			skills: { neon: { hash: "", outdated: true } },
+		});
+	});
+
 	test("reports a pinned skill as installed with outdated unknown", () => {
 		expect(
 			skillsTelemetry(
