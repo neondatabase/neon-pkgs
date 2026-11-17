@@ -1,6 +1,13 @@
 import { NeonClientError, NeonNetworkError } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
-import { createNeonTool, createNeonTools, toolIds } from "./index.js";
+import {
+	createNeonTool,
+	createNeonTools,
+	type NeonSecretsMode,
+	toolIds,
+	withheldUnderSecrets,
+} from "./index.js";
+import { redactSecretFields } from "./lib/redact.js";
 
 const READ_ONLY_SAFE = [
 	"projects.list",
@@ -227,6 +234,123 @@ describe("readOnly", () => {
 			tools["projects.delete"].execute({ project_id: "project-id" }),
 		).rejects.toBeInstanceOf(NeonClientError);
 		expect(outcomes).toEqual(["delete_projects: NeonClientError"]);
+	});
+});
+
+const SECRET_OUTPUT_FIELDS = {
+	"projects.createAndConnect": ["setup $.connectionString"],
+	"branches.createAndConnect": ["setup $.connectionString"],
+	"postgres.connectionString": ["setup $"],
+	"postgres.roles.list": ["setup $[*].password"],
+	"postgres.roles.get": ["setup $.password"],
+	"postgres.roles.create": ["setup $.password"],
+	"postgres.roles.resetPassword": ["setup $.password"],
+	"storage.objects.presign": ["setup $.url"],
+	"credentials.create": ["setup $.api_token", "setup $.s3_secret_access_key"],
+	"credentials.rotate": ["setup $.api_token", "setup $.s3_secret_access_key"],
+	"realtime.secret": ["setup $.secret"],
+	"auth.create": ["setup $.secret_server_key"],
+	"auth.oauthProviders.list": ["stored $[*].client_secret"],
+	"auth.oauthProviders.add": ["stored $.client_secret"],
+	"auth.oauthProviders.update": ["stored $.client_secret"],
+	"auth.oauthClients.create": ["setup $.client_secret"],
+	"auth.oauthClients.rotateSecret": ["setup $.client_secret"],
+	"auth.emailProvider.get": ["stored $.password"],
+	"auth.emailProvider.update": ["stored $.password"],
+	"auth.plugins.get": [
+		"stored $.email_provider.password",
+		"stored $.oauth_providers[*].client_secret",
+	],
+	"apiKeys.create": ["setup $.key"],
+	"organizations.apiKeys.create": ["setup $.key"],
+	"auth.getConfig": [
+		"stored $.oauth_providers[*].client_secret",
+		"stored $.email_provider.password",
+	],
+};
+
+const RETURNS_ONLY_SECRETS = [
+	"postgres.connectionString",
+	"postgres.roles.resetPassword",
+	"storage.objects.presign",
+	"credentials.rotate",
+	"realtime.secret",
+	"auth.oauthClients.rotateSecret",
+];
+
+const allTools = () =>
+	Object.entries(createNeonTools({ apiKey: "test-key", tools: () => true }));
+
+describe("secret metadata", () => {
+	test("lists the secret fields of every tool that returns one", () => {
+		const declared = Object.fromEntries(
+			allTools()
+				.filter(
+					([, tool]) =>
+						(tool?.metadata.secretOutputFields.length ?? 0) > 0,
+				)
+				.map(([id, tool]) => [
+					id,
+					tool?.metadata.secretOutputFields.map(
+						(field) => `${field.kind} ${field.path}`,
+					),
+				]),
+		);
+		expect(declared).toEqual(SECRET_OUTPUT_FIELDS);
+		const only = allTools()
+			.filter(([, tool]) => tool?.metadata.returnsOnlySecrets === true)
+			.map(([id]) => id);
+		expect(only).toEqual(RETURNS_ONLY_SECRETS);
+	});
+
+	test("every secret path parses", () => {
+		for (const [, tool] of allTools()) {
+			const paths = tool?.metadata.secretOutputFields.map(
+				(field) => field.path,
+			);
+			expect(() =>
+				redactSecretFields(undefined, paths ?? []),
+			).not.toThrow();
+		}
+	});
+
+	test("only none withholds tools, because every secret-only result is setup", () => {
+		const withheld = (mode: NeonSecretsMode) =>
+			allTools()
+				.filter(
+					([, tool]) =>
+						tool !== undefined &&
+						withheldUnderSecrets(tool.metadata, mode),
+				)
+				.map(([id]) => id);
+
+		expect(withheld("all")).toEqual([]);
+		expect(withheld("setup")).toEqual([]);
+		expect(withheld("none")).toEqual(RETURNS_ONLY_SECRETS);
+	});
+});
+
+describe("secrets", () => {
+	test("none refuses a tool whose result is the secret before any request", async () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["realtime.secret", "credentials.list"],
+			secrets: "none",
+			baseUrl: NO_NEON_API,
+		});
+		const ids = { project_id: "project-id", branch_id: "branch-id" };
+
+		const refused = tools["realtime.secret"].execute(ids);
+		await expect(refused).rejects.toBeInstanceOf(NeonClientError);
+		await expect(refused).rejects.toThrow(
+			'secret_realtime is unavailable with secrets: "none" because its result is a secret.',
+		);
+		await expect(
+			tools["credentials.list"].execute(ids),
+		).rejects.toBeInstanceOf(NeonNetworkError);
+		await expect(
+			tools["realtime.secret"].execute(ids, { secrets: "setup" }),
+		).rejects.toBeInstanceOf(NeonNetworkError);
 	});
 });
 

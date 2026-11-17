@@ -1,9 +1,4 @@
-import {
-	listNeonIncidents,
-	NEON_STATUS_API_URL,
-	type NeonAuthEmailServerConfigResponse,
-	type NeonAuthPluginConfigs,
-} from "@neon/sdk";
+import { listNeonIncidents, NEON_STATUS_API_URL } from "@neon/sdk";
 import * as z from "zod";
 import * as output from "../../generated/output.gen.js";
 import { decodeBase64 } from "../binary.js";
@@ -30,7 +25,11 @@ import {
 } from "../custom/sql/run.js";
 import { describeTableTool, listTablesTool } from "../custom/sql/schema.js";
 import { listSlowQueriesTool } from "../custom/sql/slow-queries.js";
-import type { NeonTool, NeonToolExecutionContext } from "../operation.js";
+import {
+	type NeonTool,
+	type NeonToolExecutionContext,
+	toolMetadata,
+} from "../operation.js";
 import { toToolResult } from "../result.js";
 import {
 	bindTool,
@@ -62,29 +61,6 @@ const logReadAnnotations = {
 	idempotentHint: true,
 	openWorldHint: false,
 } as const;
-
-// Depending on the caller's permissions, the API returns these secrets in full or
-// partially masked. Tools blank them to "", the form the API itself documents as redacted.
-const withoutSmtpPassword = (
-	config: NeonAuthEmailServerConfigResponse,
-): NeonAuthEmailServerConfigResponse =>
-	config.type === "standard" ? { ...config, password: "" } : config;
-
-const withoutPluginSecrets = (
-	plugins: NeonAuthPluginConfigs,
-): NeonAuthPluginConfigs => ({
-	...plugins,
-	...(plugins.email_provider && {
-		email_provider: withoutSmtpPassword(plugins.email_provider),
-	}),
-	...(plugins.oauth_providers && {
-		oauth_providers: plugins.oauth_providers.map((provider) =>
-			provider.client_secret === undefined
-				? provider
-				: { ...provider, client_secret: "" },
-		),
-	}),
-});
 
 const listIncidentsInputSchema = z.strictObject({});
 
@@ -153,14 +129,14 @@ const listIncidentsTool = (options: ToolClientOptions) =>
 			openWorldHint: true,
 		},
 		requiresApproval: false,
-		metadata: {
+		metadata: toolMetadata({
 			method: "GET",
 			readOnlySafe: true,
 			path: NEON_STATUS_API_URL,
 			stability: "stable",
 			deprecated: false,
 			tags: ["Status"],
-		},
+		}),
 		async execute(input: unknown, context?: NeonToolExecutionContext) {
 			await listIncidentsInputSchema.parseAsync(input);
 			return toToolResult(
@@ -630,6 +606,7 @@ export const toolFactories = {
 			id: "postgres.roles.list",
 			generated: "listProjectBranchRoles",
 			output: output.RolesResponse.shape.roles,
+			secretOutputFields: [{ path: "$[*].password", kind: "setup" }],
 			run: (neon, input, signal) =>
 				neon.postgres.roles.list(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -643,6 +620,7 @@ export const toolFactories = {
 			id: "postgres.roles.get",
 			generated: "getProjectBranchRole",
 			output: output.Role,
+			secretOutputFields: [{ path: "$.password", kind: "setup" }],
 			run: (neon, input, signal) =>
 				neon.postgres.roles.get(
 					{
@@ -674,6 +652,8 @@ export const toolFactories = {
 			id: "postgres.roles.resetPassword",
 			generated: "resetProjectBranchRolePassword",
 			output: output.Role,
+			secretOutputFields: [{ path: "$.password", kind: "setup" }],
+			returnsOnlySecrets: true,
 			run: (neon, input, signal) =>
 				neon.postgres.roles.resetPassword(
 					{
@@ -965,6 +945,8 @@ export const toolFactories = {
 			id: "storage.objects.presign",
 			generated: "presignProjectBranchBucketObject",
 			output: output.PresignResponse,
+			secretOutputFields: [{ path: "$.url", kind: "setup" }],
+			returnsOnlySecrets: true,
 			run: (neon, input, signal) =>
 				neon.storage.objects.presign(
 					{
@@ -1210,6 +1192,10 @@ export const toolFactories = {
 			id: "credentials.create",
 			generated: "createCredential",
 			output: output.CreateCredentialResponse,
+			secretOutputFields: [
+				{ path: "$.api_token", kind: "setup" },
+				{ path: "$.s3_secret_access_key", kind: "setup" },
+			],
 			run: (neon, input, signal) =>
 				neon.credentials.create(
 					{
@@ -1242,6 +1228,11 @@ export const toolFactories = {
 			id: "credentials.rotate",
 			generated: "rotateCredential",
 			output: output.RotateCredentialResponse,
+			secretOutputFields: [
+				{ path: "$.api_token", kind: "setup" },
+				{ path: "$.s3_secret_access_key", kind: "setup" },
+			],
+			returnsOnlySecrets: true,
 			annotations: {
 				readOnlyHint: false,
 				destructiveHint: true,
@@ -1313,6 +1304,8 @@ export const toolFactories = {
 			id: "realtime.secret",
 			generated: "getProjectBranchRealtimeSecret",
 			output: output.RealtimeSecret,
+			secretOutputFields: [{ path: "$.secret", kind: "setup" }],
+			returnsOnlySecrets: true,
 			requiresApproval: true,
 			run: (neon, input, signal) =>
 				neon.realtime.secret(
@@ -1528,6 +1521,9 @@ export const toolFactories = {
 			id: "auth.create",
 			generated: "createNeonAuth",
 			output: output.NeonAuthCreateIntegrationResponse,
+			secretOutputFields: [
+				{ path: "$.secret_server_key", kind: "setup" },
+			],
 			run: (neon, input, signal) =>
 				neon.auth.create(
 					{
@@ -1574,6 +1570,9 @@ export const toolFactories = {
 			id: "auth.oauthProviders.list",
 			generated: "listBranchNeonAuthOauthProviders",
 			output: output.ListNeonAuthOauthProvidersResponse.shape.providers,
+			secretOutputFields: [
+				{ path: "$[*].client_secret", kind: "stored" },
+			],
 			run: (neon, input, signal) =>
 				neon.auth.oauthProviders.list(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -1587,6 +1586,7 @@ export const toolFactories = {
 			id: "auth.oauthProviders.add",
 			generated: "addBranchNeonAuthOauthProvider",
 			output: output.NeonAuthOauthProvider,
+			secretOutputFields: [{ path: "$.client_secret", kind: "stored" }],
 			run: (neon, input, signal) =>
 				neon.auth.oauthProviders.add(
 					{
@@ -1607,6 +1607,7 @@ export const toolFactories = {
 			id: "auth.oauthProviders.update",
 			generated: "updateBranchNeonAuthOauthProvider",
 			output: output.NeonAuthOauthProvider,
+			secretOutputFields: [{ path: "$.client_secret", kind: "stored" }],
 			run: (neon, input, signal) =>
 				neon.auth.oauthProviders.update(
 					{
@@ -1704,6 +1705,7 @@ export const toolFactories = {
 			id: "auth.oauthClients.create",
 			generated: "createNeonAuthOAuthClient",
 			output: output.NeonAuthOAuthClientCreated,
+			secretOutputFields: [{ path: "$.client_secret", kind: "setup" }],
 			run: (neon, input, signal) =>
 				neon.auth.oauthClients.create(
 					{
@@ -1758,6 +1760,8 @@ export const toolFactories = {
 			id: "auth.oauthClients.rotateSecret",
 			generated: "rotateNeonAuthOAuthClientSecret",
 			output: output.NeonAuthOAuthClientSecret,
+			secretOutputFields: [{ path: "$.client_secret", kind: "setup" }],
+			returnsOnlySecrets: true,
 			run: (neon, input, signal) =>
 				neon.auth.oauthClients.rotateSecret(
 					{
@@ -1930,16 +1934,15 @@ export const toolFactories = {
 			id: "auth.emailProvider.get",
 			generated: "getNeonAuthEmailProvider",
 			output: output.NeonAuthEmailServerConfigResponse,
-			requiresApproval: false,
-			run: async (neon, input, signal) =>
-				withoutSmtpPassword(
-					await neon.auth.emailProvider.get(
-						{
-							projectId: input.project_id,
-							branchId: input.branch_id,
-						},
-						{ signal },
-					),
+			secretOutputFields: [{ path: "$.password", kind: "stored" }],
+			readOnlySafe: true,
+			run: (neon, input, signal) =>
+				neon.auth.emailProvider.get(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+					},
+					{ signal },
 				),
 		}),
 	"auth.emailProvider.update": (options) =>
@@ -1947,16 +1950,15 @@ export const toolFactories = {
 			id: "auth.emailProvider.update",
 			generated: "updateNeonAuthEmailProvider",
 			output: output.NeonAuthEmailServerConfigResponse,
-			run: async (neon, input, signal) =>
-				withoutSmtpPassword(
-					await neon.auth.emailProvider.update(
-						{
-							projectId: input.project_id,
-							branchId: input.branch_id,
-							...input.body,
-						},
-						{ signal },
-					),
+			secretOutputFields: [{ path: "$.password", kind: "stored" }],
+			run: (neon, input, signal) =>
+				neon.auth.emailProvider.update(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						...input.body,
+					},
+					{ signal },
 				),
 		}),
 	"auth.emailProvider.sendTest": (options) =>
@@ -1979,16 +1981,18 @@ export const toolFactories = {
 			id: "auth.plugins.get",
 			generated: "getNeonAuthPluginConfigs",
 			output: output.NeonAuthPluginConfigs,
-			requiresApproval: false,
-			run: async (neon, input, signal) =>
-				withoutPluginSecrets(
-					await neon.auth.plugins.get(
-						{
-							projectId: input.project_id,
-							branchId: input.branch_id,
-						},
-						{ signal },
-					),
+			secretOutputFields: [
+				{ path: "$.email_provider.password", kind: "stored" },
+				{ path: "$.oauth_providers[*].client_secret", kind: "stored" },
+			],
+			readOnlySafe: true,
+			run: (neon, input, signal) =>
+				neon.auth.plugins.get(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+					},
+					{ signal },
 				),
 		}),
 	"auth.plugins.magicLink.update": (options) =>
@@ -2184,6 +2188,7 @@ export const toolFactories = {
 			id: "apiKeys.create",
 			generated: "createApiKey",
 			output: output.ApiKeyCreateResponse,
+			secretOutputFields: [{ path: "$.key", kind: "setup" }],
 			run: (neon, input, signal) =>
 				neon.apiKeys.create({ keyName: input.key_name }, { signal }),
 		}),
@@ -2335,6 +2340,7 @@ export const toolFactories = {
 			id: "organizations.apiKeys.create",
 			generated: "createOrgApiKey",
 			output: output.OrgApiKeyCreateResponse,
+			secretOutputFields: [{ path: "$.key", kind: "setup" }],
 			run: (neon, input, signal) =>
 				neon.organizations.apiKeys.create(
 					{

@@ -24,10 +24,35 @@ export interface NeonToolExecutionContext {
 	 * caller SQL in a `READ ONLY` transaction or refuse to run.
 	 */
 	readOnly?: boolean;
+	/**
+	 * Which secrets results keep. A hidden secret reads `"***redacted***"`, and
+	 * a tool whose `metadata.returnsOnlySecrets` result would be hidden refuses.
+	 */
+	secrets?: NeonSecretsMode;
 	/** Every SQL connection logs in as this Postgres role. */
 	postgresRole?: string;
 	/** Attribution sent with `docs.search` requests. */
 	caller?: NeonToolCaller;
+}
+
+/**
+ * `setup`: a credential Neon issues for an app, CI job, or agent to use, such as
+ * a connection string, role password, or credential token.
+ * `stored`: a secret you gave Neon to call another service, such as an SMTP
+ * password or an OAuth provider's client secret.
+ */
+export type NeonSecretKind = "setup" | "stored";
+
+/** `all` keeps every secret, `setup` keeps only `setup` secrets, `none` keeps none. */
+export type NeonSecretsMode = "all" | "setup" | "none";
+
+export interface NeonSecretField {
+	/**
+	 * `$` for the whole value, `.key` for a field, `[*]` for every array item,
+	 * as in `$.oauth_providers[*].client_secret`.
+	 */
+	path: string;
+	kind: NeonSecretKind;
 }
 
 export interface NeonOperationMetadata {
@@ -44,7 +69,31 @@ export interface NeonToolMetadata extends NeonOperationMetadata {
 	 * password. A tool that is not refuses to run when `readOnly` is true.
 	 */
 	readOnlySafe: boolean;
+	/** Where the result carries a secret, and what kind it is. */
+	secretOutputFields: readonly NeonSecretField[];
+	/**
+	 * The result is the secret itself: a read of an existing secret, or a
+	 * rotation that returns the replacement. Refused when `secrets` hides it.
+	 */
+	returnsOnlySecrets: boolean;
 }
+
+/** Literal tool metadata; the secret fields default to none. */
+export type NeonToolMetadataInput = Omit<
+	NeonToolMetadata,
+	"secretOutputFields" | "returnsOnlySecrets"
+> &
+	Partial<
+		Pick<NeonToolMetadata, "secretOutputFields" | "returnsOnlySecrets">
+	>;
+
+export const toolMetadata = (
+	metadata: NeonToolMetadataInput,
+): NeonToolMetadata => ({
+	...metadata,
+	secretOutputFields: metadata.secretOutputFields ?? [],
+	returnsOnlySecrets: metadata.returnsOnlySecrets ?? false,
+});
 
 export interface JsonSafeBlob {
 	base64: string;

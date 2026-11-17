@@ -4,7 +4,7 @@ import * as z from "zod";
 import { pathInputDescriptions } from "../../../descriptions.gen.js";
 import type {
 	NeonToolExecutionContext,
-	NeonToolMetadata,
+	NeonToolMetadataInput,
 } from "../../operation.js";
 
 export const NEON_DEFAULT_DATABASE_NAME = "neondb";
@@ -13,7 +13,7 @@ export const NEON_DEFAULT_DATABASE_NAME = "neondb";
  * `readOnlySafe` for a tool that runs caller SQL means it runs one statement
  * in its own `READ ONLY` transaction when `readOnly` is set.
  */
-export const sqlMetadata = (readOnlySafe: boolean): NeonToolMetadata => ({
+export const sqlMetadata = (readOnlySafe: boolean): NeonToolMetadataInput => ({
 	method: "SQL",
 	path: "/projects/{project_id}/connection_uri",
 	stability: "stable",

@@ -18,8 +18,6 @@ import {
 	type ToolClientOptions,
 } from "../ergonomic/bind.js";
 
-export const REDACTED_SECRET = "***redacted***";
-
 export const getAuthConfigInputSchema = z.strictObject({
 	project_id: zod.zGetNeonAuthPath.shape.project_id.describe(
 		pathInputDescriptions.project_id,
@@ -47,7 +45,7 @@ const oauthProviderSettings = (provider: NeonAuthOauthProvider) => ({
 	id: provider.id,
 	type: provider.type,
 	client_id: provider.client_id ?? null,
-	client_secret: provider.client_secret ? REDACTED_SECRET : null,
+	client_secret: provider.client_secret ?? null,
 	...(provider.microsoft_tenant_id && {
 		microsoft_tenant_id: provider.microsoft_tenant_id,
 	}),
@@ -71,7 +69,7 @@ const emailProviderSettings = (data: NeonAuthEmailServerConfigResponse) => {
 			host: data.host,
 			port: data.port,
 			username: data.username,
-			password: REDACTED_SECRET,
+			password: data.password ?? null,
 			sender_email: data.sender_email,
 			sender_name: data.sender_name,
 		};
@@ -267,7 +265,7 @@ export const getAuthConfigTool = (options: ToolClientOptions) =>
 			id: publishedId("auth.getConfig"),
 			title: "Get Neon Auth configuration",
 			description:
-				"Returns a branch's Neon Auth integration and settings: trusted origins, localhost, email and password, OAuth and email providers, plugins, webhook, and logs export, with secrets redacted. Needs Neon Auth on the branch ({{auth.create}}).",
+				"Returns a branch's Neon Auth integration and settings: trusted origins, localhost, email and password, OAuth and email providers, plugins, webhook, and logs export. Needs Neon Auth on the branch ({{auth.create}}).",
 			inputSchema: getAuthConfigInputSchema,
 			outputSchema: authConfigOutputSchema,
 			annotations: {
@@ -276,10 +274,17 @@ export const getAuthConfigTool = (options: ToolClientOptions) =>
 				idempotentHint: true,
 				openWorldHint: false,
 			},
-			requiresApproval: false,
+			requiresApproval: true,
 			metadata: {
 				method: "GET",
 				readOnlySafe: true,
+				secretOutputFields: [
+					{
+						path: "$.oauth_providers[*].client_secret",
+						kind: "stored",
+					},
+					{ path: "$.email_provider.password", kind: "stored" },
+				],
 				path: "/projects/{project_id}/branches/{branch_id}/auth",
 				stability: "stable",
 				deprecated: false,
