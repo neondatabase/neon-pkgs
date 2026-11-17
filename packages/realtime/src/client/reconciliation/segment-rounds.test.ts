@@ -819,3 +819,438 @@ describe("segment rounds", () => {
 		});
 	});
 });
+
+describe("ordered segment rounds", () => {
+	const E = key("e");
+	const F = key("f");
+	const placed = (row: WireRow, after: string | null): WireRow => ({
+		...row,
+		after_row_key: after,
+	});
+	const move = (rowId: string, afterRowId: string | null) => ({
+		type: "move",
+		rowId,
+		afterRowId,
+	});
+	const remove = (rowId: string) => ({ type: "remove", rowId });
+	const put = (rowId: string, value: string) => ({
+		type: "upsert",
+		rowId,
+		row: { value },
+	});
+	const initial = [
+		tagged(A, "a"),
+		tagged(B, "b", T1),
+		tagged(C, "c", T1),
+		tagged(D, "d"),
+	];
+	const cases = [
+		{
+			name: "replaces a block in the middle across batches",
+			initial,
+			scope: selected({ tag: T1 }),
+			batches: [
+				[],
+				[placed(tagged(E, "e", T1), A)],
+				[],
+				[tagged(F, "f", T1)],
+			],
+			order: ["a", "e", "f", "d"],
+			changes: [
+				remove(B),
+				remove(C),
+				put(E, "e"),
+				put(F, "f"),
+				move(E, A),
+				move(F, E),
+			],
+		},
+		{
+			name: "inserts a new block at the head",
+			initial: [tagged(A, "a"), tagged(D, "d")],
+			scope: selected({ tag: T1 }),
+			batches: [[placed(tagged(E, "e", T1), null), tagged(F, "f", T1)]],
+			order: ["e", "f", "a", "d"],
+			changes: [put(E, "e"), put(F, "f"), move(E, null), move(F, E)],
+		},
+		{
+			name: "places two blocks with an implicit anchor between them",
+			initial: [
+				tagged(A, "a"),
+				tagged(B, "b", T1),
+				tagged(C, "c", T2),
+				tagged(D, "d"),
+			],
+			scope: selected({ tag: T1 }, { tag: T2 }),
+			batches: [[placed(tagged(E, "e", T1), A)], [tagged(F, "f", T2)]],
+			order: ["a", "e", "f", "d"],
+			changes: [
+				remove(B),
+				remove(C),
+				put(E, "e"),
+				put(F, "f"),
+				move(E, A),
+				move(F, E),
+			],
+		},
+		{
+			name: "accepts an explicit anchor equal to the implicit one",
+			initial,
+			scope: selected({ tag: T1 }),
+			batches: [
+				[placed(tagged(E, "e", T1), A), placed(tagged(F, "f", T1), E)],
+			],
+			order: ["a", "e", "f", "d"],
+			changes: [
+				remove(B),
+				remove(C),
+				put(E, "e"),
+				put(F, "f"),
+				move(E, A),
+				move(F, E),
+			],
+		},
+		{
+			name: "removes an empty block beside a placed block",
+			initial: [
+				tagged(A, "a"),
+				tagged(B, "b", T1),
+				tagged(C, "c", T2),
+				tagged(D, "d"),
+			],
+			scope: selected({ tag: T1 }, { tag: T2 }),
+			batches: [[placed(tagged(E, "e", T1), A)]],
+			order: ["a", "e", "d"],
+			changes: [remove(B), remove(C), put(E, "e"), move(E, A)],
+		},
+		{
+			name: "places disjoint blocks after different surviving anchors",
+			initial: [
+				tagged(A, "a"),
+				tagged(B, "b", T1),
+				tagged(C, "c", T2),
+				tagged(D, "d"),
+			],
+			scope: selected({ tag: T1 }, { tag: T2 }),
+			batches: [
+				[placed(tagged(E, "e", T1), A)],
+				[placed(tagged(F, "f", T2), D)],
+			],
+			order: ["a", "e", "d", "f"],
+			changes: [
+				remove(B),
+				remove(C),
+				put(E, "e"),
+				put(F, "f"),
+				move(E, A),
+				move(F, D),
+			],
+		},
+		{
+			name: "places a one-row segment selected by row key",
+			initial: [tagged(D, "d"), tagged(A, "a")],
+			scope: selected({ row_key: A }),
+			batches: [[placed(tagged(A, "a2"), null)]],
+			order: ["a2", "d"],
+			changes: [put(A, "a2"), move(A, null)],
+		},
+		{
+			name: "upserts and moves a retained row key without removing it",
+			initial,
+			scope: selected({ tag: T1 }),
+			batches: [[placed(tagged(B, "b2", T1), A)]],
+			order: ["a", "b2", "d"],
+			changes: [remove(C), put(B, "b2"), move(B, A)],
+		},
+	];
+
+	for (const materialized of [true, false]) {
+		describe(`materialized: ${materialized}`, () => {
+			it.each(cases)("$name", ({
+				initial,
+				scope,
+				batches,
+				order,
+				changes,
+			}) => {
+				const session = new Session();
+				const live = session.subscribe("9", materialized);
+				const updates: RawLiveQueryUpdate<Value>[] = [];
+				live.onUpdate((update) => updates.push(update));
+				session.sync("9", { attempt: 1, batches: [initial] });
+				session.tick([{ liveId: "9", hole: true }], 11);
+				session.sync("9", {
+					attempt: 2,
+					scope,
+					covered: [1, 1],
+					batches,
+				});
+				expect(updates).toHaveLength(2);
+				expect(updates[1]).toEqual({
+					type: "changes",
+					changes,
+					batch: { txids: ["11"] },
+				});
+				if (materialized)
+					expect(live.getSnapshot().data).toEqual(
+						order.map((value) => ({ value })),
+					);
+			});
+
+			it("publishes a later tick with a move separately and indexes its entrant", () => {
+				const session = new Session();
+				const live = session.subscribe("9", materialized);
+				const updates: RawLiveQueryUpdate<Value>[] = [];
+				const observed: (readonly Value[] | undefined)[] = [];
+				live.onUpdate((update) => {
+					updates.push(update);
+					observed.push(live.getSnapshot().data);
+				});
+				session.sync("9", { attempt: 1, batches: [initial] });
+				session.tick([{ liveId: "9", hole: true }], 11);
+				session.tick(
+					[
+						{
+							liveId: "9",
+							changes: [
+								upsert(F, "f", T2),
+								{ op: "move", row_key: F, after_row_key: null },
+							],
+						},
+					],
+					12,
+				);
+				session.sync("9", {
+					attempt: 2,
+					scope: selected({ tag: T1 }),
+					covered: [1, 1],
+					batches: [[placed(tagged(E, "e", T1), A)]],
+				});
+				expect(updates.slice(1)).toEqual([
+					{
+						type: "changes",
+						changes: [
+							remove(B),
+							remove(C),
+							put(E, "e"),
+							move(E, A),
+						],
+						batch: { txids: ["11"] },
+					},
+					{
+						type: "changes",
+						changes: [put(F, "f"), move(F, null)],
+						batch: { txids: ["12"] },
+					},
+				]);
+				if (materialized) {
+					const final = ["f", "a", "e", "d"].map((value) => ({
+						value,
+					}));
+					expect(observed.slice(1)).toEqual([final, final]);
+				}
+				session.tick([{ liveId: "9", hole: true }], 13);
+				session.sync("9", {
+					attempt: 3,
+					scope: selected({ tag: T2 }),
+					covered: [3, 3],
+					batches: [[]],
+				});
+				expect(updates[3]).toEqual({
+					type: "changes",
+					changes: [remove(F)],
+					batch: { txids: ["13"] },
+				});
+				if (materialized)
+					expect(live.getSnapshot().data).toEqual(
+						["a", "e", "d"].map((value) => ({ value })),
+					);
+			});
+
+			it("stops later replay at the next hole and holds its progress", async () => {
+				const session = new Session();
+				const live = session.subscribe("9", materialized);
+				const updates: RawLiveQueryUpdate<Value>[] = [];
+				live.onUpdate((update) => updates.push(update));
+				session.sync("9", { attempt: 1, batches: [initial] });
+				session.tick([{ liveId: "9", hole: true }], 11);
+				session.tick(
+					[
+						{
+							liveId: "9",
+							changes: [
+								{ op: "move", row_key: D, after_row_key: null },
+							],
+						},
+					],
+					12,
+				);
+				session.tick([{ liveId: "9", hole: true }], 13);
+				session.tick(
+					[
+						{
+							liveId: "9",
+							changes: [
+								{ op: "move", row_key: D, after_row_key: A },
+							],
+						},
+					],
+					14,
+				);
+				const shown = live.awaitTxId("12");
+				const held = live.awaitTxId("14");
+				session.progress(14);
+				session.sync("9", {
+					attempt: 2,
+					scope: selected({ tag: T1 }),
+					covered: [1, 1],
+					mvcc: mvccThrough(11),
+					batches: [[placed(tagged(E, "e", T1), A)]],
+				});
+				expect(updates).toHaveLength(3);
+				expect(updates[2]).toEqual({
+					type: "changes",
+					changes: [move(D, null)],
+					batch: { txids: ["12"] },
+				});
+				expect(await settled(shown)).toBe(true);
+				expect(await settled(held)).toBe(false);
+				expect(live.getSnapshot().updating).toBe(true);
+				if (materialized)
+					expect(live.getSnapshot().data).toEqual(
+						["d", "a", "e"].map((value) => ({ value })),
+					);
+				session.sync("9", {
+					attempt: 3,
+					scope: selected({ tag: T1 }),
+					covered: [3, 3],
+					mvcc: mvccThrough(13),
+					batches: [[placed(tagged(E, "e2", T1), A)]],
+				});
+				expect(updates.slice(3)).toEqual([
+					{
+						type: "changes",
+						changes: [put(E, "e2"), move(E, A)],
+						batch: { txids: ["13"] },
+					},
+					{
+						type: "changes",
+						changes: [move(D, A)],
+						batch: { txids: ["14"] },
+					},
+				]);
+				expect(await settled(held)).toBe(true);
+				expect(live.getSnapshot().updating).toBe(false);
+				if (materialized)
+					expect(live.getSnapshot().data).toEqual(
+						["a", "d", "e2"].map((value) => ({ value })),
+					);
+			});
+
+			const invalid = [
+				{
+					name: "a covered tick with a move",
+					changes: [
+						{ op: "move", row_key: A, after_row_key: D },
+					] as WireChange[],
+					batches: [[placed(tagged(E, "e", T1), A)]],
+				},
+				{
+					name: "a covered entrant outside the scope",
+					changes: [upsert(F, "f", T2)],
+					batches: [[placed(tagged(E, "e", T1), A)]],
+				},
+				{
+					name: "a later batch introducing placement into an unordered round",
+					batches: [
+						[tagged(E, "e", T1)],
+						[placed(tagged(F, "f", T1), E)],
+					],
+				},
+				{
+					name: "an anchor removed by the scope",
+					batches: [[placed(tagged(E, "e", T1), B)]],
+				},
+				{
+					name: "two explicit anchors that conflict",
+					batches: [
+						[
+							placed(tagged(E, "e", T1), A),
+							placed(tagged(F, "f", T1), A),
+						],
+					],
+				},
+				{
+					name: "an explicit anchor conflicting with an implicit one",
+					batches: [
+						[
+							placed(tagged(E, "e", T1), A),
+							tagged(F, "f", T1),
+							placed(tagged(B, "b2", T1), E),
+						],
+					],
+				},
+				{
+					name: "a self anchor",
+					batches: [[placed(tagged(E, "e", T1), E)]],
+				},
+				{
+					name: "a missing anchor",
+					batches: [[placed(tagged(E, "e", T1), F)]],
+				},
+				{
+					name: "a future round row as anchor",
+					batches: [
+						[placed(tagged(E, "e", T1), F), tagged(F, "f", T1)],
+					],
+				},
+			];
+			it.each(invalid)("rejects $name before publishing", ({
+				batches,
+				...test
+			}) => {
+				const session = new Session();
+				const live = session.subscribe("9", materialized);
+				const updates: RawLiveQueryUpdate<Value>[] = [];
+				live.onUpdate((update) => updates.push(update));
+				session.sync("9", { attempt: 1, batches: [initial] });
+				const before = live.getSnapshot();
+				session.tick(
+					[
+						{
+							liveId: "9",
+							hole: true,
+							changes:
+								"changes" in test ? test.changes : undefined,
+						},
+					],
+					11,
+				);
+				expect(() =>
+					session.sync("9", {
+						attempt: 2,
+						scope: selected({ tag: T1 }),
+						covered: [1, 1],
+						batches,
+					}),
+				).toThrow(ProtocolError);
+				expect(updates).toHaveLength(1);
+				expect(live.getSnapshot().data).toEqual(before.data);
+			});
+
+			it("rejects placement on an all baseline row", () => {
+				const session = new Session();
+				const live = session.subscribe("9", materialized);
+				const update = vi.fn();
+				live.onUpdate(update);
+				expect(() =>
+					session.sync("9", {
+						attempt: 1,
+						batches: [[placed(tagged(A, "a"), null)]],
+					}),
+				).toThrow("an all baseline row carries placement");
+				expect(update).not.toHaveBeenCalled();
+			});
+		});
+	}
+});

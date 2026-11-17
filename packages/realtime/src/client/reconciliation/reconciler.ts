@@ -201,7 +201,8 @@ type ReconciliationMessage = Extract<
  * before it applies at once. From the first unresolved hole on, ticks are
  * buffered until a round that covers the hole lands; its install replays the
  * covered ticks, replaces the round's scope with the round's rows, replays
- * the later ticks up to the next hole, and publishes the result as one update.
+ * the later ticks up to the next hole, and publishes the result. Ordered rounds
+ * publish each later tick separately to preserve its moves.
  */
 export class BaselineSyncPublicationReconciler {
 	private readonly targets = new Map<string, TargetState>();
@@ -461,6 +462,21 @@ export class BaselineSyncPublicationReconciler {
 					"baseline sync contains a duplicate row key",
 				);
 			}
+			if (row.after_row_key !== undefined) {
+				if (!scope) {
+					throw new ProtocolError(
+						"an all baseline row carries placement",
+					);
+				}
+				if (
+					baselineSync.rows.length > 0 &&
+					baselineSync.rows[0]?.after_row_key === undefined
+				) {
+					throw new ProtocolError(
+						"an unordered round row carries placement",
+					);
+				}
+			}
 			// A selected round's row belongs by its own tag or its own row key.
 			if (
 				scope &&
@@ -577,6 +593,7 @@ export class BaselineSyncPublicationReconciler {
 			throw new ProtocolError("a round cannot install without its plan");
 		}
 		const { scope, covered } = resolves;
+		const ordered = round.rows[0]?.after_row_key !== undefined;
 		const first = state.backlog[0];
 		if (!first?.hole || first.sequence !== covered.first) {
 			throw new ProtocolError(
@@ -600,6 +617,20 @@ export class BaselineSyncPublicationReconciler {
 				if (change.op === "move") {
 					throw new ProtocolError(
 						"a round cannot replay an ordered move",
+					);
+				}
+				if (
+					ordered &&
+					change.op === "upsert" &&
+					!index.has(change.row_key) &&
+					!scope.rowKeys.has(change.row_key) &&
+					!(
+						change.segment_tag !== undefined &&
+						scope.tags.has(change.segment_tag)
+					)
+				) {
+					throw new ProtocolError(
+						"a covered tick adds a row outside the round's scope",
 					);
 				}
 				touch(change.row_key);
@@ -655,30 +686,61 @@ export class BaselineSyncPublicationReconciler {
 			for (const rowKey of index.keysOf(tag)) remove(rowKey);
 		for (const rowKey of scope.rowKeys)
 			if (index.has(rowKey)) remove(rowKey);
-		// 4. Insert the round's rows.
+		// 4. Insert and place the round's rows in arrival order. Check anchors
+		// before inserting: each must survive the scope removal or be an
+		// earlier round row. Raw targets keep this membership index too.
+		const moves: WireChange[] = [];
+		let previous: string | null = null;
 		for (const row of round.rows) {
+			if (ordered) {
+				const anchor =
+					row.after_row_key === undefined
+						? previous
+						: row.after_row_key;
+				if (anchor !== null && !index.has(anchor)) {
+					throw new ProtocolError(
+						"round placement references a missing anchor",
+					);
+				}
+				moves.push(
+					Object.freeze({
+						op: "move",
+						row_key: row.row_key,
+						after_row_key: anchor,
+					}),
+				);
+				previous = row.row_key;
+			}
 			touch(row.row_key);
 			delta.set(row.row_key, row);
 			index.set(row.row_key, row.segment_tag);
 		}
-		// 5. The later buffered ticks, up to the next unresolved hole.
+		// 5. Later ticks of an ordered round remain separate programs, so
+		// their moves apply after the round's placements.
+		const later: ReconciledBatch[] = [];
 		for (
 			let tick = state.backlog[replayed];
 			tick && !tick.hole;
 			tick = state.backlog[replayed]
 		) {
-			replay(tick);
+			if (ordered) {
+				index.apply(tick.batch.changes);
+				later.push(tick.batch);
+				replayed += 1;
+			} else replay(tick);
 		}
 
 		// 6. One update: every row the install takes out of the result or
 		// replaces first, then every row it shows. A consumer that derives its
 		// own keys from rows, such as a collection keyed by an ID column, then
 		// never sees two row keys holding one of its keys, even when a segment
-		// renumbers its rows. Removing a key the result never showed is a no-op.
+		// renumbers its rows. Ordered updates keep retained keys in place until
+		// their move: one content change per key is required by move validation.
+		// Removing a key the result never showed is a no-op.
 		const removes: WireChange[] = [];
 		const upserts: WireChange[] = [];
 		for (const [rowKey, row] of delta) {
-			if (visibleBefore.get(rowKey))
+			if (visibleBefore.get(rowKey) && (!ordered || row === null))
 				removes.push(Object.freeze({ op: "remove", row_key: rowKey }));
 			if (row !== null) {
 				upserts.push(
@@ -694,12 +756,13 @@ export class BaselineSyncPublicationReconciler {
 			}
 		}
 		const batch = Object.freeze({
-			changes: Object.freeze([...removes, ...upserts]),
+			changes: Object.freeze([...removes, ...upserts, ...moves]),
 			txids: Object.freeze(txids),
 		});
+		validateChangeOrder(batch.changes);
 		let install: () => void;
 		try {
-			install = state.target.prepare(undefined, [batch]);
+			install = state.target.prepare(undefined, [batch, ...later]);
 		} catch (error) {
 			if (error instanceof ProtocolError) throw error;
 			state.baselineSync = undefined;
@@ -719,6 +782,7 @@ export class BaselineSyncPublicationReconciler {
 		state.heldProgress = state.heldProgress.slice(released.length);
 		state.target.baselineSyncCompleted(round.batchCount);
 		state.target.publishRound(batch, round.mvcc, state.holes > 0);
+		for (const tick of later) state.target.publishBatch(tick);
 		for (const progress of released)
 			state.target.applyProgress(progress.mvcc);
 	}

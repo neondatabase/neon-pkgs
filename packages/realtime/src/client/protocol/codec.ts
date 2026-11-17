@@ -89,7 +89,7 @@ export function decodeServerFrame(
 	if (v2) value = liftV2Frame(value);
 	assertSchema(validateServerMessage, value);
 	const message = value as ServerMessage;
-	if (v2) rejectSegmentTags(message);
+	if (v2) rejectV3RowFields(message);
 	validateServerUtf8Limits(message as WireRecord);
 	let mvcc: ParsedMvccSnapshot | undefined;
 	if (message.type === "baseline_sync_start" || message.type === "progress") {
@@ -111,8 +111,8 @@ export function decodeServerFrame(
  * Express a v2 frame in the v3 shape before v3 validation.
  *
  * Protocol v3 adds `segments_pending`, scope on baseline starts, and optional
- * segment tags on rows. Reject those additions on v2 frames, then add the
- * implicit `all` scope so the shared validator accepts the v2 baseline.
+ * segment tags and round placement on rows. Reject those additions on v2
+ * frames, then add the implicit `all` scope for the shared v3 validator.
  */
 function liftV2Frame(value: unknown): unknown {
 	if (value === null || typeof value !== "object" || Array.isArray(value))
@@ -140,8 +140,18 @@ function liftV2Frame(value: unknown): unknown {
 	}
 }
 
-/** Reject the v3 segment tag on a validated v2 row or upsert. */
-function rejectSegmentTags(message: ServerMessage): void {
+/** Reject v3 placement and segment tags on validated v2 rows or upserts. */
+function rejectV3RowFields(message: ServerMessage): void {
+	if (message.type === "baseline_sync_batch") {
+		const placed = message.rows.findIndex(
+			(row) => row.after_row_key !== undefined,
+		);
+		if (placed !== -1) {
+			throw new ProtocolError(
+				`rows[${placed}] has unexpected field after_row_key`,
+			);
+		}
+	}
 	const tagged =
 		message.type === "baseline_sync_batch"
 			? message.rows.findIndex((row) => row.segment_tag !== undefined)

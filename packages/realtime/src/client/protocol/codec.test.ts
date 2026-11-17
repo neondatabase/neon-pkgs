@@ -118,6 +118,32 @@ describe("Realtime JSON codec", () => {
 		}
 	});
 
+	it.each([
+		null,
+		"c".repeat(64),
+	])("rejects round placement on a v2 row (%s)", (anchor) => {
+		const frame = JSON.stringify({
+			type: "baseline_sync_batch",
+			live_id: "2",
+			epoch: "1",
+			baseline_sync_attempt: "4",
+			index: 0,
+			rows: [
+				{
+					row_key: "a".repeat(64),
+					values: ["1"],
+					after_row_key: anchor,
+				},
+			],
+		});
+		expect(() =>
+			decodeServerMessage(frame, REALTIME_SUBPROTOCOL_V3),
+		).not.toThrow();
+		expect(() =>
+			decodeServerMessage(frame, REALTIME_SUBPROTOCOL_V2),
+		).toThrow("unexpected field after_row_key");
+	});
+
 	it("decodes a v2 session exactly as the v2 schema accepts, in the v3 shape", () => {
 		// The frozen v2 schema is the oracle for the v2 decoder, which shares no
 		// validation code with it.
