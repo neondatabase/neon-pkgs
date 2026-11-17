@@ -474,7 +474,7 @@ describe("special mappings", () => {
 		}
 	});
 
-	test("maps the Neon Auth branch settings tools onto the SDK and blanks secrets", async () => {
+	test("maps the Neon Auth branch settings tools onto the SDK and returns the secrets the API returns", async () => {
 		const smtp = {
 			type: "standard",
 			host: "smtp.example.com",
@@ -647,23 +647,10 @@ describe("special mappings", () => {
 			{ enabled: false },
 		]);
 
-		expect(providerGot).toEqual({ data: { ...smtp, password: "" } });
-		expect(providerUpdated).toEqual({ data: { ...smtp, password: "" } });
-		expect(pluginsGot).toEqual({
-			data: {
-				...plugins,
-				email_provider: { ...smtp, password: "" },
-				oauth_providers: [
-					{ id: "google", type: "shared" },
-					{
-						id: "github",
-						type: "standard",
-						client_id: "gh-client",
-						client_secret: "",
-					},
-				],
-			},
-		});
+		expect(providerGot).toEqual({ data: smtp });
+		expect(providerUpdated).toEqual({ data: smtp });
+		expect(pluginsGot).toEqual({ data: plugins });
+
 		expect(sent).toEqual({
 			data: { success: false, error_message: "nope" },
 		});
@@ -689,13 +676,19 @@ describe("special mappings", () => {
 		for (const id of [
 			"auth.allowLocalhost.get",
 			"auth.emailAndPassword.get",
-			"auth.emailProvider.get",
-			"auth.plugins.get",
 			"auth.plugins.phoneNumber.get",
 			"auth.webhooks.get",
 		] as const) {
 			expect(tools[id].requiresApproval).toBe(false);
 			expect(tools[id].annotations.readOnlyHint).toBe(true);
+		}
+		for (const id of [
+			"auth.emailProvider.get",
+			"auth.plugins.get",
+		] as const) {
+			expect(tools[id].requiresApproval).toBe(true);
+			expect(tools[id].annotations.readOnlyHint).toBe(true);
+			expect(tools[id].metadata.readOnlySafe).toBe(true);
 		}
 	});
 

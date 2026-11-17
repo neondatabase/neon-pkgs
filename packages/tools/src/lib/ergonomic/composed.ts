@@ -426,6 +426,9 @@ export const createBranchAndConnectTool = (options: ToolClientOptions) =>
 			metadata: {
 				method: "POST",
 				readOnlySafe: false,
+				secretOutputFields: [
+					{ path: "$.connectionString", kind: "setup" },
+				],
 				path: "/projects/{project_id}/branches",
 				stability: "stable",
 				deprecated: false,
@@ -495,6 +498,9 @@ export const createProjectAndConnectTool = (options: ToolClientOptions) =>
 			metadata: {
 				method: "POST",
 				readOnlySafe: false,
+				secretOutputFields: [
+					{ path: "$.connectionString", kind: "setup" },
+				],
 				path: "/projects",
 				stability: "stable",
 				deprecated: false,
@@ -635,6 +641,8 @@ export const connectionStringTool = (options: ToolClientOptions) =>
 			metadata: {
 				method: "GET",
 				readOnlySafe: false,
+				secretOutputFields: [{ path: "$", kind: "setup" }],
+				returnsOnlySecrets: true,
 				path: "/projects/{project_id}/connection_uri",
 				stability: "stable",
 				deprecated: false,
@@ -671,6 +679,7 @@ export const createRoleTool = (options: ToolClientOptions) =>
 			metadata: {
 				method: "POST",
 				readOnlySafe: false,
+				secretOutputFields: [{ path: "$.password", kind: "setup" }],
 				path: "/projects/{project_id}/branches/{branch_id}/roles",
 				stability: "stable",
 				deprecated: false,

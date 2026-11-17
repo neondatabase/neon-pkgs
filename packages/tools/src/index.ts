@@ -49,6 +49,9 @@ export type {
 	JsonSafe,
 	JsonSafeBlob,
 	NeonOperationMetadata,
+	NeonSecretField,
+	NeonSecretKind,
+	NeonSecretsMode,
 	NeonTool,
 	NeonToolAnnotations,
 	NeonToolCaller,
@@ -61,6 +64,8 @@ export type {
 	NeonToolPolicyOptions,
 	NeonToolPredicate,
 } from "./lib/policy.js";
+export { hiddenSecretFields, withheldUnderSecrets } from "./lib/policy.js";
+export { REDACTED_SECRET } from "./lib/redact.js";
 export type { NeonToolId, PublishedId };
 export {
 	customToolIds,

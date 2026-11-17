@@ -17,11 +17,14 @@ import {
 	type NeonBearerCredential,
 	requireBearerCredential,
 } from "../auth.js";
-import type {
-	JsonSafe,
-	NeonTool,
-	NeonToolAnnotations,
-	NeonToolExecutionContext,
+import {
+	type JsonSafe,
+	type NeonSecretField,
+	type NeonTool,
+	type NeonToolAnnotations,
+	type NeonToolExecutionContext,
+	type NeonToolMetadataInput,
+	toolMetadata,
 } from "../operation.js";
 import { toToolResult } from "../result.js";
 import type { NeonToolId } from "./ids.js";
@@ -234,6 +237,16 @@ export const collectPages = async <T>(
 	return items;
 };
 
+type ToolDefinition<
+	InputSchema extends z.ZodType,
+	Id extends string,
+	Output,
+	OutputSchema extends z.ZodType,
+> = Omit<
+	NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>, OutputSchema>,
+	"execute" | "metadata"
+> & { outputSchema: OutputSchema; metadata: NeonToolMetadataInput };
+
 export const bindTool = <
 	const InputSchema extends z.ZodType,
 	const Id extends string,
@@ -241,10 +254,7 @@ export const bindTool = <
 	OutputSchema extends z.ZodType,
 >(
 	options: ToolClientOptions,
-	tool: Omit<
-		NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>, OutputSchema>,
-		"execute"
-	> & { outputSchema: OutputSchema },
+	tool: ToolDefinition<InputSchema, Id, Output, OutputSchema>,
 	run: (
 		neon: NeonClient<true>,
 		input: z.output<InputSchema>,
@@ -255,6 +265,7 @@ export const bindTool = <
 	outputSchema: OutputSchema;
 } => ({
 	...tool,
+	metadata: toolMetadata(tool.metadata),
 	async execute(input, context) {
 		const parsed = await tool.inputSchema.parseAsync(input);
 		const result = await run(
@@ -274,10 +285,7 @@ export const bindPublicTool = <
 	Output,
 	OutputSchema extends z.ZodType,
 >(
-	tool: Omit<
-		NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>, OutputSchema>,
-		"execute"
-	> & { outputSchema: OutputSchema },
+	tool: ToolDefinition<InputSchema, Id, Output, OutputSchema>,
 	run: (
 		input: z.output<InputSchema>,
 		context: NeonToolExecutionContext,
@@ -286,6 +294,7 @@ export const bindPublicTool = <
 	outputSchema: OutputSchema;
 } => ({
 	...tool,
+	metadata: toolMetadata(tool.metadata),
 	async execute(input, context) {
 		const parsed = await tool.inputSchema.parseAsync(input);
 		return toToolResult(await run(parsed, context ?? {}));
@@ -306,6 +315,8 @@ type FromGeneratedMeta = {
 	requiresApproval?: boolean;
 	/** Defaults to a `GET` that needs no approval. */
 	readOnlySafe?: boolean;
+	secretOutputFields?: readonly NeonSecretField[];
+	returnsOnlySecrets?: boolean;
 };
 
 type OmittedInput<G extends NeonOperationId, Keys extends string> = Omit<
@@ -399,12 +410,14 @@ export function fromGenerated(
 		outputSchema: spec.output,
 		annotations: spec.annotations ?? generated.annotations,
 		requiresApproval,
-		metadata: {
+		metadata: toolMetadata({
 			...generated.metadata,
 			readOnlySafe:
 				spec.readOnlySafe ??
 				(generated.metadata.method === "GET" && !requiresApproval),
-		},
+			secretOutputFields: spec.secretOutputFields,
+			returnsOnlySecrets: spec.returnsOnlySecrets,
+		}),
 		async execute(input, context) {
 			const parsed = await inputSchema.parseAsync(input);
 			const result = await spec.run(

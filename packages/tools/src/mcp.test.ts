@@ -130,6 +130,8 @@ describe("MCP v2 compatibility", () => {
 				deprecated: false,
 				tags: [],
 				readOnlySafe: true,
+				secretOutputFields: [],
+				returnsOnlySecrets: false,
 			},
 			execute: async () => ({ data }),
 		});

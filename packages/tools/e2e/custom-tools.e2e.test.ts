@@ -85,7 +85,16 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 		if (projectId) await deleteProject(projectId);
 	});
 
-	it("auth.getConfig reads the default branch and redacts secrets", async () => {
+	it("auth.getConfig reads the default branch and returns the secrets the API returns", async () => {
+		const ids = { projectId, branchId: mainBranchId };
+		const apiProviders = await neon.auth.oauthProviders.list(ids);
+		const apiGoogle = apiProviders.find(
+			(provider) => provider.id === "google",
+		);
+		const apiEmail = await neon.auth.emailProvider.get(ids);
+		const apiPassword =
+			apiEmail.type === "standard" ? (apiEmail.password ?? null) : null;
+
 		const { data } = await tools["auth.getConfig"].execute({
 			project_id: projectId,
 		});
@@ -97,22 +106,106 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 			id: "google",
 			type: "standard",
 			client_id: "e2e-client-id",
-			client_secret: "***redacted***",
+			client_secret: apiGoogle?.client_secret ?? null,
 		});
 		expect(data.email_provider).toEqual({
 			type: "standard",
 			host: "smtp.example.com",
 			port: 587,
 			username: "e2e-user",
-			password: "***redacted***",
+			password: apiPassword,
 			sender_email: "e2e@example.com",
 			sender_name: "E2E",
 		});
 		expect(data).toHaveProperty("logs_export");
 		expect(data).not.toHaveProperty("_errors");
+	});
+
+	it("auth.getConfig with secrets: setup hides the stored secrets the API returned", async () => {
+		const { data } = await tools["auth.getConfig"].execute(
+			{ project_id: projectId },
+			{ secrets: "setup" },
+		);
+		const google = data.oauth_providers.find(
+			(provider) => provider.id === "google",
+		);
+		expect(google?.client_secret).toBe("***redacted***");
+		expect(data.email_provider?.type).toBe("standard");
 		const serialized = JSON.stringify(data);
 		expect(serialized).not.toContain(OAUTH_SECRET);
 		expect(serialized).not.toContain(SMTP_PASSWORD);
+	});
+
+	it("secrets: setup hides the stored secrets in the Neon Auth settings tools", async () => {
+		const redacting = createNeonTools({
+			apiKey: requireApiKey(),
+			baseUrl: configuredBaseUrl(),
+			tools: ["auth.emailProvider.get", "auth.plugins.get"],
+			secrets: "setup",
+		});
+		const ids = { project_id: projectId, branch_id: mainBranchId };
+
+		const { data: email } =
+			await redacting["auth.emailProvider.get"].execute(ids);
+		const { data: plugins } =
+			await redacting["auth.plugins.get"].execute(ids);
+
+		expect(email.type).toBe("standard");
+		expect(JSON.stringify([email, plugins])).not.toContain(SMTP_PASSWORD);
+		expect(JSON.stringify([email, plugins])).not.toContain(OAUTH_SECRET);
+		expect(
+			plugins.oauth_providers?.find(
+				(provider) => provider.id === "google",
+			)?.client_secret,
+		).toBe("***redacted***");
+	});
+
+	it("credentials.create hides the token with secrets: none and shows it with secrets: setup", async () => {
+		const seen: unknown[] = [];
+		const credentials = createNeonTools({
+			apiKey: requireApiKey(),
+			baseUrl: configuredBaseUrl(),
+			tools: ["credentials.create", "credentials.revoke"],
+			secrets: "none",
+			onExecute: async ({ execute }) => {
+				const result = await execute();
+				seen.push(result.data);
+				return result;
+			},
+		});
+		const input = {
+			project_id: projectId,
+			branch_id: mainBranchId,
+			scopes: ["ai_gateway:invoke" as const],
+			principal_type: "user" as const,
+		};
+		const issued: string[] = [];
+
+		try {
+			const redacted = await credentials["credentials.create"].execute({
+				...input,
+				name: "tools-e2e-redacted",
+			});
+			issued.push(redacted.data.token_id);
+			const shown = await credentials["credentials.create"].execute(
+				{ ...input, name: "tools-e2e-shown" },
+				{ secrets: "setup" },
+			);
+			issued.push(shown.data.token_id);
+
+			expect(redacted.data.api_token).toBe("***redacted***");
+			expect(redacted.data.token_id).toMatch(/\S/u);
+			expect(shown.data.api_token).toMatch(/^nt_live_/u);
+			expect(seen[0]).toMatchObject({ api_token: "***redacted***" });
+		} finally {
+			for (const tokenId of issued) {
+				await credentials["credentials.revoke"].execute({
+					project_id: projectId,
+					branch_id: mainBranchId,
+					token_id: tokenId,
+				});
+			}
+		}
 	});
 
 	it("auth.getConfig throws NeonNotFoundError for a branch without Neon Auth", async () => {
@@ -460,10 +553,9 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 				arguments: { project_id: projectId, branch_id: mainBranchId },
 			});
 			expect(called.isError).not.toBe(true);
-			const text = JSON.stringify(called.structuredContent);
-			expect(text).toContain("***redacted***");
-			expect(text).not.toContain(OAUTH_SECRET);
-			expect(text).not.toContain(SMTP_PASSWORD);
+			expect(JSON.stringify(called.structuredContent)).toContain(
+				"e2e-client-id",
+			);
 		} finally {
 			await client.close();
 			await server.close();

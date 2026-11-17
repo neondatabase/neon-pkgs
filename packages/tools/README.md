@@ -144,7 +144,7 @@ const tools = createNeonTools({
 const { data: config } = await tools["auth.getConfig"].execute({
 	project_id: "project-id",
 });
-config.oauth_providers; // [{ id: "google", type: "standard", client_id: "…", client_secret: "***redacted***" }]
+config.oauth_providers; // [{ id: "google", type: "standard", client_id: "…", client_secret: "****abcd" }]
 
 const { data: found } = await tools["resources.search"].execute({
 	query: "checkout",
@@ -194,7 +194,7 @@ const { data: result } = await tools["sql.run"].execute({
 result; // { rows: [{ id: 1, email: "a@example.com" }, { id: 2, email: "b@example.com" }], totalRowCount: 40, truncated: true, note: "Showing the first 2 of 40 rows. …" }
 ```
 
-`auth.getConfig` replaces OAuth client secrets and the SMTP password with `"***redacted***"`. Trusted origins, localhost access, email and password, and OAuth providers are required reads: an error on any of them fails the call, and a branch without Neon Auth throws `NeonNotFoundError`. The email provider, plugins, and webhook reads are reported under `_errors` when they fail; an email provider that was never configured is `null`.
+`auth.getConfig` returns the OAuth client secrets and SMTP password the API returns to the caller; they are `stored` secrets, so `secrets: "setup"` or `"none"` hides them (see [Secrets](#secrets)). Trusted origins, localhost access, email and password, and OAuth providers are required reads: an error on any of them fails the call, and a branch without Neon Auth throws `NeonNotFoundError`. The email provider, plugins, and webhook reads are reported under `_errors` when they fail; an email provider that was never configured is `null`.
 
 `user.organizations` takes an optional `search` that filters by a case-insensitive part of the name or id. An organization API key gets its own organization.
 
@@ -291,6 +291,77 @@ await readTools["branches.list"]?.execute({ project_id: "project-id" });
 ```
 
 The result is typed as a partial record, since which tools the predicate keeps is known only at runtime. `toMastraTools` keeps that optionality, also when the record mixes in tools from a list. `CreateNeonToolsPredicateOptions` types predicate options declared ahead of the call. Pass a list of selectors when you need exact keys.
+
+## Secrets
+
+Tools return secrets as the API returns them. `secrets` on `createNeonTools`, `createNeonTool`, or `execute` chooses which ones results keep, and the execution context wins over the factory:
+
+| `secrets` | Results keep |
+| --- | --- |
+| `"all"` (default) | every secret |
+| `"setup"` | `setup` secrets: credentials Neon issues for an app, CI job, or agent to use |
+| `"none"` | no secret |
+
+A hidden secret becomes `REDACTED_SECRET` (`"***redacted***"`). An absent, `null`, or empty value stays as it is.
+
+```ts
+import { createNeonTools, REDACTED_SECRET } from "@neon/tools";
+
+const tools = createNeonTools({
+	apiKey,
+	tools: ["credentials.create", "auth.emailProvider.get", "realtime.secret"],
+	secrets: "setup",
+});
+
+const { data: credential } = await tools["credentials.create"].execute({
+	project_id: "project-id",
+	branch_id: "br-main",
+	scopes: ["ai_gateway:invoke"],
+	principal_type: "user",
+});
+credential.api_token; // "nt_live_..."
+
+const { data: smtp } = await tools["auth.emailProvider.get"].execute({
+	project_id: "project-id",
+	branch_id: "br-main",
+});
+smtp.password === REDACTED_SECRET; // true
+
+await tools["realtime.secret"].execute(
+	{ project_id: "project-id", branch_id: "br-main" },
+	{ secrets: "none" },
+);
+// throws NeonClientError: secret_realtime is unavailable with secrets: "none" because its result is a secret.
+```
+
+`metadata.secretOutputFields` lists where a tool's result carries a secret, as `{ path, kind }`. A path is `$` (the whole value), `.key`, or `[*]` (every array item). `kind` is `setup` for a credential Neon issues, or `stored` for a secret you gave Neon to call another service. `metadata.returnsOnlySecrets` is `true` when the result is the secret itself; such a tool refuses before it sends a request when `secrets` would hide its result.
+
+| Tool | `secretOutputFields` | `kind` | `returnsOnlySecrets` |
+| --- | --- | --- | --- |
+| `postgres.connectionString` | `$` | `setup` | yes |
+| `projects.createAndConnect`, `branches.createAndConnect` | `$.connectionString` | `setup` | no |
+| `postgres.roles.list` | `$[*].password` | `setup` | no |
+| `postgres.roles.get`, `postgres.roles.create` | `$.password` | `setup` | no |
+| `postgres.roles.resetPassword` | `$.password` | `setup` | yes |
+| `credentials.create` | `$.api_token`, `$.s3_secret_access_key` | `setup` | no |
+| `credentials.rotate` | `$.api_token`, `$.s3_secret_access_key` | `setup` | yes |
+| `realtime.secret` | `$.secret` | `setup` | yes |
+| `storage.objects.presign` | `$.url` | `setup` | yes |
+| `auth.create` | `$.secret_server_key` | `setup` | no |
+| `auth.oauthClients.create` | `$.client_secret` | `setup` | no |
+| `auth.oauthClients.rotateSecret` | `$.client_secret` | `setup` | yes |
+| `apiKeys.create`, `organizations.apiKeys.create` | `$.key` | `setup` | no |
+| `auth.oauthProviders.list` | `$[*].client_secret` | `stored` | no |
+| `auth.oauthProviders.add`, `auth.oauthProviders.update` | `$.client_secret` | `stored` | no |
+| `auth.emailProvider.get`, `auth.emailProvider.update` | `$.password` | `stored` | no |
+| `auth.plugins.get` | `$.email_provider.password`, `$.oauth_providers[*].client_secret` | `stored` | no |
+| `auth.getConfig` | `$.oauth_providers[*].client_secret`, `$.email_provider.password` | `stored` | no |
+
+`withheldUnderSecrets(tool.metadata, mode)` tells whether a tool refuses under a mode, so a host can leave those tools out: `(tool) => !withheldUnderSecrets(tool.metadata, "none")`. `hiddenSecretFields(tool.metadata, mode)` returns the fields a mode hides.
+
+A rotation that returns the replacement (`credentials.rotate`, `postgres.roles.resetPassword`, `auth.oauthClients.rotateSecret`) counts as only a secret, because hiding it would discard the new value after the old one stopped working. `realtime.rotateSecret` returns nothing and stays available. Creates still run when their secret is hidden, so a secret the API returns only once, such as `apiKeys.create`'s `key` or a confidential client's `client_secret`, is lost. `readOnly` does not change `secrets`.
+
+Redaction runs inside `onExecute`, so a tracking hook sees the redacted result.
 
 ## Writes and waiting
 
@@ -629,7 +700,7 @@ Retries are off unless you pass `retry`. The SDK already retries 423, 429, and 5
 
 ## Safety and binary data
 
-Every non-read operation requires approval. Generated non-read operations are conservatively marked as potentially destructive; `migrations.prepare` and `queryTuning.prepare` (which write only to a new temporary branch) and `feedback.send` are not. Reads that return connection credentials also require approval.
+Every non-read operation requires approval. Generated non-read operations are conservatively marked as potentially destructive; `migrations.prepare` and `queryTuning.prepare` (which write only to a new temporary branch) and `feedback.send` are not. Reads that return connection credentials or Neon Auth secrets also require approval.
 
 Binary request fields accept base64 strings:
 
