@@ -1,6 +1,6 @@
 # ⚠️ DEPRECATED: vite-plugin-db
 
-> **This package is deprecated and no longer maintained.** Use Claimable Neon in the Neon CLI:
+> **This package is deprecated and no longer maintained.** Use [Claimable Neon](https://neon.com/docs/reference/claimable-neon) in the Neon CLI:
 
 ```sh
 npx neon@latest claim create
