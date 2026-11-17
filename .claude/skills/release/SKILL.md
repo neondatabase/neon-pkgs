@@ -97,14 +97,17 @@ ls .changeset/*.md   # ignore README.md
 
 Each changeset's frontmatter lists `"<pkg>": <major|minor|patch>`. Cross-check:
 - A package flagged in step 1 **with** a pending changeset → covered.
-- Flagged **without** a changeset → the gap. Create one (`.changeset/<slug>.md`) choosing the
-  bump type from the change (breaking → major; new behavior → minor; fix/internal → patch).
-  Write a user-facing summary.
+- Flagged only because `local version > npm version`, with no source commits since that bump →
+  already versioned. It needs a publish, not another bump: carry it to the publish backlog
+  (step 5) without a changeset.
+- Flagged for source commits after its last version bump, **without** a changeset → the gap.
+  Create one (`.changeset/<slug>.md`) choosing the bump type from the change (breaking → major;
+  new behavior → minor; fix/internal → patch). Write a user-facing summary.
 - A pending changeset for a package the detector did **not** flag → investigate (already-bumped
   or duplicate); surface it, don't silently proceed.
-- A deprecated package whose own files changed needs its own changeset saying so, even when a
-  dependency's release would bump it anyway. Otherwise its changelog says only "Updated
-  dependencies".
+- A deprecated package whose own files changed since its last version bump needs its own
+  changeset saying so, even when a dependency's release would bump it anyway. Otherwise its
+  changelog says only "Updated dependencies".
 
 ### 3. Bump
 
