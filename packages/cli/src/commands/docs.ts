@@ -3,6 +3,7 @@ import type yargs from "yargs";
 
 import { getCliAgent, isCi } from "../env.js";
 import { isNetworkError } from "../errors.js";
+import { showHelp } from "../help.js";
 import { resolveOutputWidth, stripAnsi, truncateTo } from "../human_table.js";
 import pkg from "../pkg.js";
 import type { CommonProps } from "../types.js";
@@ -46,73 +47,86 @@ type DocsSearchProps = CommonProps & {
 	url?: string;
 };
 
-export const command = "docs";
+export const command = "docs [query]";
 export const describe = "Search neon.com docs, guides, and more";
 
 const SEARCH_DESCRIBE =
 	"Search neon.com: docs, API reference, PostgreSQL tutorial, guides, FAQs, changelog, and blog";
 
+const QUERY_POSITIONAL = {
+	describe: "What to search for",
+	type: "string",
+} as const;
+
+// Options and the check are inherited by `docs search`.
 export const builder = (argv: yargs.Argv) =>
-	argv.usage("$0 docs <sub-command> [options]").command(
-		"search <query>",
-		SEARCH_DESCRIBE,
-		(yargs) =>
-			yargs
-				.positional("query", {
-					describe: "What to search for",
-					type: "string",
-				})
-				.options({
-					category: {
-						describe:
-							"Only return pages in these categories (repeatable)",
-						type: "string",
-						array: true,
-						choices: SITE_SEARCH_CATEGORIES,
-					},
-					limit: {
-						describe: `Maximum number of results (1-${MAX_LIMIT})`,
-						type: "number",
-						default: DEFAULT_LIMIT,
-					},
-					url: {
-						describe: "Override the site search URL",
-						type: "string",
-						hidden: true,
-						coerce: single("url"),
-					},
-				})
-				.strict()
-				.check((args) => {
-					const query =
-						typeof args.query === "string" ? args.query.trim() : "";
-					if (query === "") {
-						throw new Error("<query> needs a value");
-					}
-					if (query.length > MAX_QUERY_LENGTH) {
-						throw new Error(
-							`<query> must be ${MAX_QUERY_LENGTH} characters or fewer`,
-						);
-					}
-					const limit = args.limit;
-					if (
-						!Number.isInteger(limit) ||
-						limit < 1 ||
-						limit > MAX_LIMIT
-					) {
-						throw new Error(
-							`--limit must be a whole number from 1 to ${MAX_LIMIT}`,
-						);
-					}
-					return true;
-				})
-				.example('$0 docs search "reset a branch"', SEARCH_DESCRIBE)
-				.example(
-					'$0 docs search "create branch" --category api --category docs',
-					"Search only the API reference and the docs",
-				),
-		(args) => search(args as unknown as DocsSearchProps),
-	);
+	argv
+		.usage("$0 docs <query> [options]")
+		.positional("query", QUERY_POSITIONAL)
+		.options({
+			category: {
+				describe: "Only return pages in these categories (repeatable)",
+				type: "string",
+				array: true,
+				choices: SITE_SEARCH_CATEGORIES,
+			},
+			limit: {
+				describe: `Maximum number of results (1-${MAX_LIMIT})`,
+				type: "number",
+				default: DEFAULT_LIMIT,
+			},
+			url: {
+				describe: "Override the site search URL",
+				type: "string",
+				hidden: true,
+				coerce: single("url"),
+			},
+		})
+		.strict()
+		.check((args) => {
+			// No query: bare `neon docs` prints help below; `search <query>` requires one.
+			if (args.query === undefined) return true;
+			const query =
+				typeof args.query === "string" ? args.query.trim() : "";
+			if (query === "") {
+				throw new Error("<query> needs a value");
+			}
+			if (query.length > MAX_QUERY_LENGTH) {
+				throw new Error(
+					`<query> must be ${MAX_QUERY_LENGTH} characters or fewer`,
+				);
+			}
+			const limit = args.limit;
+			if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
+				throw new Error(
+					`--limit must be a whole number from 1 to ${MAX_LIMIT}`,
+				);
+			}
+			return true;
+		})
+		// Before validation, so bare `neon docs` exits before the auth and analytics middleware.
+		.middleware(async (args) => {
+			if (args.query === undefined && args._.length === 1) {
+				await showHelp(argv);
+			}
+		}, true)
+		.command(
+			"search <query>",
+			SEARCH_DESCRIBE,
+			(yargs) =>
+				yargs
+					.positional("query", QUERY_POSITIONAL)
+					.strict()
+					.example('$0 docs search "reset a branch"', SEARCH_DESCRIBE)
+					.example(
+						'$0 docs search "create branch" --category api --category docs',
+						"Search only the API reference and the docs",
+					),
+			(args) => search(args as unknown as DocsSearchProps),
+		)
+		.example('$0 docs "reset a branch"', "Same as neon docs search");
+
+export const handler = (args: DocsSearchProps) => search(args);
 
 export function resolveSiteSearchUrl(opts: {
 	url?: string;

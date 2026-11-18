@@ -425,6 +425,72 @@ describe("neon docs search", () => {
 	});
 });
 
+describe("neon docs <query>", () => {
+	test("searches like neon docs search", async ({ testCliCommand }) => {
+		const seen: Seen[] = [];
+		await withSearchServer(
+			respond(200, { hits: [HIT] }, seen),
+			async (url) => {
+				const { stdout } = await testCliCommand(
+					["docs", "lsn", "--url", url],
+					{
+						apiKey: false,
+						outputTable: true,
+						snapshot: false,
+						env: DOCS_ENV,
+					},
+				);
+				expect(stdout).toBe(
+					"Glossary › LSN\n  https://neon.com/docs/reference/glossary\n",
+				);
+				await testCliCommand(
+					[
+						"docs",
+						"create branch",
+						"--category",
+						"api",
+						"--limit",
+						"3",
+						"--url",
+						url,
+					],
+					{
+						apiKey: false,
+						output: "json",
+						snapshot: false,
+						env: DOCS_ENV,
+					},
+				);
+			},
+		);
+		expect(seen).toEqual([
+			{ authorization: undefined, body: { query: "lsn", limit: 10 } },
+			{
+				authorization: undefined,
+				body: { query: "create branch", limit: 3, categories: ["api"] },
+			},
+		]);
+	});
+
+	test("rejects invalid input like neon docs search", async ({
+		testCliCommand,
+	}) => {
+		const cases: Array<[string[], RegExp]> = [
+			[["docs", "   "], /<query> needs a value/],
+			[["docs", "lsn", "extra"], /Unknown command: extra/],
+			[["docs", "lsn", "--limit", "0"], /--limit must be a whole number/],
+			[["docs", "lsn", "--category", "nope"], /Invalid values/i],
+		];
+		for (const [args, message] of cases) {
+			const { stderr } = await testCliCommand(
+				[...args, "--url", "http://127.0.0.1:1/site-search"],
+				{ apiKey: false, snapshot: false, code: 1, env: DOCS_ENV },
+			);
+			expect(stderr).toMatch(message);
+		}
+	});
+});
+
 describe("siteSearchHeaders", () => {
 	test("tags the CLI with its version and the coding agent", () => {
 		expect(

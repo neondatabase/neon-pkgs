@@ -88,6 +88,9 @@ const NO_SUBCOMMANDS_VERBS = [
 
 	"ask",
 
+	// `docs <query>` searches; bare `neon docs` prints help from the docs builder.
+	"docs",
+
 	"feedback",
 
 	"incidents",
