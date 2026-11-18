@@ -386,7 +386,11 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		);
 		const fetched = expectOk(await neon.postgres.endpoints.get(params));
 		expect(fetched.current_state).toBe("active");
-		expect(restarted).toMatchObject({
+		expect({
+			current_state: restarted.current_state,
+			pending_state: restarted.pending_state,
+			started_at: restarted.started_at,
+		}).toEqual({
 			current_state: fetched.current_state,
 			pending_state: fetched.pending_state,
 			started_at: fetched.started_at,
