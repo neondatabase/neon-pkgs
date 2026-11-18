@@ -39,6 +39,8 @@ const sqlToolIds = [
 
 const READ_ONLY_ROLE = "e2e_reader";
 
+const DATABASE_ROW = /^:file_folder: (.+) \(DATABASE\)$/u;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -546,6 +548,60 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 			"items (TABLE)",
 		);
 		expect(data).not.toHaveProperty("database_structure_error");
+	});
+
+	it("branches.describe lists exactly the databases the SQL tools accept", async () => {
+		await neon.postgres.databases.create(
+			{
+				projectId,
+				branchId: mainBranchId,
+				name: "reports",
+				owner_name: "neondb_owner",
+			},
+			{ waitForReadiness: true },
+		);
+		// A second database would change what later tests inspect, so it is dropped here.
+		try {
+			const { data } = await tools["branches.describe"].execute({
+				project_id: projectId,
+				branch_id: mainBranchId,
+			});
+			const listed = (data.database_structure?.[1] ?? []).flatMap(
+				(row) => {
+					const tree = row.tree_structure;
+					const name =
+						typeof tree === "string"
+							? DATABASE_ROW.exec(tree)?.[1]
+							: undefined;
+					return name === undefined ? [] : [name];
+				},
+			);
+			const registered = await neon.postgres.databases.list({
+				projectId,
+				branchId: mainBranchId,
+			});
+			expect(listed.sort()).toEqual(
+				registered.map((database) => database.name).sort(),
+			);
+			for (const databaseName of listed) {
+				const { data: result } = await tools["sql.run"].execute({
+					project_id: projectId,
+					branch_id: mainBranchId,
+					database_name: databaseName,
+					sql: "SELECT current_database() AS name",
+				});
+				expect(result.rows).toEqual([{ name: databaseName }]);
+			}
+		} finally {
+			await neon.postgres.databases.delete(
+				{
+					projectId,
+					branchId: mainBranchId,
+					databaseName: "reports",
+				},
+				{ waitForReadiness: true },
+			);
+		}
 	});
 
 	it("branches.describe only reads: it works read-only and as a role without CREATE, and leaves show_db_tree alone", async () => {
