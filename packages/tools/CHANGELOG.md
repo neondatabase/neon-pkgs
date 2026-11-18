@@ -1,5 +1,13 @@
 # @neon/tools
 
+## 2.17.3
+
+### Patch Changes
+
+- Updated dependencies [dfc9ebe]
+  - @neon/sdk@7.14.2
+  - @neon/effect@0.5.5
+
 ## 2.17.2
 
 ### Patch Changes

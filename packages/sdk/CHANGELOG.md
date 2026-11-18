@@ -1,5 +1,11 @@
 # @neon/sdk
 
+## 7.14.2
+
+### Patch Changes
+
+- dfc9ebe: `realtime.enable` with `waitForReadiness` now waits until the branch reports `enabled: true` as well as `pending: false`, so a read that still shows Realtime disabled no longer resolves as success.
+
 ## 7.14.1
 
 ### Patch Changes
