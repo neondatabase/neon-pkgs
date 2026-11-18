@@ -68,6 +68,26 @@ const rewriteLock = (
 	writeFileSync(path, JSON.stringify(lock));
 };
 
+describe("neon skills install", () => {
+	for (const [launch, npmEnv] of [
+		["npm exec --package", { npm_config_package: "neon@latest" }],
+		["npm exec -c", { npm_config_call: "neon skills -y" }],
+	] as const) {
+		it(`installs when the CLI was started with ${launch}`, async () => {
+			const { app, neon } = machine(npmEnv);
+			const install = await neon(
+				["skills", "-y", "-s", "neon", "--agent", "cursor"],
+				false,
+			);
+			expect(install.code, install.stderr).toBe(0);
+			const lock = JSON.parse(
+				readFileSync(join(app, "skills-lock.json"), "utf8"),
+			);
+			expect(Object.keys(lock.skills)).toEqual(["neon"]);
+		});
+	}
+});
+
 describe("neon skills status", () => {
 	it("matches a fresh project install, then flags it once the lock falls behind", async () => {
 		const { app, neon } = machine();
