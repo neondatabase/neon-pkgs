@@ -47,6 +47,8 @@ export type NeonConfigView = {
 	auth?: true;
 	dataApi?: NeonConfigViewDataApi;
 	preview?: {
+		/** `true` when the branch's allowed-origins list is empty, which allows every origin. */
+		realtime?: true | { allowedOrigins: string[] };
 		functions?: Record<string, { name: string }>;
 		buckets?: Record<string, { access: string }>;
 		/**
@@ -90,7 +92,17 @@ export const toNeonConfigView = (
 	if (resolved.dataApiEnabled) view.dataApi = toDataApiView(resolved.dataApi);
 
 	const previewView = toPreviewView(preview);
-	if (previewView) view.preview = previewView;
+	if (resolved.realtimePolicy === "enabled") {
+		const allowedOrigins = resolved.realtime?.allowedOrigins;
+		view.preview = {
+			realtime: allowedOrigins?.length
+				? { allowedOrigins: [...allowedOrigins] }
+				: true,
+			...previewView,
+		};
+	} else if (previewView) {
+		view.preview = previewView;
+	}
 
 	const branch: NeonConfigView["branch"] = {};
 	if (resolved.parent !== undefined) branch.parent = resolved.parent;

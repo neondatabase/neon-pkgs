@@ -113,6 +113,33 @@ describe("realtime", () => {
 		expect(calls[3].url).toMatch(new RegExp(`${base}$`));
 	});
 
+	it("enable keeps polling until the branch reports Realtime enabled", async () => {
+		let polls = 0;
+		const { neon, calls } = neonRouting((call) => {
+			if (call.method !== "GET") return { status: 202 };
+			polls++;
+			return {
+				status: 200,
+				body: { enabled: polls > 1, pending: false },
+			};
+		});
+		const { error } = await neon.realtime.enable(selectors);
+		expect(error).toBeUndefined();
+		expect(methods(calls)).toEqual(["POST", "GET", "GET"]);
+	});
+
+	it("enable times out when the branch never reports Realtime enabled", async () => {
+		const { neon } = neonRouting(
+			(call) =>
+				call.method === "GET"
+					? { status: 200, body: { enabled: false, pending: false } }
+					: { status: 202 },
+			{ timeoutMs: 30 },
+		);
+		const { error } = await neon.realtime.enable(selectors);
+		expect(error).toBeInstanceOf(NeonWaitTimeoutError);
+	});
+
 	it("enable returns once queued with waitForReadiness: false", async () => {
 		const { neon, calls } = neonRouting(realtimeBackend(2));
 		const { error } = await neon.realtime.enable(selectors, {

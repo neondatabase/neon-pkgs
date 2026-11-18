@@ -33,8 +33,8 @@ type Queue = (
 
 /**
  * Branch-scoped Realtime. Enable, disable, and rotate are asynchronous: with
- * `waitForReadiness` they poll {@link Realtime.get} until `pending` is `false`, otherwise
- * they resolve once the API has queued the change.
+ * `waitForReadiness` they poll {@link Realtime.get} until `pending` is `false` (and, for
+ * enable, `enabled` is `true`), otherwise they resolve once the API has queued the change.
  */
 export class Realtime<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
@@ -76,7 +76,8 @@ export class Realtime<DThrow extends boolean> {
 
 	/**
 	 * Enable Realtime, or apply new options to a branch that already has it. Waits until
-	 * the change is applied unless `waitForReadiness` is `false`.
+	 * the branch reports Realtime enabled with the change applied unless
+	 * `waitForReadiness` is `false`.
 	 *
 	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/realtime
 	 */
@@ -94,6 +95,7 @@ export class Realtime<DThrow extends boolean> {
 			params,
 			opts,
 			true,
+			(state) => state.enabled && !state.pending,
 			(client, path, signal) => {
 				const {
 					projectId: _projectId,
@@ -130,6 +132,7 @@ export class Realtime<DThrow extends boolean> {
 			params,
 			opts,
 			false,
+			(state) => !state.pending,
 			(client, path, signal) =>
 				disableProjectBranchRealtime({
 					client,
@@ -198,6 +201,7 @@ export class Realtime<DThrow extends boolean> {
 			params,
 			opts,
 			false,
+			(state) => !state.pending,
 			(client, path, signal) =>
 				rotateProjectBranchRealtimeSecret({
 					client,
@@ -213,6 +217,7 @@ export class Realtime<DThrow extends boolean> {
 		params: RealtimeGetParams,
 		opts: CallOptions | undefined,
 		waitByDefault: boolean,
+		settled: (state: RealtimeState) => boolean,
 		queue: Queue,
 	): Promise<void | NeonResult<void>> {
 		const shouldThrow = this.#ctx.shouldThrow(opts);
@@ -237,7 +242,7 @@ export class Realtime<DThrow extends boolean> {
 					throwOnError: false,
 					signal,
 				}),
-			(state) => !state.pending,
+			settled,
 			`Realtime on branch ${params.branchId} to apply the change`,
 			{
 				pollIntervalMs:

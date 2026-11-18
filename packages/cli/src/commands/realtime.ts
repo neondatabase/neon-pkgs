@@ -12,18 +12,19 @@ import {
 
 export type RealtimeEnableProps = BranchScopeProps & {
 	allowedOrigins?: readonly string[];
+	wait: boolean;
 };
 
 export type RealtimeRotateSecretProps = BranchScopeProps & {
 	wait: boolean;
 };
 
-const ROTATION_POLL_INTERVAL_MS =
+const POLL_INTERVAL_MS =
 	Number(process.env.NEON_REALTIME_POLL_INTERVAL_MS) || 1_000;
-const ROTATION_POLL_TIMEOUT_MS =
+const POLL_TIMEOUT_MS =
 	Number(process.env.NEON_REALTIME_POLL_TIMEOUT_MS) || 60_000;
 
-/** Request Realtime provisioning or an allowed-origin update for a branch. */
+/** Enable Realtime or update its allowed origins, waiting until the branch applies it. */
 export const enable = async (props: RealtimeEnableProps): Promise<void> => {
 	const realtime =
 		props.allowedOrigins === undefined
@@ -33,16 +34,38 @@ export const enable = async (props: RealtimeEnableProps): Promise<void> => {
 	defineConfig({ preview: { realtime } });
 
 	const branchId = await branchIdFromProps(props);
-	await retryOnLock(() =>
-		props.apiClient.enableProjectBranchRealtime(
-			props.projectId,
-			branchId,
-			props.allowedOrigins === undefined
-				? {}
-				: { allowed_origins: [...props.allowedOrigins] },
-		),
-	);
-	log.info("Realtime enable requested for branch %s.", branchId);
+	const [{ fromSdkError, getNeonClient }, { NeonWaitTimeoutError }] =
+		await Promise.all([import("../neon_client.js"), import("@neon/sdk")]);
+	await getNeonClient(props)
+		.realtime.enable(
+			{
+				projectId: props.projectId,
+				branchId,
+				...(props.allowedOrigins === undefined
+					? {}
+					: { allowed_origins: [...props.allowedOrigins] }),
+			},
+			{
+				waitForReadiness: props.wait,
+				wait: {
+					pollIntervalMs: POLL_INTERVAL_MS,
+					timeoutMs: POLL_TIMEOUT_MS,
+				},
+			},
+		)
+		.catch((error: unknown) => {
+			if (error instanceof NeonWaitTimeoutError) {
+				throw new Error(
+					`Timed out waiting for Realtime on branch ${branchId}. The change was requested and may still be in progress; run the command again to keep waiting.`,
+				);
+			}
+			throw fromSdkError(error, props.apiHost);
+		});
+	if (props.wait) {
+		log.info("Realtime is enabled on branch %s.", branchId);
+	} else {
+		log.info("Realtime enable requested for branch %s.", branchId);
+	}
 };
 
 /** Request Realtime deprovisioning for a branch. */
@@ -68,7 +91,7 @@ export const rotateSecret = async (
 	log.info("Realtime secret rotation requested for branch %s.", branchId);
 	if (!props.wait) return;
 
-	const deadline = Date.now() + ROTATION_POLL_TIMEOUT_MS;
+	const deadline = Date.now() + POLL_TIMEOUT_MS;
 	do {
 		const { data } = await props.apiClient.getProjectBranchRealtime(
 			props.projectId,
@@ -89,10 +112,7 @@ export const rotateSecret = async (
 		const remainingMs = deadline - Date.now();
 		if (remainingMs <= 0) break;
 		await new Promise((resolve) =>
-			setTimeout(
-				resolve,
-				Math.min(ROTATION_POLL_INTERVAL_MS, remainingMs),
-			),
+			setTimeout(resolve, Math.min(POLL_INTERVAL_MS, remainingMs)),
 		);
 	} while (Date.now() < deadline);
 
@@ -121,15 +141,25 @@ export const builder = (argv: yargs.Argv) =>
 			"enable",
 			"Enable Realtime on a branch",
 			(yargs) =>
-				yargs.strict().option("allowed-origin", {
-					describe:
-						'Allowed browser origin (repeatable). "*" allows every origin',
-					type: "array",
-					string: true,
+				yargs.strict().options({
+					"allowed-origin": {
+						describe:
+							'Allowed browser origin (repeatable). "*" allows every origin',
+						type: "array",
+						string: true,
+					},
+					wait: {
+						describe:
+							"Wait until Realtime is enabled on the branch",
+						type: "boolean",
+						default: true,
+					},
 				}),
 			(args) =>
 				enable({
-					...(args as unknown as BranchScopeProps),
+					...(args as unknown as BranchScopeProps & {
+						wait: boolean;
+					}),
 					...(args.allowedOrigin !== undefined
 						? { allowedOrigins: args.allowedOrigin }
 						: {}),

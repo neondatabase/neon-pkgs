@@ -267,6 +267,27 @@ const renderSeededBranch = (view: NeonConfigView): string => {
 	return `${[...at(1, "branch: () => ({"), ...settings, ...at(1, "}),")].join("\n")}\n`;
 };
 
+/** The `preview.realtime` entry for a policy seeded from live state, or "" when it is off. */
+const renderSeededRealtime = (view: NeonConfigView): string => {
+	const realtime = view.preview?.realtime;
+	if (realtime === undefined) return "";
+	if (realtime === true) {
+		return block(1, "preview", at(2, "realtime: true,")).join("\n");
+	}
+	const origins = realtime.allowedOrigins.map(renderScalar);
+	const [oneLine] = at(3, `allowedOrigins: [${origins.join(", ")}],`);
+	// A formatter breaks an array that doesn't fit in 80 columns into one item per line.
+	const allowedOrigins =
+		oneLine.length <= 80
+			? [oneLine]
+			: [
+					...at(3, "allowedOrigins: ["),
+					...at(4, ...origins.map((origin) => `${origin},`)),
+					...at(3, "],"),
+				];
+	return block(1, "preview", block(2, "realtime", allowedOrigins)).join("\n");
+};
+
 /** GA service keys for a policy seeded from live state. */
 const renderSeededGaServices = (
 	view: NeonConfigView,
@@ -336,6 +357,7 @@ export const renderNeonConfigFromView = (
 	branchName: string,
 ): { source: string; seeded: boolean } => {
 	const services = [
+		renderSeededRealtime(view),
 		view.auth ? "  auth: true," : "",
 		view.dataApi
 			? renderDataApiEntry(dataApiChoiceFromView(view.dataApi)).trimEnd()
