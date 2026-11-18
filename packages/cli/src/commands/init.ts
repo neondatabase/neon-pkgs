@@ -120,7 +120,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "string",
 			choices: ["oauth", "api-key"] as const,
 			describe:
-				"MCP authentication. Selects skills and MCP setup. oauth is neon mcp --oauth",
+				"MCP authentication. Selects skills and MCP setup. oauth is neon mcp --oauth. api-key mints a key, which needs neon login or a personal API key: with an organization or project-scoped key and no Neon MCP key already configured, init skips MCP and exits 1. Omit it to fall back to oauth when no key can be minted",
 		})
 		.option("mcp-project-scoped", {
 			type: "boolean",
