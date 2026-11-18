@@ -1,5 +1,12 @@
 # neon
 
+## 9.6.3
+
+### Patch Changes
+
+- 97c4ce8: `neon claim delete` now removes the `.neon` file that linked the directory to the project, instead of leaving an empty `{}` file behind.
+- 743d625: `neon docs "<query>"` now searches neon.com the same way as `neon docs search "<query>"`, instead of failing with `Unknown command`.
+
 ## 9.6.2
 
 ### Patch Changes
