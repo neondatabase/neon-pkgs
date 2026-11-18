@@ -1,6 +1,4 @@
-import { NeonClientError } from "@neon/sdk";
 import * as z from "zod";
-import { NeonToolCallerError } from "../../caller-error.js";
 import {
 	bindTool,
 	publishedId,
@@ -15,6 +13,7 @@ import {
 	sqlClient,
 	sqlMetadata,
 } from "./connection.js";
+import { readWithExtension } from "./extensions.js";
 import { WORKLOAD_STATEMENTS_FILTER } from "./inspect/queries.js";
 
 export const listSlowQueriesInputSchema = z.strictObject({
@@ -31,12 +30,6 @@ export const listSlowQueriesInputSchema = z.strictObject({
 		.default(1000)
 		.describe("Ignored; results are not filtered by time."),
 });
-
-const EXTENSION_CHECK_SQL = `
-	SELECT /* neon inspect */ EXISTS (
-		SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements'
-	) as extension_exists;
-`;
 
 const SLOW_QUERIES_SQL = `
 	SELECT /* neon inspect */
@@ -99,19 +92,15 @@ export const listSlowQueriesTool = (options: ToolClientOptions) =>
 				signal,
 			);
 			const sql = sqlClient(connection.uri, signal);
-			const [extension] = await sql.query(EXTENSION_CHECK_SQL);
-			const installed = extension?.extension_exists;
-			if (installed !== true) {
-				const message =
-					"pg_stat_statements extension is not installed on the database. Please install it using the following command: CREATE EXTENSION pg_stat_statements;";
-				// `SELECT EXISTS` returns one boolean; anything else is a malformed result.
-				throw installed === false
-					? new NeonToolCallerError(message)
-					: new NeonClientError(message);
-			}
-			const slowQueries = await sql.query(SLOW_QUERIES_SQL, [
-				input.limit,
-			]);
+			const slowQueries = await readWithExtension(
+				sql,
+				{
+					extension: "pg_stat_statements",
+					needs: "Listing slow queries",
+					databaseName: connection.databaseName,
+				},
+				sql.query(SLOW_QUERIES_SQL, [input.limit]),
+			);
 			const formatted = slowQueries.map((query) => ({
 				query: query.query,
 				calls: query.calls,
