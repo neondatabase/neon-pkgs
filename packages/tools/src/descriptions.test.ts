@@ -348,6 +348,9 @@ describe("mcp-tool-names.json", () => {
 		expect(byName.get("list_branch_computes")?.description).toContain(
 			"use list_postgres_endpoints.",
 		);
+		expect(byName.get("run_sql")?.description).toContain(
+			"For several statements, send one per call or use run_sql_transaction.",
+		);
 	});
 
 	test("the MCP tools only reference other MCP tools", () => {

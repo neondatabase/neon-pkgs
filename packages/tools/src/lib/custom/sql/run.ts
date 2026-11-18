@@ -162,7 +162,7 @@ export const runSqlTool = (options: ToolClientOptions) =>
 			id: publishedId("sql.run"),
 			title: "Run SQL",
 			description:
-				"Runs one SQL statement on a branch's database and returns its rows. After a prepare step, pass its temporary branch_id. NEVER run destructive SQL autonomously; always ask the user first.",
+				"Runs one SQL statement on a branch's database and returns its rows. For several statements, send one per call or use {{sql.runTransaction}}. After a prepare step, pass its temporary branch_id. NEVER run destructive SQL autonomously; always ask the user first.",
 			inputSchema: runSqlInputSchema,
 			outputSchema: sqlResultOutputSchema,
 			annotations: sqlWriteAnnotations,
