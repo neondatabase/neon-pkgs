@@ -233,10 +233,6 @@ const updateRequest = (
 	return endpoint;
 };
 
-/**
- * Mutations return the compute as it was when the request was accepted, so after waiting
- * the compute is read again to show the state the change produced.
- */
 const mutate = async (
 	props: WaitProps,
 	action: { verb: string; done: string },
@@ -248,26 +244,18 @@ const mutate = async (
 ) => {
 	const { neon, fail } = await sdk(props);
 	const params = { projectId: props.projectId, endpointId: props.id };
-	try {
-		const accepted = await run(neon, params, {
-			waitForReadiness: props.wait,
-		});
-		if (!props.wait) {
-			writeCompute(
-				props,
-				accepted,
-				`Compute ${props.id}: ${action.verb} accepted, not yet applied`,
-			);
-			return;
-		}
-		writeCompute(
-			props,
-			await neon.postgres.endpoints.get(params),
-			`Compute ${props.id} ${action.done}`,
-		);
-	} catch (error) {
+	const compute = await run(neon, params, {
+		waitForReadiness: props.wait,
+	}).catch((error: unknown) => {
 		throw fail(error);
-	}
+	});
+	writeCompute(
+		props,
+		compute,
+		props.wait
+			? `Compute ${props.id} ${action.done}`
+			: `Compute ${props.id}: ${action.verb} accepted, not yet applied`,
+	);
 };
 
 export const update = (props: UpdateProps) => {

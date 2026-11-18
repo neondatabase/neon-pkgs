@@ -430,6 +430,8 @@ const { data: uri } = await neon.postgres.connectionString({
 | `delete({ projectId, endpointId })` | **→void** |
 | `start` / `suspend` / `restart({ projectId, endpointId })` | `Endpoint` |
 
+With `waitForReadiness`, `create`, `update`, `start`, `suspend`, and `restart` read the endpoint again after the operations finish, so `current_state`, `pending_state`, and `started_at` match a later `get`. Without it, they return the endpoint as Neon accepted the request.
+
 #### `neon.postgres.roles`
 
 | Method | Returns |
