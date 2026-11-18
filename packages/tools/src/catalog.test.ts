@@ -8,6 +8,7 @@ import {
 	toolIds,
 } from "./index.js";
 import { hiddenToolIds } from "./lib/ergonomic/ids.js";
+import { toMcpOutputSchema } from "./mcp.js";
 
 const methodPaths = (value: object, prefix = ""): string[] => {
 	const paths: string[] = [];
@@ -156,6 +157,72 @@ describe("special mappings", () => {
 		expect(await requests[0].json()).toEqual({
 			destination_org_id: "org-to",
 			project_ids: ["project-id"],
+		});
+	});
+
+	describe("postgres.dataApi.get", () => {
+		const input = {
+			project_id: "project-id",
+			branch_id: "br-main",
+			database_name: "neondb",
+		};
+		const dataApiTool = (response: () => Response) => {
+			const tool = createNeonTool("postgres.dataApi.get", {
+				apiKey: "test-key",
+				fetch: async () => response(),
+			});
+			const validateOutput = (data: unknown) =>
+				toMcpOutputSchema(tool.outputSchema)["~standard"].validate({
+					data,
+				});
+			return { tool, validateOutput };
+		};
+
+		test("returns enabled false when the database has no Data API", async () => {
+			const { tool, validateOutput } = dataApiTool(() =>
+				jsonResponse({ code: "", message: "data api not found" }, 404),
+			);
+
+			const result = await tool.execute(input);
+
+			expect(result).toEqual({ data: { enabled: false } });
+			expect(validateOutput(result.data)).not.toHaveProperty("issues");
+		});
+
+		test("adds enabled true to a configured Data API", async () => {
+			const { tool, validateOutput } = dataApiTool(() =>
+				jsonResponse({
+					url: "https://ep-host.apirest.neon.tech/neondb/rest/v1",
+					status: "ready",
+					settings: { db_schemas: ["public"] },
+				}),
+			);
+
+			const result = await tool.execute(input);
+
+			expect(result).toEqual({
+				data: {
+					url: "https://ep-host.apirest.neon.tech/neondb/rest/v1",
+					status: "ready",
+					settings: { db_schemas: ["public"] },
+					enabled: true,
+				},
+			});
+			expect(validateOutput(result.data)).not.toHaveProperty("issues");
+		});
+
+		test.each([
+			"database not found",
+			"branch not found",
+		])("still throws the 404 for %s", async (message) => {
+			const { tool } = dataApiTool(() =>
+				jsonResponse({ code: "", message }, 404),
+			);
+
+			await expect(tool.execute(input)).rejects.toMatchObject({
+				status: 404,
+				message,
+			});
 		});
 	});
 

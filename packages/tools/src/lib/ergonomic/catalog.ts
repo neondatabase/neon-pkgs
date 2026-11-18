@@ -1,4 +1,8 @@
-import { listNeonIncidents, NEON_STATUS_API_URL } from "@neon/sdk";
+import {
+	listNeonIncidents,
+	NEON_STATUS_API_URL,
+	NeonNotFoundError,
+} from "@neon/sdk";
 import * as z from "zod";
 import * as output from "../../generated/output.gen.js";
 import { decodeBase64 } from "../binary.js";
@@ -744,16 +748,32 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.dataApi.get",
 			generated: "getProjectBranchDataAPI",
-			output: output.DataAPIReponse,
-			run: (neon, input, signal) =>
-				neon.postgres.dataApi.get(
-					{
-						projectId: input.project_id,
-						branchId: input.branch_id,
-						databaseName: input.database_name,
-					},
-					{ signal },
-				),
+			output: z.union([
+				output.DataAPIReponse.extend({ enabled: z.literal(true) }),
+				z.looseObject({ enabled: z.literal(false) }),
+			]),
+			run: async (neon, input, signal) => {
+				try {
+					const dataApi = await neon.postgres.dataApi.get(
+						{
+							projectId: input.project_id,
+							branchId: input.branch_id,
+							databaseName: input.database_name,
+						},
+						{ signal },
+					);
+					return { ...dataApi, enabled: true as const };
+				} catch (error) {
+					// A missing branch or database is also a 404 with an empty code; only the message tells them apart.
+					if (
+						error instanceof NeonNotFoundError &&
+						/^data api not found$/i.test(error.message)
+					) {
+						return { enabled: false as const };
+					}
+					throw error;
+				}
+			},
 		}),
 	"postgres.dataApi.create": (options) =>
 		fromGenerated(options, {
