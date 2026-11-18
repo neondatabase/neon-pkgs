@@ -2527,6 +2527,8 @@ describe("init CLI", () => {
 		expect(help).toMatch(/--no-config/);
 		expect(flat).toMatch(/does not scaffold/i);
 		expect(flat).toMatch(/forwarded to plugins, or to skills and mcp/i);
+		expect(flat).toMatch(/project-scoped key .*exits 1/);
+		expect(flat).toMatch(/fall back to oauth/);
 		expect(help).toMatch(/Plugin agents/);
 		expect(help).toMatch(/Skills and MCP agents/);
 		expect(help).not.toMatch(/installed apps/);
