@@ -83,7 +83,7 @@ neon projects list --api-key <neon_api_key>
 
 For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
 
-To check which account and credential a command uses, run `neon me` with the same `--profile` or `--api-key` option and environment as that command. The `Authentication` row names the source, such as `OAuth (profile DEFAULT)`, `API key (profile work)`, `API key (--api-key)`, or `API key (NEON_API_KEY)`. When no credential is usable, `neon me` exits 1 with `Not signed in` and the `neon login` command to run; it never starts a sign-in itself.
+To check which account and credential a command uses, run `neon me` with the same `--profile` or `--api-key` option and environment as that command. The `Authentication` row names the source, such as `OAuth (profile DEFAULT)`, `API key (profile work)`, `API key (--api-key)`, or `API key (NEON_API_KEY)`. An organization API key has no user, so `neon me` shows its `Organization` id instead, and `-o json` prints `{"account_id": "org-…", "auth_method": "api_key_org"}`; check `auth_method` to tell it apart from a user. When no credential is usable, `neon me` exits 1 with `Not signed in` and the `neon login` command to run; it never starts a sign-in itself.
 
 ## Create a project without an account
 
@@ -1610,7 +1610,7 @@ Every subcommand except `list` takes `--org-id`. Without it, the CLI uses the or
 | orgs (`org`)                                                               | `list`, `get`, `members`, `invitations`, `spending-limit`                                                    | Manage organizations               |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
-| [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show current user                  |
+| [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show the current user or organization |
 | [branches](https://neon.com/docs/reference/cli-branches)                   | `list`, `create`, `rename`, `add-compute`, `set-default`, `set-expiration`, `delete`, `get`                  | Manage branches                    |
 | postgres (`pg`, `lakebase`)                                                | `computes`, `databases`, `roles`, `connection-string`, `psql`                                                | Manage Postgres and connect to it  |
 | [databases](https://neon.com/docs/reference/cli-databases)                 | `list`, `create`, `delete`                                                                                   | Manage databases                   |

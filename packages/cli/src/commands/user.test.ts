@@ -39,6 +39,59 @@ describe("me", () => {
 	test("keeps JSON as the API response", async ({ testCliCommand }) => {
 		await testCliCommand(["me"], { output: "json" });
 	});
+
+	test("keeps the GET /users/me error for a user credential", async ({
+		testCliCommand,
+	}) => {
+		const { stderr } = await testCliCommand(["me"], {
+			mockDir: "me-user-404",
+			code: 1,
+			snapshot: false,
+		});
+		expect(stderr).toContain("user not found");
+	});
+});
+
+describe("me with an organization API key", () => {
+	test("shows the organization and credential in the table", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(["me"], {
+			mockDir: "me-org-key",
+			output: "table",
+			apiKey: false,
+			env: { NEON_API_KEY: "org-key" },
+			snapshot: false,
+		});
+		expect(stdout).toMatch(/^Organization\s+org-test-12345$/m);
+		expect(stdout).toMatch(/^Authentication\s+API key \(NEON_API_KEY\)$/m);
+	});
+
+	test("prints the account id and auth method as JSON", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(["me"], {
+			mockDir: "me-org-key",
+			output: "json",
+			snapshot: false,
+		});
+		expect(JSON.parse(stdout)).toEqual({
+			account_id: "org-test-12345",
+			auth_method: "api_key_org",
+		});
+	});
+
+	test("reports the GET /users/me error, not the GET /auth one, when GET /auth fails", async ({
+		testCliCommand,
+	}) => {
+		const { stderr } = await testCliCommand(["me"], {
+			mockDir: "me-auth-fails",
+			code: 1,
+			snapshot: false,
+		});
+		expect(stderr).toContain("not allowed for organization API keys");
+		expect(stderr).not.toContain("auth lookup failed");
+	});
 });
 
 describe("userDetails", () => {

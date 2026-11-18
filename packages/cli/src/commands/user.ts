@@ -1,12 +1,13 @@
 import type { CurrentUserInfoResponse } from "@neon/sdk";
 import type yargs from "yargs";
 
+import { isNeonApiError, type NeonApiClient } from "../api.js";
 import { type AuthContext, getAuthContext } from "../auth_context.js";
 import type { CommonProps } from "../types.js";
 import { writer } from "../writer.js";
 
 export const command = "me";
-export const describe = "Show current user";
+export const describe = "Show the current user or organization";
 export const builder = (yargs: yargs.Argv) =>
 	yargs.option("context-file", {
 		hidden: true,
@@ -18,7 +19,17 @@ export const handler = async (args: CommonProps) => {
 const me = async (props: CommonProps) => {
 	// No client means `ensureAuth` found no credential and already reported it.
 	if (!props.apiClient) return;
-	const { data } = await props.apiClient.getCurrentUserInfo();
+	const data = await currentUserOrOrgKey(props.apiClient);
+	if ("auth_method" in data) {
+		if (props.output === "json" || props.output === "yaml") {
+			writer(props).end(data, { fields: ["account_id", "auth_method"] });
+			return;
+		}
+		writer(props).end(orgKeyDetails(data, getAuthContext()), {
+			fields: ["organization", "authentication"],
+		});
+		return;
+	}
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, {
 			fields: ["login", "email", "name", "projects_limit"],
@@ -29,6 +40,43 @@ const me = async (props: CommonProps) => {
 		fields: ["login", "email", "name", "projects_limit", "authentication"],
 	});
 };
+
+type OrgKeyIdentity = { account_id: string; auth_method: "api_key_org" };
+
+/**
+ * The user, or the organization when the credential is an organization API key, which
+ * `GET /users/me` refuses with 403 or 404. `GET /auth` is asked only after that refusal,
+ * so user keys and OAuth still cost one request. Any other outcome rethrows the original
+ * error object, which the top-level handler needs intact to recover from SSO step-up.
+ */
+const currentUserOrOrgKey = async (
+	apiClient: NeonApiClient,
+): Promise<CurrentUserInfoResponse | OrgKeyIdentity> => {
+	try {
+		return (await apiClient.getCurrentUserInfo()).data;
+	} catch (err) {
+		if (
+			!isNeonApiError(err) ||
+			(err.status !== 403 && err.status !== 404)
+		) {
+			throw err;
+		}
+		const details = await apiClient.getAuthDetails().then(
+			({ data }) => data,
+			() => undefined,
+		);
+		if (details?.auth_method !== "api_key_org") throw err;
+		return {
+			account_id: details.account_id,
+			auth_method: details.auth_method,
+		};
+	}
+};
+
+const orgKeyDetails = (identity: OrgKeyIdentity, auth: AuthContext | null) => ({
+	organization: identity.account_id,
+	authentication: auth ? authenticationLabel(auth) : undefined,
+});
 
 /** Table-only view; the field names become the row labels. */
 export const userDetails = (
