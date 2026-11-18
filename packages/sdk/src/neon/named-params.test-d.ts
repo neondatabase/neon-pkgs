@@ -30,7 +30,7 @@ it("named inputs preserve resource and pagination inference", () => {
 			{ projectId: "p", branchId: "b" },
 			{ throwOnError: true },
 		),
-	).resolves.toEqualTypeOf<void>();
+	).resolves.toEqualTypeOf<Branch | null>();
 	expectTypeOf(
 		client.operations.waitFor(
 			{ operations: [] },

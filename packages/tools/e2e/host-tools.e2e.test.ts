@@ -850,6 +850,32 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 			await server.close();
 		}
 	});
+
+	it("branches.delete returns the deleted branch, then null for the same id", async () => {
+		const branchTools = holdingOutputContract(
+			createNeonTools({
+				apiKey: requireApiKey(),
+				baseUrl: configuredBaseUrl(),
+				tools: ["branches.delete"],
+			}),
+		);
+		const branch = await neon.branches.create({
+			projectId,
+			name: "e2e-delete-branch",
+			noCompute: true,
+		});
+		const remove = () =>
+			branchTools["branches.delete"].execute({
+				project_id: projectId,
+				branch_id: branch.id,
+			});
+
+		expect((await remove()).data).toMatchObject({
+			id: branch.id,
+			name: "e2e-delete-branch",
+		});
+		expect((await remove()).data).toBeNull();
+	});
 });
 
 describe("e2e — @neon/tools docs and feedback tools", () => {
