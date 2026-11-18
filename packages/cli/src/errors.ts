@@ -59,6 +59,14 @@ const ERROR_MATCHERS = [
 	[/^Could not reach neonstatus\.com /, "NETWORK_ERROR"],
 	[/^Timed out waiting for neonstatus\.com /, "REQUEST_TIMEOUT"],
 	[
+		/^Could not read .+ from (api\.github\.com|raw\.githubusercontent\.com): the connection failed\./,
+		"NETWORK_ERROR",
+	],
+	[
+		/^Could not read .+ from (api\.github\.com|raw\.githubusercontent\.com): the request did not finish within /,
+		"REQUEST_TIMEOUT",
+	],
+	[
 		/ (is|are) no longer pulled\. Pull NEON_BRANCH_ID /,
 		"LEGACY_FUNCTION_ENV_KEY",
 	],

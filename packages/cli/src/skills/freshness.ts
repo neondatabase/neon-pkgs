@@ -12,6 +12,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isNetworkError } from "../errors.js";
 import { log } from "../log.js";
 import { showNotice } from "../notices.js";
 import { githubRequestHeaders } from "../utils/github_headers.js";
@@ -400,6 +401,40 @@ const gitBlobSha = (bytes: Uint8Array): string =>
 		.update(bytes)
 		.digest("hex");
 
+/**
+ * Fetches a GitHub URL and reads its body under one timeout. A timeout or a failed connection
+ * names the host, since the global handler reports a bare failed connection as the Neon API's.
+ */
+const readFromGitHub = async <T>(
+	url: string,
+	what: string,
+	headers: HeadersInit,
+	read: (response: Response) => Promise<T>,
+): Promise<T> => {
+	try {
+		const response = await fetch(url, {
+			headers,
+			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+		});
+		return await read(response);
+	} catch (error) {
+		const timedOut =
+			error instanceof Error && error.name === "TimeoutError";
+		// fetch reports a connection closed during the body read as a bare `terminated`.
+		const connectionFailed =
+			isNetworkError(error) ||
+			(error instanceof TypeError && error.message === "terminated");
+		if (!timedOut && !connectionFailed) throw error;
+		log.debug("GitHub request for %s failed: %O", url, error);
+		const { host } = new URL(url);
+		throw new Error(
+			timedOut
+				? `Could not read ${what} from ${host}: the request did not finish within ${FETCH_TIMEOUT_MS / 1000}s. Check that this machine can reach ${host}, then retry.`
+				: `Could not read ${what} from ${host}: the connection failed. Check your internet connection, then retry.`,
+		);
+	}
+};
+
 type TreeEntry = { path: string; mode: string; type: string; sha: string };
 
 const isTreeEntry = (value: unknown): value is TreeEntry =>
@@ -414,27 +449,30 @@ const fetchTree = async (
 	env: NodeJS.ProcessEnv,
 ): Promise<TreeEntry[]> => {
 	const url = `https://api.github.com/repos/${source}/git/trees/HEAD?recursive=1`;
-	const response = await fetch(url, {
-		headers: {
+	const body = await readFromGitHub(
+		url,
+		`the file tree of ${source}`,
+		{
 			Accept: "application/vnd.github+json",
 			...githubRequestHeaders(url, env),
 		},
-		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-	});
-	if (!response.ok) {
-		if (
-			(response.status === 403 || response.status === 429) &&
-			response.headers.get("x-ratelimit-remaining") === "0"
-		) {
-			throw new Error(
-				`GitHub API rate limit reached while checking ${source}. Set GITHUB_TOKEN and retry.`,
-			);
-		}
-		throw new Error(
-			`GitHub returned ${response.status} for the file tree of ${source}.`,
-		);
-	}
-	const body: unknown = await response.json();
+		async (response): Promise<unknown> => {
+			if (!response.ok) {
+				if (
+					(response.status === 403 || response.status === 429) &&
+					response.headers.get("x-ratelimit-remaining") === "0"
+				) {
+					throw new Error(
+						`GitHub API rate limit reached while checking ${source}. Set GITHUB_TOKEN and retry.`,
+					);
+				}
+				throw new Error(
+					`GitHub returned ${response.status} for the file tree of ${source}.`,
+				);
+			}
+			return response.json();
+		},
+	);
 	if (!isRecord(body) || !Array.isArray(body.tree)) {
 		throw new Error(
 			`GitHub returned an unexpected file tree for ${source}.`,
@@ -469,16 +507,19 @@ const fetchContentHashes = async (
 				.split("/")
 				.map(encodeURIComponent)
 				.join("/");
-			const response = await fetch(
+			const bytes = await readFromGitHub(
 				`https://raw.githubusercontent.com/${source}/HEAD/${path}`,
-				{ signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+				`${entry.path} in ${source}`,
+				{},
+				async (response) => {
+					if (!response.ok) {
+						throw new Error(
+							`GitHub returned ${response.status} for ${entry.path} in ${source}.`,
+						);
+					}
+					return new Uint8Array(await response.arrayBuffer());
+				},
 			);
-			if (!response.ok) {
-				throw new Error(
-					`GitHub returned ${response.status} for ${entry.path} in ${source}.`,
-				);
-			}
-			const bytes = new Uint8Array(await response.arrayBuffer());
 			if (gitBlobSha(bytes) !== entry.sha) {
 				throw new Error(`${source} changed during the check. Retry.`);
 			}
