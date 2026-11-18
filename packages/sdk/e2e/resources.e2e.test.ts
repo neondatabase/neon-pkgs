@@ -4,7 +4,11 @@ import {
 	uniqueProjectName,
 } from "@neon/e2e-harness";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type NeonClient, NeonNotFoundError } from "../src/index.js";
+import {
+	NeonApiError,
+	type NeonClient,
+	NeonNotFoundError,
+} from "../src/index.js";
 import { expectOk, makeClient } from "./helpers.js";
 
 /**
@@ -230,6 +234,42 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 				{
 					waitForReadiness: true,
 				},
+			),
+		);
+	});
+
+	it("explains why a branch with an expiration date cannot be a parent", async () => {
+		const expiring = expectOk(
+			await neon.branches.create({
+				projectId,
+				name: "expiring-parent",
+				parent_id: defaultBranchId,
+				noCompute: true,
+				expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+			}),
+		);
+
+		const { data, error } = await neon.branches.create({
+			projectId,
+			name: "scratch-child",
+			parent_id: expiring.id,
+			noCompute: true,
+		});
+
+		expect(data).toBeUndefined();
+		expect(error).toBeInstanceOf(NeonApiError);
+		expect(error).toMatchObject({
+			status: 400,
+			code: "BRANCHING_IS_NOT_ALLOWED",
+		});
+		expect(error?.message).toContain(
+			`remove the expiration from ${expiring.id} (update it with expires_at: null)`,
+		);
+
+		expectOk(
+			await neon.branches.delete(
+				{ projectId, branchId: expiring.id },
+				{ waitForReadiness: true },
 			),
 		);
 	});
