@@ -1,7 +1,14 @@
 /** `testCliCommand` always passes `--api-key`, which `claim` rejects. */
 
 import { fork } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -203,6 +210,67 @@ describe("claim status and delete after the assertion expires", () => {
 		expect(
 			readClaimableCredentials(configDir, expiredCredentials.projectId),
 		).toBeNull();
+	});
+
+	test("delete removes the .neon that links the dropped project", async () => {
+		let contextFile = "";
+		const { code, stdout, stderr } = await runCli(
+			["claim", "delete", "--yes", "--output", "json"],
+			{},
+			(workspace) => {
+				contextFile = workspace.contextFile;
+				writeClaimableCredentials(
+					workspace.configDir,
+					expiredCredentials,
+				);
+				writeFileSync(
+					contextFile,
+					JSON.stringify({
+						projectId: expiredCredentials.projectId,
+						branch: expiredCredentials.branchId,
+					}),
+				);
+			},
+		);
+
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+		expect(JSON.parse(stdout)).toEqual({
+			project_id: expiredCredentials.projectId,
+			state: "cleared",
+		});
+		expect(existsSync(contextFile)).toBe(false);
+	});
+
+	test("delete of another project keeps the .neon that links this directory", async () => {
+		let contextFile = "";
+		const linked = JSON.stringify({
+			projectId: "patient-art-12345",
+			branch: "main",
+		});
+		const { code, stderr } = await runCli(
+			[
+				"claim",
+				"delete",
+				expiredCredentials.projectId,
+				"--yes",
+				"--output",
+				"json",
+			],
+			{},
+			(workspace) => {
+				contextFile = workspace.contextFile;
+				writeClaimableCredentials(
+					workspace.configDir,
+					expiredCredentials,
+				);
+				writeFileSync(contextFile, linked);
+			},
+		);
+
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+		expect(readFileSync(contextFile, "utf8")).toBe(linked);
 	});
 
 	test("status with a regular .neon and no assertion is not a missing identity", async () => {

@@ -93,7 +93,6 @@ const cliArgs = (apiHost: string, root: string) => [
 const runList = async (handler: (arrival: Arrival) => void) => {
 	const server = await startServer(handler);
 	const root = mkdtempSync(join(tmpdir(), "neon-projects-list-"));
-	const started = Date.now();
 	try {
 		const result = await new Promise<{
 			code: number | null;
@@ -122,7 +121,7 @@ const runList = async (handler: (arrival: Arrival) => void) => {
 		return {
 			...result,
 			arrivals: server.arrivals,
-			ms: Date.now() - started,
+			exitedAt: Date.now(),
 		};
 	} finally {
 		await server.close();
@@ -215,20 +214,23 @@ describe("projects list", () => {
 	});
 
 	it("fails without waiting for a stalled shared listing", async () => {
+		let ownedFailedAt = 0;
 		const result = await runList((arrival) => {
 			if (arrival.path === OWNED) {
+				ownedFailedAt = Date.now();
 				arrival.send(500, { message: "owned listing failed" });
 			}
 		});
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain("ERROR: owned listing failed");
-		expect(result.ms).toBeLessThan(10_000);
+		expect(result.exitedAt - ownedFailedAt).toBeLessThan(10_000);
 	});
 
 	it("recovers from a missing org id and exits while the shared listing is stalled", async () => {
 		let sharedClosed: Promise<void> | undefined;
 		// The owned 400 waits for the shared request, so the abort always hits one in flight.
 		let rejectOwned: (() => void) | undefined;
+		let ownedRejectedAt = 0;
 		const server = await startServer((arrival) => {
 			if (arrival.path === SHARED) {
 				sharedClosed = arrival.closed;
@@ -240,15 +242,16 @@ describe("projects list", () => {
 			} else if (arrival.query.get("org_id") === "org-picked") {
 				arrival.send(200, page("org-project", 1));
 			} else {
-				rejectOwned = () =>
+				rejectOwned = () => {
+					ownedRejectedAt = Date.now();
 					arrival.send(400, { message: "org_id is required" });
+				};
 				if (sharedClosed) {
 					rejectOwned();
 				}
 			}
 		});
 		const root = mkdtempSync(join(tmpdir(), "neon-projects-recovery-"));
-		const started = Date.now();
 		try {
 			const result = await new Promise<{ code: number; output: string }>(
 				(resolve) => {
@@ -292,7 +295,9 @@ describe("projects list", () => {
 			);
 			expect(result.code).toBe(0);
 			expect(result.output).toContain("org-project-0");
-			expect(Date.now() - started).toBeLessThan(10_000);
+			// Measured from the owned 400 so CLI startup under load doesn't count; without the
+			// abort, the stalled shared request holds the process open for the 60 s request timeout.
+			expect(Date.now() - ownedRejectedAt).toBeLessThan(30_000);
 			expect(
 				server.arrivals.filter((a) => a.path === SHARED),
 			).toHaveLength(1);

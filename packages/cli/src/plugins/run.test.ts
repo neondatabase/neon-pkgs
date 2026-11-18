@@ -156,13 +156,12 @@ describe("runPluginsCli timeout", () => {
 		dirs.push(bin);
 		writeFileSync(
 			join(bin, "npx"),
-			`#!/usr/bin/env node
-const { spawn } = require("node:child_process");
-process.stdout.write("plugins banner\\n");
-spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
-  stdio: "inherit",
-});
-setInterval(() => {}, 1000);
+			// The timeout starts at spawn, so the banner has to come from something
+			// that starts faster than a Node process on a loaded machine.
+			`#!/bin/sh
+echo "plugins banner"
+sleep 60 &
+sleep 60
 `,
 		);
 		chmodSync(join(bin, "npx"), 0o755);
@@ -181,7 +180,7 @@ setInterval(() => {}, 1000);
 					"-y",
 				],
 				cwd: bin,
-				timeoutMs: 400,
+				timeoutMs: 900,
 				env: {
 					...process.env,
 					PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,

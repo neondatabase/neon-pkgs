@@ -413,8 +413,8 @@ const clearLocalRecord = (
 	contextMatches: boolean,
 ): void => {
 	removeClaimableCredentials(props.configDir, projectId);
-	if (contextMatches && existsSync(props.contextFile)) {
-		applyContext(props.contextFile, {});
+	if (contextMatches) {
+		removeFileIfPresent(props.contextFile);
 	}
 };
 

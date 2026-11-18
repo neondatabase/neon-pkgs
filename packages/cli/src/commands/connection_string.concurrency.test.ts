@@ -97,6 +97,7 @@ const runCs = async (handler: Handler) => {
 describe("connection-string lookups", () => {
 	it("requests endpoints, roles, and databases before any of them answers", async () => {
 		const held: Array<() => void> = [];
+		const fallbacks: Array<ReturnType<typeof setTimeout>> = [];
 		const arrived = new Set<string>();
 		const result = await runCs((path, send) => {
 			if (!LOOKUPS.includes(path)) {
@@ -106,12 +107,15 @@ describe("connection-string lookups", () => {
 			arrived.add(path);
 			held.push(() => send(200, bodies[path]));
 			if (arrived.size === LOOKUPS.length) {
+				for (const fallback of fallbacks.splice(0)) {
+					clearTimeout(fallback);
+				}
 				for (const release of held.splice(0)) {
 					release();
 				}
 			} else {
 				// A sequential client never sends the next lookup; fail it instead of hanging.
-				setTimeout(() => send(500), 2000);
+				fallbacks.push(setTimeout(() => send(500), 2000));
 			}
 		});
 		expect(result.stderr).toBe("");
