@@ -1,5 +1,15 @@
 # neonctl
 
+## 9.7.2
+
+### Patch Changes
+
+- Updated dependencies [c76c71d]
+- Updated dependencies [59a8bc7]
+- Updated dependencies [4ab89b2]
+- Updated dependencies [23e34f9]
+  - neon@9.7.2
+
 ## 9.7.1
 
 ### Patch Changes
