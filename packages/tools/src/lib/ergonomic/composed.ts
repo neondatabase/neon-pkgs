@@ -548,7 +548,7 @@ export const resetFromParentTool = (options: ToolClientOptions) =>
 			id: publishedId("branches.resetFromParent"),
 			title: "Reset branch from parent",
 			description:
-				"Resets a branch to its parent's current state, discarding the branch's own changes. NEVER run autonomously; always ask the user first. preserve_under_name first saves the current state as a new branch. To restore a snapshot, use {{snapshots.restore}}.",
+				"Resets a branch to its parent's current state, discarding the branch's own changes. NEVER run autonomously: run it only when the user's own message asks for it, otherwise ask first. preserve_under_name first saves the current state as a new branch. To restore a snapshot, use {{snapshots.restore}}.",
 			inputSchema: resetFromParentInputSchema,
 			outputSchema: output.Branch,
 			annotations: writeAnnotations,
@@ -722,7 +722,7 @@ export const restoreSnapshotTool = (options: ToolClientOptions) =>
 			id: publishedId("snapshots.restore"),
 			title: "Restore snapshot",
 			description:
-				"Restores a snapshot into a new branch and waits until it is ready. finalize true replaces target_branch_id (default: the snapshot's source branch) with it. NEVER finalize autonomously; ask the user first. Swap in later with {{branches.finalizeRestore}}.",
+				"Restores a snapshot into a new branch and waits until it is ready. finalize true replaces target_branch_id (default: the snapshot's source branch) with it. NEVER finalize autonomously: finalize only when the user's own message asks for it, otherwise ask first. Swap in later with {{branches.finalizeRestore}}.",
 			inputSchema: restoreSnapshotInputSchema,
 			outputSchema: output.Branch,
 			annotations: writeAnnotations,

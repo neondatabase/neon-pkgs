@@ -411,7 +411,7 @@ const tools = createNeonTools({
 		"postgres.connectionString":
 			"Get a connection string. Call it after {{projects.create}}.",
 		delete_projects:
-			"Delete a Neon project and all its data. NEVER run autonomously; always ask the user first.",
+			"Delete a Neon project and all its data. NEVER run autonomously: run it only when the user's own message asks for it, otherwise ask first.",
 	},
 });
 tools["projects.create"].description;

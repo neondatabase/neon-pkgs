@@ -84,7 +84,7 @@ A description names another tool as `{{selector}}`. `createNeonTools` and `creat
 - The first sentence says what the tool does to which resource, in the present tense: "Lists a project's branches", not "Retrieves information about the specified branch".
 - Then only what changes the agent's next call: preconditions, which sibling tool to use instead, destructive or irreversible effects, waiting, and errors a caller can avoid. Tools that overlap point at each other.
 - Leave out types, enum values, defaults, and bounds; the JSON Schema has them. Say something once, in the input it is about, rather than in every tool.
-- Keep "NEVER run autonomously; always ask the user first." on the destructive tools that have it.
+- Keep "NEVER run autonomously: run it only when the user's own message asks for it, otherwise ask first." on the destructive tools that have it. "Always ask the user first" makes agents stop before a deletion the user already asked for.
 - Every claim matches the handler or SDK method. Read it first.
 
 ### Budgets and the tests that enforce them

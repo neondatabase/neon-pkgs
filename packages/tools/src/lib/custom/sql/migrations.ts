@@ -166,7 +166,7 @@ export const prepareMigrationTool = (options: ToolClientOptions) =>
 			id: publishedId("migrations.prepare"),
 			title: "Prepare Database Migration",
 			description:
-				"Applies a schema change on a new temporary branch and returns a migration_id. Test it there with {{sql.run}}, ask the user, then always call {{migrations.complete}} with the response's complete object so the branch is deleted.",
+				"Applies a schema change on a new temporary branch and returns a migration_id. Test it there with {{sql.run}}, then always call {{migrations.complete}} with the response's complete object so the branch is deleted.",
 			inputSchema: prepareMigrationInputSchema,
 			outputSchema: prepareMigrationOutputSchema,
 			annotations: {
@@ -253,7 +253,7 @@ export const completeMigrationTool = (options: ToolClientOptions) =>
 			id: publishedId("migrations.complete"),
 			title: "Complete Database Migration",
 			description:
-				"Applies or discards a prepared migration and deletes the temporary branch. NEVER run autonomously; always ask the user first. Pass the complete object from {{migrations.prepare}}; apply_changes false discards.",
+				"Applies or discards a prepared migration and deletes the temporary branch. NEVER run autonomously: run it only when the user's own message asks for it, otherwise ask first. Pass the complete object from {{migrations.prepare}}; apply_changes false discards.",
 			inputSchema: completeMigrationInputSchema,
 			outputSchema: completeMigrationOutputSchema,
 			annotations: sqlWriteAnnotations,
