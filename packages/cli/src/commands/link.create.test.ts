@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import prompts from "prompts";
 import { afterEach, describe, expect, vi } from "vitest";
 
 const pickBranchInteractively = vi.hoisted(() => vi.fn());
@@ -32,6 +33,103 @@ const test = originalTest.extend<{
 			return join(dir, ".neon");
 		});
 	},
+});
+
+describe("link result", () => {
+	const props = (apiHost: string, contextFile: string) => ({
+		apiClient: getApiClient({ apiKey: "test-key", apiHost }),
+		apiKey: "test-key",
+		apiHost,
+		output: "yaml" as const,
+		contextFile,
+		yes: true,
+		clear: false,
+		checks: true,
+		envPull: false,
+		config: false,
+		cwd: join(contextFile, ".."),
+	});
+
+	test("an existing project reports created: false", async ({
+		runMockServer,
+		tmpContext,
+	}) => {
+		const server = await runMockServer("main");
+		const apiHost = `http://localhost:${(server.address() as AddressInfo).port}`;
+		const ctx = tmpContext("result_existing");
+
+		await expect(
+			runLink({ ...props(apiHost, ctx), projectId: "test" }),
+		).resolves.toEqual({ created: false });
+		await expect(
+			runLink({ ...props(apiHost, ctx), branch: "main" }),
+		).resolves.toEqual({ created: false });
+	});
+
+	test("a created project reports created: true", async ({
+		runMockServer,
+		tmpContext,
+	}) => {
+		const server = await runMockServer("main");
+		const apiHost = `http://localhost:${(server.address() as AddressInfo).port}`;
+
+		await expect(
+			runLink({
+				...props(apiHost, tmpContext("result_created")),
+				orgId: "org-2",
+				projectName: "test_project",
+				regionId: "aws-us-east-2",
+			}),
+		).resolves.toEqual({ created: true });
+	});
+
+	test("an existing project picked interactively reports created: false", async ({
+		runMockServer,
+		tmpContext,
+	}) => {
+		vi.stubEnv("CI", "false");
+		const stdinIsTTY = process.stdin.isTTY;
+		const stdoutIsTTY = process.stdout.isTTY;
+		process.stdin.isTTY = true;
+		process.stdout.isTTY = true;
+		prompts.inject(["test"]);
+		pickBranchInteractively.mockResolvedValue({
+			kind: "existing",
+			branchId: "br-main-branch-123456",
+		});
+		const server = await runMockServer("main");
+		const apiHost = `http://localhost:${(server.address() as AddressInfo).port}`;
+
+		try {
+			await expect(
+				runLink({
+					...props(apiHost, tmpContext("result_picked")),
+					yes: false,
+					orgId: "org-2",
+				}),
+			).resolves.toEqual({ created: false });
+			expect(pickBranchInteractively).toHaveBeenCalled();
+		} finally {
+			process.stdin.isTTY = stdinIsTTY;
+			process.stdout.isTTY = stdoutIsTTY;
+			vi.unstubAllEnvs();
+			pickBranchInteractively.mockReset();
+		}
+	});
+
+	test("--no-checks verifies nothing and reports no result", async ({
+		tmpContext,
+	}) => {
+		await expect(
+			runLink({
+				...props("http://localhost:1", tmpContext("result_offline")),
+				checks: false,
+				orgId: "org-2",
+				projectId: "test",
+				branch: "main",
+			}),
+		).resolves.toBeUndefined();
+	});
 });
 
 describe("link interactive branch create", () => {

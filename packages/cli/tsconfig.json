@@ -27,6 +27,7 @@
       // imports it, and that code is bundled into this package.
       "@neon/config/v1": ["node_modules/@neon/config/dist/v1"],
       "@neon/e2e-harness": ["node_modules/@neon/e2e-harness/src/index"],
+      "@neon/e2e-harness/auth": ["node_modules/@neon/e2e-harness/src/auth"],
       // Same reason for the private internals, which are bundled into this package:
       // classic resolution ignores their `exports` map. tsdown resolves them itself.
       "@neon-internals/cli-core/*": ["node_modules/@neon-internals/cli-core/dist/*"],

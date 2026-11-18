@@ -231,6 +231,9 @@ export const configRowValue = (
 	if (config === "created") {
 		return "neon.ts created";
 	}
+	if (config === "seeded") {
+		return "neon.ts created from the linked branch";
+	}
 	if (config === "existing") {
 		return `existing ${filename ?? "Neon config"} preserved`;
 	}
