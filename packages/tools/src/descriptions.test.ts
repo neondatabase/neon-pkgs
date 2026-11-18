@@ -342,6 +342,12 @@ describe("mcp-tool-names.json", () => {
 		expect(byName.get("get_auth")?.description).toContain(
 			"Prefer get_neon_auth_config, which adds the auth settings",
 		);
+		expect(byName.get("create_auth_user")?.description).toContain(
+			"without a password",
+		);
+		expect(byName.get("create_auth_user")?.description).toContain(
+			"/sign-up/email under base_url from get_neon_auth_config",
+		);
 		expect(byName.get("list_postgres_endpoints")?.description).toContain(
 			"use list_branch_computes.",
 		);
