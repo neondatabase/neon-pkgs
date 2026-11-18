@@ -22,6 +22,14 @@ describe("neon docs search against neon.com site search", () => {
 		}
 	});
 
+	it("searches with the query right after docs", async () => {
+		const result = await runCli(["docs", "create branch"], {
+			apiKey: null,
+		});
+		expect(result.code, result.stderr).toBe(0);
+		expect(parseHits(result.stdout).length).toBeGreaterThan(0);
+	});
+
 	it("searches with a broken stored credential", async () => {
 		const configDir = mkdtempSync(join(tmpdir(), "neon-e2e-broken-"));
 		writeFileSync(join(configDir, "credentials.json"), "{not json");

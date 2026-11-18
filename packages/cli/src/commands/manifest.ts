@@ -213,7 +213,7 @@ export const commandManifest: CommandEntry[] = [
 		load: () => import("./feedback.js"),
 	},
 	{
-		command: "docs",
+		command: "docs [query]",
 		describe: "Search neon.com docs, guides, and more",
 		load: () => import("./docs.js"),
 	},
