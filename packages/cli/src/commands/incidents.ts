@@ -24,6 +24,7 @@ export const builder = (argv: yargs.Argv) =>
 			[
 				"",
 				"Reads the public status page at https://neonstatus.com. No login or linked project is needed.",
+				"Updated At (`updated_at` in JSON) is when the status page last updated the overall status, not when this command fetched it.",
 			].join("\n"),
 		);
 

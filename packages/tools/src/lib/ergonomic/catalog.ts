@@ -69,7 +69,11 @@ const listIncidentsOutputSchema = z.looseObject({
 	status: z
 		.string()
 		.describe("Overall status: operational, degraded, or outage."),
-	updated_at: z.string(),
+	updated_at: z
+		.string()
+		.describe(
+			"When neonstatus.com last updated the overall status, not when this call fetched it.",
+		),
 	status_page_url: z.string(),
 	incidents: z
 		.array(
@@ -119,7 +123,7 @@ const listIncidentsTool = (options: ToolClientOptions) =>
 		id: publishedId("incidents.list"),
 		title: "List Neon incidents",
 		description:
-			"Lists open Neon incidents and maintenance from neonstatus.com and the affected components and regions. Needs no credentials. Call it when Neon requests fail unexpectedly or the user asks whether Neon is down.",
+			"Lists open Neon incidents and maintenance from neonstatus.com and the affected components and regions. Needs no credentials. Fetches the page on every call; updated_at is when neonstatus.com last updated the overall status, not when this call fetched it. Call it when Neon requests fail unexpectedly or the user asks whether Neon is down.",
 		inputSchema: listIncidentsInputSchema,
 		outputSchema: listIncidentsOutputSchema,
 		annotations: {
