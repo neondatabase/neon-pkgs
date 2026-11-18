@@ -2195,6 +2195,86 @@ describe("init handler", () => {
 
 	test.each([
 		{
+			name: "a new link",
+			pinned: undefined,
+			services: ["ai-gateway"],
+			pulls: 1,
+			heading: "Neon setup complete.",
+			outcome: "success",
+		},
+		{
+			name: "a linked branch",
+			pinned: { projectId: "proj-1", branch: "main" },
+			services: ["ai-gateway"],
+			pulls: 1,
+			heading: "Neon setup complete.",
+			outcome: "success",
+		},
+		{
+			name: "a linked branch",
+			pinned: { projectId: "proj-1", branch: "main" },
+			services: ["ai-gateway", "auth"],
+			pulls: 1,
+			heading: "Neon setup needs a next step.",
+			outcome: "pending",
+		},
+		{
+			name: "a project pinned without a branch",
+			pinned: { projectId: "proj-1" },
+			services: ["ai-gateway"],
+			pulls: 0,
+			heading: "Neon setup needs a next step.",
+			outcome: "pending",
+		},
+	])("-y --services $services after $name reports $outcome", async ({
+		pinned,
+		services,
+		pulls,
+		heading,
+		outcome,
+	}) => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-aigw-status-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		if (pinned) {
+			writeFileSync(contextFile, `${JSON.stringify(pinned)}\n`);
+		}
+		const linkProject = vi.fn(async () => {
+			writeFileSync(
+				contextFile,
+				`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
+			);
+		});
+		const envPull = vi.fn().mockResolvedValue({ status: "empty" });
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+		const { trackEvent } = await import("../analytics.js");
+		vi.mocked(trackEvent).mockClear();
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				linkProject,
+				envPull,
+				yes: true,
+				services,
+				analytics: true,
+				contextFile,
+				detectProjectAgents: () => ["cursor"],
+			}),
+		);
+
+		expect(envPull).toHaveBeenCalledTimes(pulls);
+		expect(stdoutText(stdout)).toContain(heading);
+		const end = vi
+			.mocked(trackEvent)
+			.mock.calls.find((call) => call[0] === "cli_init_end")?.[1];
+		expect(end).toEqual(expect.objectContaining({ outcome }));
+	});
+
+	test.each([
+		{
 			name: "a Postgres-only neon.ts",
 			config: undefined,
 			expected: "neon config plan",

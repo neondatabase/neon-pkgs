@@ -1486,7 +1486,14 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		}
 
 		const pendingUnauthed = funnel.link === "skipped" && !noLink;
-		const pendingServices = extraServices && linked;
+		// The AI Gateway exists on every branch; its only setup is the credential the
+		// env pull mints.
+		const pendingServices =
+			linked &&
+			declared.some(
+				(service) =>
+					service !== "ai-gateway" || envPullPlan.kind === "skip",
+			);
 		const pendingClaimable =
 			funnel.link === "claimable" && claimExpiresAt !== undefined;
 		const pendingExisting =
