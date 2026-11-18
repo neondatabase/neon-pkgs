@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe } from "vitest";
+import { afterEach, beforeEach, describe, expect } from "vitest";
 import { test } from "../test_utils/fixtures.js";
 
 describe("realtime", () => {
@@ -15,28 +15,71 @@ describe("realtime", () => {
 		rmSync(workspace, { recursive: true, force: true });
 	});
 
-	test("enable requests Realtime for the selected branch", async ({
+	const enableArgs = [
+		"realtime",
+		"enable",
+		"--project-id",
+		"test",
+		"--branch",
+		"sunny",
+		"--allowed-origin",
+		"https://app.example.com",
+		"--allowed-origin",
+		"http://localhost:3000",
+	];
+
+	test("enable waits until Realtime is enabled on the branch", async ({
 		testCliCommand,
 	}) => {
-		await testCliCommand(
-			[
-				"realtime",
-				"enable",
-				"--project-id",
-				"test",
-				"--branch",
-				"sunny",
-				"--allowed-origin",
-				"https://app.example.com",
-				"--allowed-origin",
-				"http://localhost:3000",
-			],
-			{
-				mockDir: "realtime",
-				snapshot: false,
-				stderr: "Realtime enable requested for branch br-sunny-branch-123456.",
+		const requests: string[] = [];
+		await testCliCommand(enableArgs, {
+			mockDir: "realtime-enable",
+			env: { NEON_REALTIME_POLL_INTERVAL_MS: "1" },
+			onRequest: ({ method, path }) => requests.push(`${method} ${path}`),
+			snapshot: false,
+			stderr: "Realtime is enabled on branch br-sunny-branch-123456.",
+		});
+		expect(
+			requests.filter((request) => request.endsWith("/realtime")),
+		).toEqual([
+			"POST /projects/test/branches/br-sunny-branch-123456/realtime",
+			"GET /projects/test/branches/br-sunny-branch-123456/realtime",
+			"GET /projects/test/branches/br-sunny-branch-123456/realtime",
+		]);
+	});
+
+	test("enable --no-wait returns after requesting Realtime", async ({
+		testCliCommand,
+	}) => {
+		const requests: string[] = [];
+		await testCliCommand([...enableArgs, "--no-wait"], {
+			mockDir: "realtime-enable",
+			onRequest: ({ method, path }) => requests.push(`${method} ${path}`),
+			snapshot: false,
+			stderr: "Realtime enable requested for branch br-sunny-branch-123456.",
+		});
+		expect(
+			requests.filter((request) => request.endsWith("/realtime")),
+		).toEqual([
+			"POST /projects/test/branches/br-sunny-branch-123456/realtime",
+		]);
+	});
+
+	test("enable explains that Realtime may still be applying after a timeout", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(enableArgs, {
+			mockDir: "realtime-enable-timeout",
+			env: {
+				NEON_REALTIME_POLL_INTERVAL_MS: "1",
+				NEON_REALTIME_POLL_TIMEOUT_MS: "10",
 			},
-		);
+			code: 1,
+			snapshot: false,
+			stderr:
+				"ERROR: Timed out waiting for Realtime on branch br-sunny-branch-123456. " +
+				"The change was requested and may still be in progress; run the command again to keep waiting.",
+		});
 	});
 
 	test("disable uses the project and branch linked in .neon", async ({
