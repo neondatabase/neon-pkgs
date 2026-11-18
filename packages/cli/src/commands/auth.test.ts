@@ -45,7 +45,12 @@ import {
 	locationForAuth,
 } from "./auth";
 
-vi.mock("open", () => ({ default: vi.fn((url: string) => fetch(url)) }));
+const browser = vi.hoisted(() => ({
+	visit: (url: string): Promise<unknown> => fetch(url),
+}));
+vi.mock("open", () => ({
+	default: vi.fn((url: string) => browser.visit(url)),
+}));
 vi.mock("../pkg.ts", () => ({ default: { version: "0.0.0" } }));
 
 // Neither suite names a credential explicitly, so an exported NEON_API_KEY or NEON_PROFILE in
@@ -94,6 +99,49 @@ describe("auth", () => {
 		expect(credentials.user_id).toEqual(expect.any(String));
 		expect(info).toHaveBeenCalledWith("Auth complete (profile DEFAULT)");
 		info.mockRestore();
+	});
+
+	test("completes a browser sign-in that finishes minutes after the URL is printed", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		const dir = mkdtempSync(join(tmpdir(), "neon-slow-login-"));
+		const visit = browser.visit;
+		const printed = new Promise<string>((resolve) => {
+			browser.visit = async (url) => resolve(url);
+		});
+		// Date stays real so token timestamps validate. fetch's timers are faked too, so advance
+		// only while no request is in flight.
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+		try {
+			const login = authFlow({
+				_: ["auth"],
+				apiHost: `http://localhost:${(server.address() as AddressInfo).port}`,
+				clientId: "test-client-id",
+				configDir: dir,
+				forceAuth: true,
+				oauthHost: `http://localhost:${oauthServer.address().port}`,
+				allowUnsafeTls: true,
+			}).then(
+				() => "signed in",
+				(err: unknown) => err,
+			);
+
+			const authUrl = await printed;
+			await vi.advanceTimersByTimeAsync(5 * 60_000);
+			vi.useRealTimers();
+			await fetch(authUrl);
+
+			expect(await login).toBe("signed in");
+			const credentials = JSON.parse(
+				readFileSync(join(dir, "credentials.json"), "utf-8"),
+			);
+			expect(credentials.refresh_token).toEqual(expect.any(String));
+		} finally {
+			vi.useRealTimers();
+			browser.visit = visit;
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 
 	const WINDOWS_KEYRING_LIMIT = 1280;
