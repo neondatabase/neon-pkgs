@@ -1,5 +1,14 @@
 # neon
 
+## 9.7.2
+
+### Patch Changes
+
+- c76c71d: `neon init` now reports "Neon setup complete." when the only service beyond Postgres in the new `neon.ts` is the AI Gateway, since init already pulls its credential and `neon deploy` has nothing left to apply.
+- 59a8bc7: `neon init --help` now says that `--mcp-auth api-key` fails with an organization or project-scoped key, and that omitting the flag falls back to OAuth.
+- 4ab89b2: Browser sign-in (`neon login`, and the sign-in other commands start when no credential is found) now waits up to 10 minutes for the browser to finish, up from 60 seconds, and says so in the waiting message and in `neon login --help`.
+- 23e34f9: `neon me` now works with an organization API key: it shows the key's organization and exits 0, where it used to fail with `not allowed for organization API keys`.
+
 ## 9.7.1
 
 ### Patch Changes
