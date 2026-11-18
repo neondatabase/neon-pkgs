@@ -348,6 +348,22 @@ describe("mcp-tool-names.json", () => {
 		expect(byName.get("list_branch_computes")?.description).toContain(
 			"use list_postgres_endpoints.",
 		);
+		const dataApiCreate = byName.get("provision_neon_data_api");
+		if (dataApiCreate === undefined) {
+			throw new TypeError("provision_neon_data_api");
+		}
+		expect(dataApiCreate.description).toContain(
+			"pass auth_provider neon_auth and add_default_grants without asking",
+		);
+		expect(dataApiCreate.description).toContain(
+			"confirm get_auth returns a JWKS URL (if it 404s, call provision_neon_auth)",
+		);
+		expect(
+			inputDescription(dataApiCreate.inputSchema, "auth_provider"),
+		).toContain("every request fails with HTTP 401");
+		expect(
+			inputDescription(dataApiCreate.inputSchema, "add_default_grants"),
+		).toContain("signed-in requests get HTTP 403");
 	});
 
 	test("the MCP tools only reference other MCP tools", () => {

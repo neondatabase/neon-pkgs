@@ -11,6 +11,10 @@
 		"scopes": "Capabilities to grant. The credential may only perform actions in these scopes.",
 		"expires_at": "When the credential stops working, 1 minute to 365 days from now. Omit for a credential that never expires."
 	},
+	"createProjectBranchDataAPI": {
+		"auth_provider": "neon_auth verifies Neon Auth JWTs; external verifies JWTs against jwks_url. When omitted, the current provider stays, and Neon Auth JWTs verify once Neon Auth is on the branch; with neither, every request fails with HTTP 401.",
+		"add_default_grants": "Grants the authenticated role SELECT, INSERT, UPDATE, and DELETE on every table in the public schema, including tables created later. Without it or your own GRANTs, signed-in requests get HTTP 403."
+	},
 	"createProjectBranchFunctionDeployment": {
 		"runtime": "The Node.js runtime for the deployment.",
 		"zip": "Base64-encoded ZIP of the function source. Omit to reuse the latest bundle; required for the first deployment."

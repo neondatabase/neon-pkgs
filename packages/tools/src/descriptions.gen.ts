@@ -44,7 +44,7 @@ export const toolDescriptions: Readonly<Partial<Record<NeonToolId, string>>> = {
 	"postgres.databases.update": "Renames a database or changes its owner.",
 	"postgres.databases.delete": "Deletes a database and its data from a branch.",
 	"postgres.dataApi.get": "Gets the Neon Data API configuration for one database on a branch.",
-	"postgres.dataApi.create": "Creates the Neon Data API, a REST interface over database_name, on a branch.",
+	"postgres.dataApi.create": "Creates the Neon Data API, a REST interface over database_name, on a branch. If the Data API has no auth provider yet and the user names none of their own, pass auth_provider neon_auth and add_default_grants without asking. For the user's own identity provider, ask for its JWKS URL and pass external. Before reporting success, confirm {{auth.get}} returns a JWKS URL (if it 404s, call {{auth.create}}), or for external that {{postgres.dataApi.get}} shows jwks_url.",
 	"postgres.dataApi.update": "Updates the Neon Data API settings for a database and refreshes its schema cache.",
 	"postgres.dataApi.delete": "Deletes the Neon Data API for a database; requests to its endpoint start failing.",
 	"storage.get": "Checks whether object storage is available on a branch; a 404 says why not.",
