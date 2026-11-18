@@ -38,7 +38,7 @@ describe("matchErrorCode", () => {
 				"No interactive terminal. Re-run with -y to set up this directory with Recommended defaults: `neon init -y`.",
 				"NON_INTERACTIVE",
 			],
-			["Authentication timed out after 60 seconds", "AUTH_TIMEOUT"],
+			["Authentication timed out after 10 minutes", "AUTH_TIMEOUT"],
 			[
 				"neon skills needs Node.js 22.20.0 or newer to run the skills CLI. This process is Node.js 22.14.0. Upgrade Node.js, then retry.",
 				"NODE_VERSION_UNSUPPORTED",

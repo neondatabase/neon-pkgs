@@ -35,6 +35,7 @@ import type yargs from "yargs";
 import type { NeonApiClient } from "../api.js";
 import { getApiClient, isNeonApiError } from "../api.js";
 import {
+	AUTH_TIMEOUT_MINUTES,
 	AuthRefreshError,
 	auth,
 	classifyRefreshFailure,
@@ -132,6 +133,9 @@ const wrapAuthHelp = (text: string): string => wrapHelpText(text, helpWidth());
 const authHelpEpilogue = (): string => {
 	const cli = getCliName();
 	return helpEpilogue(
+		wrapAuthHelp(
+			`Browser sign-in prints its Auth Url to stderr and waits up to ${AUTH_TIMEOUT_MINUTES} minutes for it to finish. A coding agent can run ${cli} login in the background and pass the URL to the person signing in on this machine.`,
+		),
 		wrapAuthHelp("Non-interactive (CI, scripts, agents):"),
 		wrapAuthHelp("Use an existing API key or an API-key profile."),
 		`  ${cli} projects list --profile agent`,
@@ -1024,7 +1028,7 @@ export const ensureAuth = async (
 
 	// Agents and scripts run commands with every stdio stream on a pipe or file, where nobody
 	// may be watching for a browser, so name the sign-in command instead of waiting out the
-	// 60-second timeout. One terminal stream is enough to keep `neon psql < q.sql` signing in.
+	// sign-in timeout. One terminal stream is enough to keep `neon psql < q.sql` signing in.
 	// `login` returned above and still opens the browser from there.
 	if (
 		!(props.forceAuth ?? props["force-auth"]) &&

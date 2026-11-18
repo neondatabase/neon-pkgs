@@ -398,7 +398,9 @@ describe("no usable credential and no terminal, outside CI", () => {
 			"Auth Url:",
 		);
 
-		expect(stderr).toContain("Awaiting authentication in web browser.");
+		expect(stderr).toContain(
+			"Awaiting authentication in web browser (up to 10 minutes).",
+		);
 	});
 });
 

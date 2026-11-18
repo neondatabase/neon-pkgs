@@ -35,7 +35,8 @@ export const NEONCTL_SCOPES = [
 	"urn:neoncloud:orgs:permission",
 ] as const;
 
-const AUTH_TIMEOUT_SECONDS = 60;
+// Long enough for a person to finish a sign-in that a coding agent relayed to them.
+export const AUTH_TIMEOUT_MINUTES = 10;
 
 export const defaultClientID = "neonctl";
 
@@ -280,10 +281,10 @@ export const auth = async ({
 		const timer = setTimeout(() => {
 			reject(
 				new Error(
-					`Authentication timed out after ${AUTH_TIMEOUT_SECONDS} seconds`,
+					`Authentication timed out after ${AUTH_TIMEOUT_MINUTES} minutes`,
 				),
 			);
-		}, AUTH_TIMEOUT_SECONDS * 1000);
+		}, AUTH_TIMEOUT_MINUTES * 60_000);
 
 		const onRequest = async (
 			request: IncomingMessage,
@@ -355,7 +356,9 @@ export const auth = async ({
 			redirect_uri: REDIRECT_URI(listen_port),
 		});
 
-		log.info("Awaiting authentication in web browser.");
+		log.info(
+			`Awaiting authentication in web browser (up to ${AUTH_TIMEOUT_MINUTES} minutes).`,
+		);
 		log.info(`Auth Url: ${authUrl}`);
 
 		open(authUrl.href).catch((err: unknown) => {
