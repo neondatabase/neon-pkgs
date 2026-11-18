@@ -5,10 +5,11 @@ import {
 	listProjectBranchRoles,
 } from "../../client/sdk.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
-import { cancelled, runBounded } from "../deadline.js";
+import { cancelled, type Deadline, runBounded } from "../deadline.js";
 import { NeonClientError, toNeonError } from "../errors.js";
 import { invalidParamsResult, validateCallOptions } from "../params.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
+import { type RawOutcome, withRetries } from "../retry.js";
 import { DataApi } from "./dataapi.js";
 import { Databases } from "./databases.js";
 import { Endpoints } from "./endpoints.js";
@@ -72,11 +73,12 @@ export class Postgres<DThrow extends boolean> {
 			return invalidParamsResult<string>(invalid, shouldThrow);
 		}
 		// This resolver makes up to four sequential requests without going through
-		// RequestContext, so it owns the deadline covering all of them.
+		// RequestContext, so it owns the deadline covering all of them and retries
+		// each one itself.
 		const deadline = this.#ctx.deadlineFor(opts);
 		try {
 			const resolved = await runBounded(deadline, () =>
-				this.#resolve(params, deadline.signal),
+				this.#resolve(params, deadline),
 			);
 			const cancellation = cancelled(deadline);
 			// `runBounded` resolves undefined only when the deadline won the race, which
@@ -98,21 +100,26 @@ export class Postgres<DThrow extends boolean> {
 
 	async #resolve(
 		params: ConnectionStringParams,
-		signal?: AbortSignal,
+		deadline: Deadline,
 	): Promise<NeonResult<string>> {
 		const client = this.#ctx.client;
+		const signal = deadline.signal;
+		const send = <T extends RawOutcome>(exec: () => Promise<T>) =>
+			withRetries(exec, this.#ctx.defaults.retries, deadline);
 		const projectId = params.projectId;
 		let branchId = params.branchId;
 		let roleName = params.roleName;
 		let databaseName = params.databaseName;
 
 		if ((!roleName || !databaseName) && !branchId) {
-			const branches = await listProjectBranches({
-				client,
-				path: { project_id: projectId },
-				throwOnError: false,
-				signal,
-			});
+			const branches = await send(() =>
+				listProjectBranches({
+					client,
+					path: { project_id: projectId },
+					throwOnError: false,
+					signal,
+				}),
+			);
 			if (branches.error || !branches.data) {
 				return err(toNeonError(branches.error, branches.response));
 			}
@@ -130,12 +137,14 @@ export class Postgres<DThrow extends boolean> {
 
 		if (!roleName) {
 			if (!branchId) return err(branchRequired("roleName"));
-			const roles = await listProjectBranchRoles({
-				client,
-				path: { project_id: projectId, branch_id: branchId },
-				throwOnError: false,
-				signal,
-			});
+			const roles = await send(() =>
+				listProjectBranchRoles({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					throwOnError: false,
+					signal,
+				}),
+			);
 			if (roles.error || !roles.data)
 				return err(toNeonError(roles.error, roles.response));
 			if (roles.data.roles.length !== 1) {
@@ -148,12 +157,14 @@ export class Postgres<DThrow extends boolean> {
 
 		if (!databaseName) {
 			if (!branchId) return err(branchRequired("databaseName"));
-			const databases = await listProjectBranchDatabases({
-				client,
-				path: { project_id: projectId, branch_id: branchId },
-				throwOnError: false,
-				signal,
-			});
+			const databases = await send(() =>
+				listProjectBranchDatabases({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					throwOnError: false,
+					signal,
+				}),
+			);
 			if (databases.error || !databases.data) {
 				return err(toNeonError(databases.error, databases.response));
 			}
@@ -169,19 +180,21 @@ export class Postgres<DThrow extends boolean> {
 			databaseName = databases.data.databases[0].name;
 		}
 
-		const conn = await getConnectionUri({
-			client,
-			path: { project_id: projectId },
-			query: {
-				branch_id: branchId,
-				endpoint_id: params.endpointId,
-				database_name: databaseName,
-				role_name: roleName,
-				pooled: params.pooled ?? true,
-			},
-			throwOnError: false,
-			signal,
-		});
+		const conn = await send(() =>
+			getConnectionUri({
+				client,
+				path: { project_id: projectId },
+				query: {
+					branch_id: branchId,
+					endpoint_id: params.endpointId,
+					database_name: databaseName,
+					role_name: roleName,
+					pooled: params.pooled ?? true,
+				},
+				throwOnError: false,
+				signal,
+			}),
+		);
 		if (conn.error || !conn.data)
 			return err(toNeonError(conn.error, conn.response));
 		return ok(conn.data.uri);

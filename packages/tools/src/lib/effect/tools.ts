@@ -40,9 +40,10 @@ export type NeonEffectTools<
 
 /**
  * Which failures to retry and how. A policy only ever sees failures of
- * read-only tools that the SDK did not already retry: the adapter never resends
- * a mutation, and leaves 423, 429, and 503 responses to the SDK, which retries
- * them and honours `Retry-After`.
+ * read-only tools: the adapter never resends a mutation, and leaves 423, 429,
+ * and 503 responses to the SDK, which retries them and honours `Retry-After`.
+ * A `NeonNetworkError` can arrive after the SDK already resent a `GET` whose
+ * connection dropped.
  */
 export interface NeonToolRetryPolicy {
 	readonly schedule: Schedule.Schedule<unknown, NeonToolError>;
