@@ -186,7 +186,8 @@ export const noDetectedAgentsMessage = (input: {
 	/** `project-then-installed`: project folders, else the host CLI agent, else installed apps. */
 	scope: "project" | "global" | "project-then-installed";
 	supported: readonly string[];
-	fix: "run-without-yes" | "pass-yes";
+	/** `run-in-terminal`: no prompt and no -y, after the same detection as -y. */
+	fix: "run-without-yes" | "pass-yes" | "run-in-terminal";
 	nameAgent?: boolean;
 }): string => {
 	const lead =
@@ -195,7 +196,10 @@ export const noDetectedAgentsMessage = (input: {
 			: "No coding agents detected.";
 	const name = input.nameAgent === true;
 	let hint: string;
-	if (input.fix === "pass-yes") {
+	if (input.fix === "run-in-terminal") {
+		hint =
+			"Pass --agent <name>, run this command from a supported agent, or run it in a terminal to pick one.";
+	} else if (input.fix === "pass-yes") {
 		const detected =
 			input.scope === "project"
 				? "Pass -y to use project folders, else the host CLI agent"
