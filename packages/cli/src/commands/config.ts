@@ -320,10 +320,15 @@ export const missingDependencies = (cwd: string): string[] => {
 	return REQUIRED_PACKAGES.filter((pkg) => !declared.has(pkg));
 };
 
-/** `@neon/neon-js` re-exports `@neon/auth`; the `@neondatabase/*` names are their predecessors. */
+/**
+ * `@neon/neon-js` re-exports `@neon/auth`; the `@neondatabase/*` names are their predecessors.
+ * `@neon/oauth` apps mount `app/api/auth/[...oauth]`, and adding a `[...path]` route beside it
+ * fails the Next.js build.
+ */
 const NEON_AUTH_SDK_PACKAGES = [
 	"@neon/auth",
 	"@neon/neon-js",
+	"@neon/oauth",
 	"@neondatabase/auth",
 	"@neondatabase/neon-js",
 ];

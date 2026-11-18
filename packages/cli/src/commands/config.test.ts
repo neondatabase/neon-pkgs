@@ -1332,6 +1332,11 @@ describe("config commands", () => {
 				"export default { auth: true };\n",
 			],
 			[
+				"the app already depends on @neon/oauth",
+				{ next: "16.0.0", "@neon/oauth": "^0.1.0" },
+				"export default { auth: true };\n",
+			],
+			[
 				"the app is not a Next.js app",
 				{ react: "19.0.0" },
 				"export default { auth: true };\n",
