@@ -744,3 +744,66 @@ describe("enableNeonAuth", () => {
 		);
 	});
 });
+
+describe("updateBranchFunction", () => {
+	test("PATCHes the display name and returns the updated function", async () => {
+		const requests: { method?: string; path: string; body: unknown }[] = [];
+		const server = createServer((req, res) => {
+			let text = "";
+			req.on("data", (chunk) => {
+				text += chunk;
+			});
+			req.on("end", () => {
+				requests.push({
+					method: req.method,
+					path: req.url ?? "",
+					body: JSON.parse(text),
+				});
+				res.setHeader("content-type", "application/json");
+				res.end(
+					JSON.stringify({
+						function: {
+							id: "fn-1",
+							slug: "sum",
+							name: "sum of two numbers",
+							invocation_url: "https://br-main-sum.example.test/",
+							created_at: "2026-11-17T00:00:00Z",
+						},
+					}),
+				);
+			});
+		});
+		try {
+			await new Promise<void>((resolve) => server.listen(0, resolve));
+			const address = server.address();
+			if (address === null || typeof address === "string") {
+				throw new Error("test server has no port");
+			}
+			const api = createRealNeonApi({
+				apiKey: "test-key",
+				baseUrl: `http://localhost:${address.port}`,
+			});
+
+			await expect(
+				api.updateBranchFunction?.("proj-one", "br-main", "sum", {
+					name: "sum of two numbers",
+				}),
+			).resolves.toEqual({
+				id: "fn-1",
+				slug: "sum",
+				name: "sum of two numbers",
+				invocationUrl: "https://br-main-sum.example.test/",
+			});
+			expect(requests).toEqual([
+				{
+					method: "PATCH",
+					path: "/projects/proj-one/branches/br-main/functions/sum",
+					body: { name: "sum of two numbers" },
+				},
+			]);
+		} finally {
+			server.closeAllConnections();
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+});

@@ -1420,6 +1420,27 @@ class RealNeonApi implements NeonApi {
 		);
 	}
 
+	async updateBranchFunction(
+		projectId: string,
+		branchId: string,
+		slug: string,
+		input: { name: string },
+	): Promise<NeonFunctionSnapshot> {
+		return this.call(
+			`updateBranchFunction(${projectId}/${branchId}/${slug})`,
+			async () => {
+				const data = await this.patchJson(
+					`${branchPreviewPath(projectId, branchId, "functions")}/${encodeURIComponent(slug)}`,
+					{ name: input.name },
+				);
+				return functionToSnapshot(
+					functionGetResponseSchema.parse(data).function,
+				);
+			},
+			{ projectId, mutating: true },
+		);
+	}
+
 	async listBranchTriggers(
 		projectId: string,
 		branchId: string,

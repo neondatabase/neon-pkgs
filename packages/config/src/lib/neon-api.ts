@@ -630,6 +630,18 @@ export interface NeonApi {
 		slug: string,
 	): Promise<NeonFunctionSnapshot>;
 
+	/**
+	 * Set a function's display name. A deployment carries no name, so the first one names
+	 * the function after its slug. Optional so a pre-feature adapter still type-checks;
+	 * without it, apply deploys and warns when the listed name differs from neon.ts.
+	 */
+	updateBranchFunction?(
+		projectId: string,
+		branchId: string,
+		slug: string,
+		input: { name: string },
+	): Promise<NeonFunctionSnapshot>;
+
 	listBranchTriggers(
 		projectId: string,
 		branchId: string,
