@@ -913,6 +913,20 @@ describe("branches without --project-id", () => {
 		});
 	});
 
+	test("refuses to guess a project when the organizations response has no list", async ({
+		testCliCommand,
+	}) => {
+		const paths: string[] = [];
+		await testCliCommand(["branches", "list"], {
+			mockDir: "no_org_list",
+			code: 1,
+			snapshot: false,
+			stderr: "ERROR: Could not read the Neon API response (200 OK) to /users/me/organizations: the body has no organizations list (Content-Type: application/json; charset=UTF-8)",
+			onRequest: (request) => paths.push(request.path),
+		});
+		expect(paths).not.toContain("/projects");
+	});
+
 	test("uses the only project when the user belongs to one organization", async ({
 		testCliCommand,
 	}) => {

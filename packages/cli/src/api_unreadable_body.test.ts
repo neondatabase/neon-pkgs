@@ -18,7 +18,12 @@ let server: Server;
 let apiHost: string;
 
 beforeAll(async () => {
-	server = createServer((_req, res) => {
+	server = createServer((req, res) => {
+		if (req.url === "/users/me/organizations") {
+			res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+			res.end("<html><body>Sign in to continue</body></html>");
+			return;
+		}
 		res.writeHead(200, { "Content-Type": "application/json" });
 		// V8's JSON.parse error quotes input like this back in its message.
 		res.end('{"password": FAKESECRET}');
@@ -72,5 +77,26 @@ describe("a 2xx JSON response with an unparseable body", () => {
 
 		const properties = getErrorAnalyticsEventProperties(err, "API_ERROR");
 		expect(JSON.stringify(properties)).not.toContain("FAKESECRET");
+	});
+});
+
+describe("a 2xx response without the organizations list", () => {
+	it("refuses an HTML page in place of the list", async () => {
+		const err = await getApiClient({ apiKey: "test", apiHost })
+			.getCurrentUserOrganizations()
+			.then(
+				(result) => {
+					throw new Error(
+						`expected a rejection, got data: ${JSON.stringify(result.data)}`,
+					);
+				},
+				(error: unknown) => error,
+			);
+
+		expect(err).toBeInstanceOf(UnreadableResponseError);
+		if (!isNeonApiError(err)) throw err;
+		expect(err.message).toBe(
+			"Could not read the Neon API response (200 OK) to /users/me/organizations: the body has no organizations list (Content-Type: text/html; charset=utf-8)",
+		);
 	});
 });

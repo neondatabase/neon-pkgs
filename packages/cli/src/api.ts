@@ -117,8 +117,8 @@ export class NeonApiError extends Error {
 }
 
 /**
- * A 2xx response whose body could not be read or parsed. The request succeeded, so this is
- * reported to Sentry as well as counted as an API error.
+ * A 2xx response whose body could not be read or parsed, or lacks a list the spec requires. The
+ * request succeeded, so this is reported to Sentry as well as counted as an API error.
  */
 export class UnreadableResponseError extends NeonApiError {
 	constructor(
@@ -304,11 +304,19 @@ export function unreadableBodyError(
 	response: Response,
 	cause: unknown,
 ): UnreadableResponseError {
-	const base = httpError(response, undefined);
-	const reason =
+	return unusableBodyError(
+		response,
 		cause instanceof SyntaxError
 			? "the body is not valid JSON"
-			: "the body could not be read";
+			: "the body could not be read",
+	);
+}
+
+function unusableBodyError(
+	response: Response,
+	reason: string,
+): UnreadableResponseError {
+	const base = httpError(response, undefined);
 	return new UnreadableResponseError(
 		`Could not read the Neon API response (${response.status} ${response.statusText}) to ${base.requestPath ?? "the request"}: ${reason}`,
 		{
@@ -473,6 +481,11 @@ async function readJsonBody(response: Response): Promise<unknown> {
 	}
 }
 
+const hasArrayField = (data: unknown, field: string): boolean =>
+	typeof data === "object" &&
+	data !== null &&
+	Array.isArray(Reflect.get(data, field));
+
 /** A single query-string parameter value (serialized via `String()`). */
 type QueryValue = string | number | boolean | null | undefined;
 
@@ -529,9 +542,15 @@ export const getApiClient = ({
 		}),
 	);
 
-	/** Await a raw call, unwrap to a `{ data, status, headers }` envelope, or throw {@link NeonApiError}. */
+	/**
+	 * Await a raw call, unwrap to a `{ data, status, headers }` envelope, or throw {@link NeonApiError}.
+	 * `list` names an array field callers read without checking it. The generated client hands a
+	 * 2xx empty body over as `{}` and a non-JSON one as a string, Blob or stream, so without the
+	 * check those reach callers as a missing list.
+	 */
 	async function call<T>(
 		run: () => Promise<RawResult<T>>,
+		list?: keyof T & string,
 	): Promise<ApiResponse<T>> {
 		let result: RawResult<T>;
 		try {
@@ -563,6 +582,12 @@ export const getApiClient = ({
 		// an `ok` response and no `data`.
 		if (result.error !== undefined && result.error !== null) {
 			throw unreadableBodyError(response, rawErrorBody(result.error));
+		}
+		if (list !== undefined && !hasArrayField(result.data, list)) {
+			throw unusableBodyError(
+				response,
+				`the body has no ${list} list (Content-Type: ${response.headers.get("Content-Type") ?? "none"})`,
+			);
 		}
 		return {
 			data: result.data as T,
@@ -651,7 +676,10 @@ export const getApiClient = ({
 				raw.getCurrentUserInfo({ client, signal: options.signal }),
 			),
 		getCurrentUserOrganizations: () =>
-			call(() => raw.getCurrentUserOrganizations({ client })),
+			call(
+				() => raw.getCurrentUserOrganizations({ client }),
+				"organizations",
+			),
 		getAuthDetails: (options: { signal?: AbortSignal } = {}) =>
 			call(() => raw.getAuthDetails({ client, signal: options.signal })),
 		getActiveRegions: () => call(() => raw.getActiveRegions({ client })),

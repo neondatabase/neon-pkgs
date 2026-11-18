@@ -1146,7 +1146,7 @@ const fetchOrganizations = async (
 	props: CommonProps,
 ): Promise<Organization[]> => {
 	const { data } = await props.apiClient.getCurrentUserOrganizations();
-	return data.organizations ?? [];
+	return data.organizations;
 };
 
 type OrgResolution =
