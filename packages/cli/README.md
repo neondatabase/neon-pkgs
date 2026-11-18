@@ -172,7 +172,8 @@ neon claim delete <project-id> --yes
 project stays manageable after its original directory is gone. `list` prints `state`
 (`unclaimed` or `expired`) from the identity assertion clock and the project
 expiry, plus `project_expires_at`. `delete` also drops a
-local record whose identity assertion has expired or been revoked.
+local record whose identity assertion has expired or been revoked. Whether it deletes the project or only
+drops the local record, `delete` removes `.neon` when it links that project.
 
 `neon claimable` is an alias for `neon claim`. For local service development, set
 `CLAIMABLE_NEON_HOST=http://localhost:8787`; non-local origins must use HTTPS.
