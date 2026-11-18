@@ -11,6 +11,9 @@
 		"scopes": "Capabilities to grant. The credential may only perform actions in these scopes.",
 		"expires_at": "When the credential stops working, 1 minute to 365 days from now. Omit for a credential that never expires."
 	},
+	"createProjectBranchDataAPI": {
+		"add_default_grants": "Grants the authenticated role read and write access to public-schema tables, including tables the database owner creates later. Without it, the Data API can read no table until you GRANT access. Never grants anonymous."
+	},
 	"createProjectBranchFunctionDeployment": {
 		"runtime": "The Node.js runtime for the deployment.",
 		"zip": "Base64-encoded ZIP of the function source. Omit to reuse the latest bundle; required for the first deployment."

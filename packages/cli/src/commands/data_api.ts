@@ -123,7 +123,7 @@ export const builder = (argv: yargs.Argv) =>
 					"add-default-grants": {
 						type: "boolean",
 						describe:
-							"Grant all permissions on tables in the public schema to authenticated users",
+							"Grant authenticated users read and write access to public-schema tables, including tables the database owner creates later",
 					},
 					"skip-auth-schema": {
 						type: "boolean",
