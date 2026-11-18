@@ -1,5 +1,19 @@
 # neon
 
+## 9.7.0
+
+### Minor Changes
+
+- dfc9ebe: `neon realtime enable` now waits up to a minute until Realtime is enabled on the branch, prints `Realtime is enabled on branch <id>.`, and exits 1 if the wait times out. Pass `--no-wait` for the previous behavior, which returns right after the request with `Realtime enable requested for branch <id>.`. `neon status` shows Realtime and its allowed origins, and `neon config init --from-branch` declares Realtime in the seeded `neon.ts`.
+
+### Patch Changes
+
+- Updated dependencies [dfc9ebe]
+- Updated dependencies [dfc9ebe]
+  - @neon/config-runtime@1.12.7
+  - @neon/sdk@7.14.2
+  - @neon/config@1.14.4
+
 ## 9.6.3
 
 ### Patch Changes

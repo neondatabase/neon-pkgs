@@ -1,5 +1,12 @@
 # @neondatabase/config-runtime
 
+## 1.12.7
+
+### Patch Changes
+
+- dfc9ebe: `pullConfig` and `inspect` report a branch's Realtime allowed origins: `config.preview.realtime` is `{ allowedOrigins: [...] }` when the branch lists origins, and stays `true` when the list is empty.
+  - @neon/config@1.14.4
+
 ## 1.12.6
 
 ### Patch Changes
