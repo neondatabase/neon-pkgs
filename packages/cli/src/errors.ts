@@ -125,6 +125,32 @@ const NETWORK_ERROR_CODES = new Set([
 const NETWORK_ERROR_MESSAGE_PATTERN =
 	/fetch failed|failed to fetch|network error/i;
 
+/**
+ * Whether any error in the `cause` chain carries an HTTP status, meaning the API answered. Its
+ * message is the API's, and can itself say "failed to fetch" (a deleted project's 404 does).
+ */
+const hasHttpStatus = (err: unknown): boolean => {
+	let current: unknown = err;
+	for (
+		let depth = 0;
+		depth < 6 && current !== null && typeof current === "object";
+		depth++
+	) {
+		const { status, response } = current as {
+			status?: unknown;
+			response?: { status?: unknown };
+		};
+		if (
+			typeof status === "number" ||
+			typeof response?.status === "number"
+		) {
+			return true;
+		}
+		current = (current as { cause?: unknown }).cause;
+	}
+	return false;
+};
+
 const readErrorCode = (value: unknown): string | undefined => {
 	if (value === null || typeof value !== "object") return undefined;
 	const code = (value as { code?: unknown }).code;
@@ -142,6 +168,9 @@ const readErrorCode = (value: unknown): string | undefined => {
  * response was ever received, so it never masks a real 4xx/5xx the user needs to see.
  */
 export const isNetworkError = (err: unknown): boolean => {
+	if (hasHttpStatus(err)) {
+		return false;
+	}
 	let current: unknown = err;
 	for (
 		let depth = 0;

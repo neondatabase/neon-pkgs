@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { NeonApiError } from "./api.js";
 import { parseEnvPullKeys } from "./env_services.js";
 import { isNetworkError, matchErrorCode } from "./errors.js";
 import { missingNpxMessage } from "./utils/package_manager.js";
@@ -121,6 +122,17 @@ describe("isNetworkError", () => {
 		};
 		expect(isNetworkError(apiError)).toBe(false);
 		expect(isNetworkError(new Error("Project not found"))).toBe(false);
+	});
+
+	it("does not treat an API error whose message mentions fetching as a network error", () => {
+		// Deleting a project that is already deleted returns this 404 body.
+		const deleted = new NeonApiError(
+			'failed to fetch project; project_id:"damp-wind-60441318"',
+			{ status: 404 },
+		);
+		expect(isNetworkError(deleted)).toBe(false);
+		const wrapped = Object.assign(new Error("wrapped"), { cause: deleted });
+		expect(isNetworkError(wrapped)).toBe(false);
 	});
 
 	it("does not treat an axios timeout (ECONNABORTED) as a network error", () => {
