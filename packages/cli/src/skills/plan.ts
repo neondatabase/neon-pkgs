@@ -87,7 +87,7 @@ export async function resolveSkillsPlan(
 			: {}),
 	});
 	const detected =
-		options.yes && options.agents.length === 0
+		!prompt && options.agents.length === 0
 			? await collectYesAgents({
 					detected: () => scoped,
 					detectAgent: options.detectAgent ?? detectAgent,
@@ -103,7 +103,7 @@ export async function resolveSkillsPlan(
 		nonInteractiveMessage: noDetectedAgentsMessage({
 			scope,
 			supported: available,
-			fix: options.yes ? "run-without-yes" : "pass-yes",
+			fix: options.yes ? "run-without-yes" : "run-in-terminal",
 			nameAgent: true,
 		}),
 		resolveSpecified: (raw) => {

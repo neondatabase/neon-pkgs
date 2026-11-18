@@ -185,6 +185,45 @@ describe("neon skills", () => {
 		expect(stderr).toMatch(/omit -y in a terminal/);
 	});
 
+	test("--skill without -y installs into the host CLI agent when the project has no folders", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({
+			projectCursor: false,
+		});
+		const { stdout } = await testCliCommand(
+			["skills", "-s", "neon-realtime"],
+			runOptions(home, cwd, bin, { OPENCODE: "1" }),
+		);
+		expect(JSON.parse(stdout)).toEqual([
+			{
+				scope: "this directory",
+				skills: "neon-realtime",
+				agents: "opencode",
+				status: "installed",
+			},
+		]);
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["--agent", "opencode"]),
+		);
+	});
+
+	test("--skill without -y, project folders, or host fails", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({
+			projectCursor: false,
+		});
+		const { stderr } = await testCliCommand(["skills", "-s", "neon"], {
+			...runOptions(home, cwd, bin),
+			code: 1,
+		});
+		expect(stderr).toMatch(
+			/No coding agents detected in this project\. Pass --agent <name>, run this command from a supported agent, or run it in a terminal to pick one\./,
+		);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
+	});
+
 	test("does not spawn without -y", async ({ testCliCommand }) => {
 		const { home, cwd, bin, argvFile } = scratch();
 		const { stderr } = await testCliCommand(["skills"], {

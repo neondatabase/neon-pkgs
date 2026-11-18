@@ -1007,7 +1007,7 @@ $ neon skills status --global
 
 On a TTY the command asks which agents and which skills, then installs. Detected agents start selected from project-folder markers such as `.cursor`. Default skills start selected. `neon-postgres-agent-platforms` is offered and starts unselected.
 
-`-y` skips those questions and installs the default skills into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--skill` / `-s` names specific skills and skips the skill picker; it does not select agents. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y`, or `--skill <name>` (add `--agent <name>` to name agents). If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
+`-y` skips those questions and installs the default skills into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--skill` / `-s` names specific skills and skips the skill picker; it does not select agents. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y` or `--skill <name>`; both install into detected agents unless `--agent <name>` names them. If no agent is detected, it exits: pass `--agent <name>`, run from a supported agent, or run in a terminal without `-y` to pick.
 
 `--skill` names by source repo: `neondatabase/agent-skills` (`neon`, `neon-ai-gateway`, `neon-auth`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-realtime`); `neondatabase/neon-for-agent-platforms` (`neon-postgres-agent-platforms`).
 
