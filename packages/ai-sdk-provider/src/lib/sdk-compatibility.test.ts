@@ -25,12 +25,42 @@ const responseBody = {
 	},
 };
 
-function createTestProvider() {
+// What the gateway returns for gemini-3-7-flash, gemini-3-8-flash and
+// gemini-4-argon on a non-streaming /v1/chat/completions call.
+const arrayContentBody = {
+	id: null,
+	object: "chat.completion",
+	created: 0,
+	model: "system.ai.gemini-4-argon",
+	choices: [
+		{
+			index: 0,
+			message: {
+				role: "assistant",
+				content: [
+					{
+						type: "text",
+						text: "pong",
+						thoughtSignature: "c2lnbmF0dXJl",
+					},
+				],
+			},
+			finish_reason: "stop",
+		},
+	],
+	usage: {
+		prompt_tokens: 1,
+		completion_tokens: 1,
+		total_tokens: 2,
+	},
+};
+
+function createTestProvider(body: object = responseBody) {
 	return createNeon({
 		baseURL: "https://example.com",
 		apiKey: "test-token",
 		fetch: async () =>
-			new Response(JSON.stringify(responseBody), {
+			new Response(JSON.stringify(body), {
 				status: 200,
 				headers: { "content-type": "application/json" },
 			}),
@@ -91,6 +121,24 @@ describe("AI SDK compatibility", () => {
 	it("generates text with AI SDK 7", async () => {
 		const result = await generateTextV7({
 			model: createTestProvider()("gpt-oss-20b"),
+			prompt: "Reply with pong.",
+		});
+
+		expect(result.text).toBe("pong");
+	});
+
+	it("generates text from array content with AI SDK 6", async () => {
+		const result = await generateTextV6({
+			model: createTestProvider(arrayContentBody)("gemini-4-argon"),
+			prompt: "Reply with pong.",
+		});
+
+		expect(result.text).toBe("pong");
+	});
+
+	it("generates text from array content with AI SDK 7", async () => {
+		const result = await generateTextV7({
+			model: createTestProvider(arrayContentBody)("gemini-4-argon"),
 			prompt: "Reply with pong.",
 		});
 

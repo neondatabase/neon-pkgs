@@ -1,23 +1,28 @@
 import type { FetchFunction } from "@ai-sdk/provider-utils";
 
-// TODO(#308): Temporary workaround. Remove this whole module (and its wiring in
-// provider.ts) once the Neon AI Gateway returns Chat Completions-compliant
-// gpt-oss responses (string `content` + `reasoning_content`). The wrapper is a
-// transparent pass-through for any already-compliant response, so it is safe to
-// leave in place until the gateway fix ships — but it should be deleted then.
+// Keep this module until the Neon AI Gateway returns a string `content` for
+// every model on the unified Chat Completions route. gpt-oss, which it was
+// written for (#308), is compliant now, but gemini-3-7-flash, gemini-3-8-flash
+// and gemini-4-argon still return arrays there, and the AI SDK rejects them
+// without this rewrite.
 
 /**
- * Normalize the Neon AI Gateway's non-OpenAI-compliant `gpt-oss` ("harmony")
- * response shape into the OpenAI Chat Completions contract before it reaches
- * the AI SDK's schema validation.
+ * Normalize array `content` from the Neon AI Gateway's unified Chat
+ * Completions route into the OpenAI Chat Completions contract before it
+ * reaches the AI SDK's schema validation.
  *
- * For `gpt-oss-*` the gateway returns `message.content` (and streaming
- * `delta.content`) as an array of Responses-style parts:
+ * For some models the gateway returns `message.content` (and streaming
+ * `delta.content`) as an array of Responses-style parts. gpt-oss ("harmony")
+ * sent reasoning and text:
  *
  *   "content": [
  *     { "type": "reasoning", "summary": [{ "type": "summary_text", "text": "…" }] },
  *     { "type": "text", "text": "…" }
  *   ]
+ *
+ * and Gemini models send text parts on non-streaming responses:
+ *
+ *   "content": [{ "type": "text", "text": "…", "thoughtSignature": "…" }]
  *
  * The Chat Completions spec requires `content` to be a string, so any strict
  * OpenAI-compatible client (incl. the Vercel AI SDK) rejects it. We flatten the
@@ -27,11 +32,8 @@ import type { FetchFunction } from "@ai-sdk/provider-utils";
  *
  * The transform only rewrites when `content` is an array, and the fetch wrapper
  * returns the response untouched when nothing was rewritten. So it is a true
- * no-op / pass-through for every spec-compliant model (Llama, Gemini, Qwen, …)
- * and self-retires the moment the gateway starts returning a compliant shape —
- * it will not double-transform or otherwise interfere with the downstream fix.
- *
- * See neondatabase/neon-pkgs#308.
+ * no-op / pass-through for every spec-compliant model and will not
+ * double-transform once the gateway returns a compliant shape.
  */
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -233,13 +235,13 @@ function headersWithout(source: Headers, ...names: string[]): Headers {
 }
 
 /**
- * Wrap a fetch implementation so gpt-oss harmony responses are normalized to
- * the OpenAI Chat Completions shape before the caller parses them. Composes
+ * Wrap a fetch implementation so responses with array `content` (Gemini text
+ * parts, gpt-oss harmony parts) are normalized to the OpenAI Chat Completions
+ * shape before the caller parses them. Composes
  * with a user-supplied `fetch` (falls back to the global `fetch`).
  *
  * When the response is already compliant, the original response is returned
- * untouched — a transparent pass-through that will not interfere once the
- * gateway is fixed.
+ * untouched.
  */
 export function wrapFetchWithHarmonyNormalization(
 	baseFetch?: FetchFunction,

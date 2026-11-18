@@ -19,7 +19,12 @@ import type {
 } from "../../client/types.gen.js";
 import { withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
-import { NeonClientError } from "../errors.js";
+import {
+	NeonAbortError,
+	NeonClientError,
+	NeonNotFoundError,
+	NeonOperationError,
+} from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
 import {
 	invalidParamsResult,
@@ -293,34 +298,55 @@ export class Branches<DThrow extends boolean> {
 		);
 	}
 
-	/** @apiCall DELETE /projects/{project_id}/branches/{branch_id} */
+	/**
+	 * Neon removes the branch when it accepts the delete, and the returned operations
+	 * clean up afterwards. With readiness polling on, a failed operation is checked
+	 * against a read-back: the call resolves if the branch reads 404, while other cleanup
+	 * may still be running, and keeps the operation error otherwise.
+	 *
+	 * @apiCall DELETE /projects/{project_id}/branches/{branch_id}
+	 * @apiCall GET /projects/{project_id}/branches/{branch_id}
+	 */
 	delete(params: BranchDeleteParams): Promise<Outcome<void, DThrow>>;
 	delete<Throw extends boolean = DThrow>(
 		params: BranchDeleteParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
-	delete(
+	async delete(
 		params: BranchDeleteParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const shouldThrow = this.#ctx.shouldThrow(opts);
 		const error = validateParams(params, "branches.delete", {
 			projectId: "string",
 			branchId: "string",
 		});
-		if (error)
-			return invalidParamsResult<void>(
-				error,
-				this.#ctx.shouldThrow(opts),
-			);
+		if (error) return invalidParamsResult<void>(error, shouldThrow);
 		const { projectId, branchId } = params;
-		return this.#ctx.runVoid(opts, (client, signal) =>
+		const path = { project_id: projectId, branch_id: branchId };
+		const deleted = await this.#ctx.executeVoid(opts, (client, signal) =>
 			deleteProjectBranch({
 				client,
-				path: { project_id: projectId, branch_id: branchId },
+				path,
 				throwOnError: false,
 				signal,
 			}),
 		);
+		if (!(deleted.error instanceof NeonOperationError)) {
+			return finalize(deleted, shouldThrow);
+		}
+		const readBack = await this.#ctx.executeVoid(
+			{ ...opts, waitForReadiness: false },
+			(client, signal) =>
+				getProjectBranch({ client, path, throwOnError: false, signal }),
+		);
+		if (readBack.error instanceof NeonNotFoundError) {
+			return finalize(ok(undefined), shouldThrow);
+		}
+		if (readBack.error instanceof NeonAbortError) {
+			return finalize(readBack, shouldThrow);
+		}
+		return finalize(deleted, shouldThrow);
 	}
 
 	createAndConnect(

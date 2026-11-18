@@ -1,17 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { createNeonClient } from "../client.js";
-import { NeonClientError } from "../errors.js";
+import type { NeonConfig } from "../config.js";
+import { NeonClientError, NeonOperationError } from "../errors.js";
 
 function neonRouting(
 	respond: (request: { url: string; method: string; body: unknown }) => {
 		status: number;
 		body: unknown;
 	},
+	config: Omit<Partial<NeonConfig>, "throwOnError" | "apiKey" | "fetch"> = {},
 ) {
 	const calls: Array<{ url: string; method: string; body: unknown }> = [];
 	const neon = createNeonClient({
 		apiKey: "test",
 		retries: 0,
+		...config,
 		fetch: async (input, init) => {
 			const request = input instanceof Request ? input : undefined;
 			const url = request ? request.url : String(input);
@@ -182,6 +185,218 @@ describe("branches.createAndConnect", () => {
 			branch: { name: "feature", parent_id: "br-parent" },
 			endpoints: [{ type: "read_write" }],
 		});
+	});
+});
+
+describe("branches.delete", () => {
+	const BRANCH_URL = "/projects/p-1/branches/br-1";
+	const operation = (status: string, action = "delete_timeline") => ({
+		id: "op-1",
+		project_id: "p-1",
+		branch_id: "br-1",
+		action,
+		status,
+		failures_count: 0,
+		created_at: "2026-01-01T00:00:00Z",
+		updated_at: "2026-01-01T00:00:00Z",
+		total_duration_ms: 0,
+	});
+	const waiting = { wait: { pollIntervalMs: 1, timeoutMs: 5_000 } };
+
+	function deleteRouting(
+		options: {
+			deleted?: string;
+			polled?: string;
+			readBack?: { status: number; body: unknown };
+		},
+		config: Omit<
+			Partial<NeonConfig>,
+			"throwOnError" | "apiKey" | "fetch"
+		> = waiting,
+	) {
+		return neonRouting(({ url, method }) => {
+			if (method === "DELETE") {
+				return {
+					status: 200,
+					body: {
+						branch: { id: "br-1" },
+						operations: [operation(options.deleted ?? "running")],
+					},
+				};
+			}
+			if (url.includes("/operations/")) {
+				return {
+					status: 200,
+					body: {
+						operation: operation(options.polled ?? "finished"),
+					},
+				};
+			}
+			return (
+				options.readBack ?? {
+					status: 404,
+					body: { code: "", message: "branch not found" },
+				}
+			);
+		}, config);
+	}
+
+	const readBacks = (calls: Array<{ url: string; method: string }>) =>
+		calls.filter(
+			(call) => call.method === "GET" && call.url.endsWith(BRANCH_URL),
+		);
+
+	it("resolves when a cleanup operation fails after the branch is gone", async () => {
+		const { neon, calls } = deleteRouting({ polled: "failed" });
+
+		const result = await neon.branches.delete(
+			{ projectId: "p-1", branchId: "br-1" },
+			{ waitForReadiness: true },
+		);
+
+		expect(result).toEqual({ data: undefined, error: undefined });
+		expect(readBacks(calls)).toHaveLength(1);
+	});
+
+	it("resolves on a throwing call when the client waits on every mutation", async () => {
+		const { neon } = deleteRouting(
+			{ polled: "failed" },
+			{ ...waiting, waitForReadiness: true },
+		);
+
+		await expect(
+			neon.branches.delete(
+				{ projectId: "p-1", branchId: "br-1" },
+				{ throwOnError: true },
+			),
+		).resolves.toBeUndefined();
+	});
+
+	it("throws the operation error on a throwing call while the branch is still readable", async () => {
+		const { neon } = deleteRouting(
+			{
+				polled: "failed",
+				readBack: { status: 200, body: { branch: { id: "br-1" } } },
+			},
+			{ ...waiting, waitForReadiness: true },
+		);
+
+		await expect(
+			neon.branches.delete(
+				{ projectId: "p-1", branchId: "br-1" },
+				{ throwOnError: true },
+			),
+		).rejects.toBeInstanceOf(NeonOperationError);
+	});
+
+	it("resolves when the delete response already reports a failed operation", async () => {
+		const { neon, calls } = deleteRouting({ deleted: "failed" });
+
+		const result = await neon.branches.delete(
+			{ projectId: "p-1", branchId: "br-1" },
+			{ waitForReadiness: true },
+		);
+
+		expect(result.error).toBeUndefined();
+		expect(calls.some((call) => call.url.includes("/operations/"))).toBe(
+			false,
+		);
+		expect(readBacks(calls)).toHaveLength(1);
+	});
+
+	it("keeps the operation error while the branch is still readable", async () => {
+		const { neon } = deleteRouting({
+			polled: "failed",
+			readBack: { status: 200, body: { branch: { id: "br-1" } } },
+		});
+
+		const { error } = await neon.branches.delete(
+			{ projectId: "p-1", branchId: "br-1" },
+			{ waitForReadiness: true },
+		);
+
+		expect(error).toBeInstanceOf(NeonOperationError);
+		expect(error).toMatchObject({ operationId: "op-1", status: "failed" });
+	});
+
+	it.each([
+		403, 500,
+	])("keeps the operation error when the read-back answers %i", async (status) => {
+		const { neon } = deleteRouting({
+			polled: "error",
+			readBack: { status, body: { message: "unavailable" } },
+		});
+
+		const { error } = await neon.branches.delete(
+			{ projectId: "p-1", branchId: "br-1" },
+			{ waitForReadiness: true },
+		);
+
+		expect(error).toBeInstanceOf(NeonOperationError);
+		expect(error).toMatchObject({ status: "error" });
+	});
+
+	it("does not read the branch back after a wait timeout", async () => {
+		const { neon, calls } = deleteRouting(
+			{ polled: "running" },
+			{ wait: { pollIntervalMs: 1, timeoutMs: 20 } },
+		);
+
+		const { error } = await neon.branches.delete(
+			{ projectId: "p-1", branchId: "br-1" },
+			{ waitForReadiness: true },
+		);
+
+		expect(error?.kind).toBe("timeout");
+		expect(readBacks(calls)).toHaveLength(0);
+	});
+
+	it("reports an abort while reading the branch back", async () => {
+		const controller = new AbortController();
+		const { neon } = neonRouting(({ url, method }) => {
+			if (method === "DELETE") {
+				return {
+					status: 200,
+					body: {
+						branch: { id: "br-1" },
+						operations: [operation("failed")],
+					},
+				};
+			}
+			controller.abort();
+			return { status: 404, body: { message: `no ${url}` } };
+		}, waiting);
+
+		const { error } = await neon.branches.delete(
+			{ projectId: "p-1", branchId: "br-1" },
+			{ waitForReadiness: true, signal: controller.signal },
+		);
+
+		expect(error?.kind).toBe("aborted");
+	});
+
+	it("does not read the branch back when its operations finish", async () => {
+		const { neon, calls } = deleteRouting({});
+
+		const result = await neon.branches.delete(
+			{ projectId: "p-1", branchId: "br-1" },
+			{ waitForReadiness: true },
+		);
+
+		expect(result.error).toBeUndefined();
+		expect(readBacks(calls)).toHaveLength(0);
+	});
+
+	it("neither polls nor reads back without readiness polling", async () => {
+		const { neon, calls } = deleteRouting({ deleted: "failed" });
+
+		const result = await neon.branches.delete({
+			projectId: "p-1",
+			branchId: "br-1",
+		});
+
+		expect(result.error).toBeUndefined();
+		expect(calls).toHaveLength(1);
 	});
 });
 

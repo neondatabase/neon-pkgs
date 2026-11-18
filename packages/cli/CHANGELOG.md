@@ -1,5 +1,20 @@
 # neon
 
+## 9.6.2
+
+### Patch Changes
+
+- ed49e34: With no terminal attached, as in a coding agent's shell or a script, a command that finds no usable credential now exits with an error naming `neon login` and the API key options instead of waiting 60 seconds for a browser sign-in. `neon login` still starts the browser sign-in there.
+
+## 9.6.1
+
+### Patch Changes
+
+- Updated dependencies [804880e]
+  - @neon/sdk@7.14.1
+  - @neon/config@1.14.3
+  - @neon/config-runtime@1.12.6
+
 ## 9.6.0
 
 ### Minor Changes
