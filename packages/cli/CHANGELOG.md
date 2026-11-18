@@ -1,5 +1,11 @@
 # neon
 
+## 9.7.1
+
+### Patch Changes
+
+- 87b3e1c: `neon skills --skill <name>` without a terminal now falls back to the coding agent running it when no other agent is detected, as `neon skills -y` already did, instead of exiting with "No coding agents detected".
+
 ## 9.7.0
 
 ### Minor Changes
