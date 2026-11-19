@@ -15,6 +15,7 @@ import {
 	sqlClient,
 	sqlMetadata,
 } from "./connection.js";
+import { WORKLOAD_STATEMENTS_FILTER } from "./inspect/queries.js";
 
 export const listSlowQueriesInputSchema = z.strictObject({
 	project_id: projectIdField,
@@ -32,13 +33,13 @@ export const listSlowQueriesInputSchema = z.strictObject({
 });
 
 const EXTENSION_CHECK_SQL = `
-	SELECT EXISTS (
+	SELECT /* neon inspect */ EXISTS (
 		SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements'
 	) as extension_exists;
 `;
 
 const SLOW_QUERIES_SQL = `
-	SELECT
+	SELECT /* neon inspect */
 		query,
 		calls,
 		total_exec_time,
@@ -53,9 +54,10 @@ const SLOW_QUERIES_SQL = `
 		wal_records,
 		wal_fpi,
 		wal_bytes
-	FROM pg_stat_statements
+	FROM pg_stat_statements s
 	WHERE query NOT LIKE '%pg_stat_statements%'
 	AND query NOT LIKE '%EXPLAIN%'
+	AND ${WORKLOAD_STATEMENTS_FILTER}
 	ORDER BY mean_exec_time DESC
 	LIMIT $1;
 `;
@@ -77,7 +79,7 @@ export const listSlowQueriesTool = (options: ToolClientOptions) =>
 			id: publishedId("queries.listSlow"),
 			title: "List Slow Queries",
 			description:
-				"Lists queries from pg_stat_statements, slowest mean execution time first. For sizes, indexes, locks, cache, bloat, or replication, use {{database.inspect}}.",
+				"Lists queries from pg_stat_statements, slowest mean execution time first, leaving out Neon's own setup and session-reset statements. For sizes, indexes, locks, cache, bloat, or replication, use {{database.inspect}}.",
 			inputSchema: listSlowQueriesInputSchema,
 			outputSchema: listSlowQueriesOutputSchema,
 			annotations: {

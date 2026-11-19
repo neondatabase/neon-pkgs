@@ -103,9 +103,10 @@ const runInspectOnDatabase = async (
 	if (query.requiresExtension) {
 		const extension = query.requiresExtension;
 		const installed = await runDiagnostic(check, () =>
-			sql.query("SELECT 1 FROM pg_extension WHERE extname = $1", [
-				extension,
-			]),
+			sql.query(
+				"SELECT /* neon inspect */ 1 FROM pg_extension WHERE extname = $1",
+				[extension],
+			),
 		);
 		if (installed.length === 0) {
 			throw new NeonToolCallerError(
