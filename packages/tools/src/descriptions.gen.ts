@@ -107,7 +107,7 @@ export const toolDescriptions: Readonly<Partial<Record<NeonToolId, string>>> = {
 	"auth.trustedDomains.list": "Lists the domains a branch's Neon Auth may redirect to after sign-in.",
 	"auth.trustedDomains.add": "Adds a domain a branch's Neon Auth may redirect to after sign-in.",
 	"auth.trustedDomains.delete": "Removes a domain from the ones a branch's Neon Auth may redirect to.",
-	"auth.users.create": "Creates a Neon Auth user on a branch without a password, so email and password sign-in fails for it and signing up the same email is rejected. For a user who signs in, for example to get a test JWT, POST email, password, and name to /sign-up/email under base_url from {{auth.getConfig}}, with an Origin header in trusted_origins or a localhost one when allow_localhost is on, then GET /token with the session cookie. Sign-up returns no session while require_email_verification is on.",
+	"auth.users.create": "Creates a Neon Auth user on a branch. The user has no password, so it cannot sign in with email and password.",
 	"auth.users.delete": "Deletes a Neon Auth user from a branch. Irreversible.",
 	"auth.users.updateRole": "Sets the roles of a Neon Auth user on a branch.",
 	"auth.allowLocalhost.get": "Gets whether a branch's Neon Auth accepts localhost origins.",
