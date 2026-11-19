@@ -5,6 +5,7 @@ import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import {
 	fillSingleProject,
+	nameFromArgumentOrFlag,
 	resolveBranchFromProps,
 } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
@@ -35,26 +36,47 @@ export const builderFor = (usage: string) => (argv: yargs.Argv) =>
 			(args) => list(args as any),
 		)
 		.command(
-			"create",
+			"create [database]",
 			"Create a database",
 			(yargs) =>
-				yargs.options({
-					name: {
+				yargs
+					.options({
+						name: {
+							describe:
+								"Database name. Also accepted as the first argument",
+							type: "string",
+							demandOption: true,
+						},
+						"owner-name": {
+							describe: "Owner name",
+							type: "string",
+						},
+					})
+					.positional("database", {
 						describe: "Database name",
 						type: "string",
-						demandOption: true,
-					},
-					"owner-name": {
-						describe: "Owner name",
-						type: "string",
-					},
-				}),
+					})
+					.middleware(nameFromArgumentOrFlag("database"), true),
 			(args) => create(args as any),
 		)
 		.command(
-			"delete <database>",
+			"delete [database]",
 			"Delete a database",
-			(yargs) => yargs,
+			(yargs) =>
+				yargs
+					.options({
+						name: {
+							describe:
+								"Database name. Also accepted as the first argument",
+							type: "string",
+							demandOption: true,
+						},
+					})
+					.positional("database", {
+						describe: "Database name",
+						type: "string",
+					})
+					.middleware(nameFromArgumentOrFlag("database"), true),
 			(args) => deleteDb(args as any),
 		);
 

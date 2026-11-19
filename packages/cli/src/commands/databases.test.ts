@@ -82,6 +82,124 @@ describe("databases", () => {
 		]);
 	});
 
+	test("create takes the name as an argument or as --name", async ({
+		testCliCommand,
+	}) => {
+		for (const name of [
+			["test_db"],
+			["--name", "test_db"],
+			["test_db", "--name", "test_db"],
+		]) {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				[
+					"databases",
+					"create",
+					...name,
+					"--project-id",
+					"test",
+					"--branch",
+					"test_branch",
+					"--owner-name",
+					"test_owner",
+				],
+				{ snapshot: false, onRequest: (r) => requests.push(r) },
+			);
+			expect(requests).toContainEqual({
+				method: "POST",
+				path: "/projects/test/branches/br-sunny-branch-123456/databases",
+				body: {
+					database: { name: "test_db", owner_name: "test_owner" },
+				},
+			});
+		}
+	});
+
+	test("delete takes the name as an argument or as --name", async ({
+		testCliCommand,
+	}) => {
+		for (const name of [
+			["test_db"],
+			["--name", "test_db"],
+			["test_db", "--name", "test_db"],
+		]) {
+			const requests: string[] = [];
+			await testCliCommand(
+				[
+					"databases",
+					"delete",
+					...name,
+					"--project-id",
+					"test",
+					"--branch",
+					"test_branch",
+				],
+				{
+					snapshot: false,
+					onRequest: (r) => requests.push(`${r.method} ${r.path}`),
+				},
+			);
+			expect(requests).toContain(
+				"DELETE /projects/test/branches/br-sunny-branch-123456/databases/test_db",
+			);
+		}
+	});
+
+	test("create and delete reject two different names before any request", async ({
+		testCliCommand,
+	}) => {
+		for (const command of ["create", "delete"]) {
+			const requests: string[] = [];
+			const { stderr } = await testCliCommand(
+				[
+					"databases",
+					command,
+					"test_db",
+					"--name",
+					"other",
+					"--project-id",
+					"test",
+					"--branch",
+					"test_branch",
+				],
+				{
+					code: 1,
+					snapshot: false,
+					onRequest: (r) => requests.push(r.path),
+				},
+			);
+			expect(stderr).toContain(
+				'ERROR: Two different names were given: "test_db" as an argument and "other" with --name. Pass one of them.',
+			);
+			expect(requests).toEqual([]);
+		}
+	});
+
+	test("create and delete without a name fail before any request", async ({
+		testCliCommand,
+	}) => {
+		for (const command of ["create", "delete"]) {
+			const requests: string[] = [];
+			const { stderr } = await testCliCommand(
+				[
+					"databases",
+					command,
+					"--project-id",
+					"test",
+					"--branch",
+					"test_branch",
+				],
+				{
+					code: 1,
+					snapshot: false,
+					onRequest: (r) => requests.push(r.path),
+				},
+			);
+			expect(stderr).toContain("ERROR: Missing required argument: name");
+			expect(requests).toEqual([]);
+		}
+	});
+
 	test("list names the resolved branch in the table", async ({
 		testCliCommand,
 	}) => {

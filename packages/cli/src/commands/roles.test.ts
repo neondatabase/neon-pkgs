@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect } from "vitest";
 
-import { test } from "../test_utils/fixtures";
+import { type RecordedRequest, test } from "../test_utils/fixtures";
 
 const missingRoleMessage =
 	'Role "gone_role" not found on branch test_branch; nothing to delete.';
@@ -157,6 +157,120 @@ describe("roles", () => {
 			"--branch",
 			"test_branch",
 		]);
+	});
+
+	test("create takes the name as an argument or as --name", async ({
+		testCliCommand,
+	}) => {
+		for (const name of [
+			["test_role"],
+			["--name", "test_role"],
+			["test_role", "--name", "test_role"],
+		]) {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				[
+					"roles",
+					"create",
+					...name,
+					"--project-id",
+					"test",
+					"--branch",
+					"test_branch",
+				],
+				{ snapshot: false, onRequest: (r) => requests.push(r) },
+			);
+			expect(requests).toContainEqual({
+				method: "POST",
+				path: "/projects/test/branches/br-sunny-branch-123456/roles",
+				body: { role: { name: "test_role" } },
+			});
+		}
+	});
+
+	test("delete takes the name as an argument or as --name", async ({
+		testCliCommand,
+	}) => {
+		for (const name of [
+			["test_role"],
+			["--name", "test_role"],
+			["test_role", "--name", "test_role"],
+		]) {
+			const requests: string[] = [];
+			await testCliCommand(
+				[
+					"roles",
+					"delete",
+					...name,
+					"--project-id",
+					"test",
+					"--branch",
+					"test_branch",
+				],
+				{
+					snapshot: false,
+					onRequest: (r) => requests.push(`${r.method} ${r.path}`),
+				},
+			);
+			expect(requests).toContain(
+				"DELETE /projects/test/branches/br-sunny-branch-123456/roles/test_role",
+			);
+		}
+	});
+
+	test("create and delete reject two different names before any request", async ({
+		testCliCommand,
+	}) => {
+		for (const command of ["create", "delete"]) {
+			const requests: string[] = [];
+			const { stderr } = await testCliCommand(
+				[
+					"roles",
+					command,
+					"test_role",
+					"--name",
+					"other",
+					"--project-id",
+					"test",
+					"--branch",
+					"test_branch",
+				],
+				{
+					code: 1,
+					snapshot: false,
+					onRequest: (r) => requests.push(r.path),
+				},
+			);
+			expect(stderr).toContain(
+				'ERROR: Two different names were given: "test_role" as an argument and "other" with --name. Pass one of them.',
+			);
+			expect(requests).toEqual([]);
+		}
+	});
+
+	test("create and delete without a name fail before any request", async ({
+		testCliCommand,
+	}) => {
+		for (const command of ["create", "delete"]) {
+			const requests: string[] = [];
+			const { stderr } = await testCliCommand(
+				[
+					"roles",
+					command,
+					"--project-id",
+					"test",
+					"--branch",
+					"test_branch",
+				],
+				{
+					code: 1,
+					snapshot: false,
+					onRequest: (r) => requests.push(r.path),
+				},
+			);
+			expect(stderr).toContain("ERROR: Missing required argument: name");
+			expect(requests).toEqual([]);
+		}
 	});
 
 	test("list names the resolved branch in the table", async ({

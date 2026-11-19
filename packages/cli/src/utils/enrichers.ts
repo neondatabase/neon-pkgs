@@ -396,3 +396,27 @@ export const fillSingleOrg = async (props: OrgScopeProps) => {
 	}
 	return { ...props, orgId: data.organizations[0].id };
 };
+
+/**
+ * Lets a command take its name as the `positional` argument or as `--name`:
+ * `databases create analytics` and `databases create --name analytics`. Use it
+ * as a before-validation middleware, so a required `--name` is satisfied by
+ * either form and handlers keep reading the key they always read.
+ */
+export const nameFromArgumentOrFlag =
+	(positional: string) =>
+	(args: Record<string, unknown>): void => {
+		const flag = args.name;
+		const argument = args[positional];
+		if (
+			flag !== undefined &&
+			argument !== undefined &&
+			String(flag) !== String(argument)
+		) {
+			throw new Error(
+				`Two different names were given: "${String(argument)}" as an argument and "${String(flag)}" with --name. Pass one of them.`,
+			);
+		}
+		args.name ??= argument;
+		args[positional] ??= flag;
+	};

@@ -5,6 +5,7 @@ import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import {
 	fillSingleProject,
+	nameFromArgumentOrFlag,
 	resolveBranchFromProps,
 } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
@@ -46,13 +47,14 @@ export const builderFor = (usage: string) => (argv: yargs.Argv) =>
 			(args) => list(args as any),
 		)
 		.command(
-			"create",
+			"create [role]",
 			"Create a role. By default it joins neon_superuser (admin on every database); pass --access read_only or read_write for a scoped role",
 			(yargs) =>
 				yargs
 					.options({
 						name: {
-							describe: "Role name",
+							describe:
+								"Role name. Also accepted as the first argument",
 							type: "string",
 							demandOption: true,
 						},
@@ -80,6 +82,11 @@ export const builderFor = (usage: string) => (argv: yargs.Argv) =>
 							array: true,
 						},
 					})
+					.positional("role", {
+						describe: "Role name",
+						type: "string",
+					})
+					.middleware(nameFromArgumentOrFlag("role"), true)
 					.check((args) => {
 						if (
 							args.access === "admin" &&
@@ -115,9 +122,23 @@ export const builderFor = (usage: string) => (argv: yargs.Argv) =>
 			(args) => resetPassword(args as any),
 		)
 		.command(
-			"delete <role>",
+			"delete [role]",
 			"Delete a role",
-			(yargs) => yargs,
+			(yargs) =>
+				yargs
+					.options({
+						name: {
+							describe:
+								"Role name. Also accepted as the first argument",
+							type: "string",
+							demandOption: true,
+						},
+					})
+					.positional("role", {
+						describe: "Role name",
+						type: "string",
+					})
+					.middleware(nameFromArgumentOrFlag("role"), true),
 			(args) => deleteRole(args as any),
 		);
 
