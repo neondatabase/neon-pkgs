@@ -37,7 +37,7 @@
 	"postgres.databases.create": "Creates a database on a branch, owned by owner_name.",
 	"postgres.databases.update": "Renames a database or changes its owner.",
 	"postgres.databases.delete": "Deletes a database and its data from a branch.",
-	"postgres.dataApi.get": "Gets the Neon Data API configuration for one database on a branch.",
+	"postgres.dataApi.get": "Gets the Neon Data API configuration for one database on a branch. Returns enabled false when the database has no Data API; {{postgres.dataApi.create}} enables it.",
 	"postgres.dataApi.create": "Creates the Neon Data API, a REST interface over database_name, on a branch.",
 	"postgres.dataApi.update": "Updates the Neon Data API settings for a database and refreshes its schema cache.",
 	"postgres.dataApi.delete": "Deletes the Neon Data API for a database; requests to its endpoint start failing.",
