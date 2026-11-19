@@ -68,10 +68,13 @@ export const inspectDatabaseInputSchema = z.strictObject({
  * The proxy refuses an IP allowlist or blocked-network connection with an HTTP
  * 400 whose `severity` is empty; Postgres sets it on every error it raises. A
  * quota refusal is another 4xx, which `@neondatabase/serverless` reports only as
- * this message. A connection the proxy refused never ran the query.
+ * this message. A connection the proxy refused never ran the query. PgBouncer
+ * and Postgres end the session with `FATAL`, as when they refuse a role that
+ * cannot log in; a rejected statement is `ERROR`.
  */
 const isRefusedConnection = (error: NeonDbError): boolean =>
 	error.severity === "" ||
+	error.severity === "FATAL" ||
 	/^Server error \(HTTP status 4\d\d\)/.test(error.message);
 
 const runDiagnostic = async <T>(
