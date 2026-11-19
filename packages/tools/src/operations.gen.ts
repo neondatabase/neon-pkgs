@@ -1019,7 +1019,7 @@ export const operationFactories = {
 	"jwks_url": zod.zCreateProjectBranchDataApiBody.shape["jwks_url"].optional(),
 	"provider_name": zod.zCreateProjectBranchDataApiBody.shape["provider_name"].optional(),
 	"jwt_audience": zod.zCreateProjectBranchDataApiBody.shape["jwt_audience"].optional(),
-	"add_default_grants": zod.zCreateProjectBranchDataApiBody.shape["add_default_grants"].describe("Grants the authenticated role SELECT, INSERT, UPDATE, and DELETE on every table in the public schema, including tables created later. Without it or your own GRANTs, signed-in requests get HTTP 403.").optional(),
+	"add_default_grants": zod.zCreateProjectBranchDataApiBody.shape["add_default_grants"].describe("Grants the authenticated role SELECT, INSERT, UPDATE, and DELETE on every public table, including later ones, so every signed-in user can read and write tables without RLS. Without it or your own GRANTs, signed-in requests get HTTP 403.").optional(),
 	"skip_auth_schema": zod.zCreateProjectBranchDataApiBody.shape["skip_auth_schema"].optional(),
 	"settings": zod.zCreateProjectBranchDataApiBody.shape["settings"].optional(),
 }),

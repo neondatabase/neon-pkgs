@@ -358,12 +358,20 @@ describe("mcp-tool-names.json", () => {
 		expect(dataApiCreate.description).toContain(
 			"confirm get_auth returns a JWKS URL (if it 404s, call provision_neon_auth)",
 		);
+		expect(dataApiCreate.description).toContain(
+			"Before reporting success, enable RLS on exposed tables or tell the user which lack it",
+		);
 		expect(
 			inputDescription(dataApiCreate.inputSchema, "auth_provider"),
 		).toContain("every request fails with HTTP 401");
-		expect(
-			inputDescription(dataApiCreate.inputSchema, "add_default_grants"),
-		).toContain("signed-in requests get HTTP 403");
+		const addDefaultGrants = inputDescription(
+			dataApiCreate.inputSchema,
+			"add_default_grants",
+		);
+		expect(addDefaultGrants).toContain(
+			"every signed-in user can read and write tables without RLS",
+		);
+		expect(addDefaultGrants).toContain("signed-in requests get HTTP 403");
 	});
 
 	test("the MCP tools only reference other MCP tools", () => {
