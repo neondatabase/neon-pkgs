@@ -271,6 +271,81 @@ export const showHelp = async (argv: yargs.Argv) => {
 };
 
 /**
+ * Where yargs was when it rejected a command: the command path it had matched
+ * (`["functions"]` for `neon functions logs`) and the names and aliases it could
+ * have routed to from there.
+ */
+export type CommandScope = { path: string[]; commands: string[] };
+
+/**
+ * Names callers try that are not a misspelling of a command, keyed by the full
+ * path. `{cli}` is the invoked binary.
+ */
+const GUESSES: Record<string, string> = {
+	whoami: "Did you mean `{cli} me`?",
+	keys: "Did you mean `{cli} api-keys`?",
+	sql: "Did you mean `{cli} psql`?",
+	storage: "Did you mean `{cli} buckets`?",
+	regions:
+		"There is no regions command. `{cli} projects create --help` lists the region IDs.",
+	"functions logs":
+		"Function logs are under `{cli} logs`, for example: {cli} logs query --source function",
+};
+
+const editDistance = (a: string, b: string): number => {
+	let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+	for (let i = 1; i <= a.length; i++) {
+		const next = [i];
+		for (let j = 1; j <= b.length; j++) {
+			next[j] = Math.min(
+				(row[j] ?? 0) + 1,
+				(next[j - 1] ?? 0) + 1,
+				(row[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1),
+			);
+		}
+		row = next;
+	}
+	return row[b.length] ?? 0;
+};
+
+/**
+ * The closest command within two edits that starts with the same letter. The
+ * letter keeps `get` from suggesting `set`.
+ */
+const nearest = (unknown: string, commands: string[]): string | undefined => {
+	let best: string | undefined;
+	let bestDistance = 3;
+	for (const command of commands) {
+		if (command[0] !== unknown[0]) continue;
+		const distance = editDistance(unknown, command);
+		if (distance < bestDistance && distance < unknown.length) {
+			best = command;
+			bestDistance = distance;
+		}
+	}
+	return best;
+};
+
+/**
+ * A line to print under yargs' "Unknown command: x" / "Unknown commands: x, y",
+ * or undefined when there is nothing useful to say.
+ */
+export const unknownCommandHint = (
+	message: string,
+	scope: CommandScope,
+	cliName: string,
+): string | undefined => {
+	const unknown = /^Unknown commands?: ([^,\s]+)/.exec(message)?.[1];
+	if (unknown === undefined) return undefined;
+	const guess = GUESSES[[...scope.path, unknown].join(" ")];
+	if (guess !== undefined) return guess.split("{cli}").join(cliName);
+	const match = nearest(unknown, scope.commands);
+	return match === undefined
+		? undefined
+		: `Did you mean \`${[cliName, ...scope.path, match].join(" ")}\`?`;
+};
+
+/**
  * A yargs validation failure: a missing required option or positional, an unknown
  * subcommand, a value outside `choices`. Carries the failing command's help, captured
  * in `.fail` because yargs has restored the parent's context by the time the error
@@ -278,10 +353,13 @@ export const showHelp = async (argv: yargs.Argv) => {
  */
 export class UsageError extends Error {
 	readonly help: string;
+	/** The command yargs was running and its subcommands, for an unknown-command hint. */
+	readonly scope: CommandScope | undefined;
 
-	constructor(message: string, help: string) {
+	constructor(message: string, help: string, scope?: CommandScope) {
 		super(message);
 		this.help = help;
+		this.scope = scope;
 	}
 }
 
@@ -298,6 +376,7 @@ export const failOnUsageError = (
 	msg: string | null,
 	err: Error | null,
 	usage: unknown,
+	scope?: () => CommandScope,
 ) => {
 	if (err) {
 		throw err;
@@ -316,7 +395,11 @@ export const failOnUsageError = (
 	if (typeof help !== "string") {
 		throw new Error("yargs usage.help() did not return a string");
 	}
-	throw new UsageError(redactRejectedChoices(msg ?? "Invalid usage"), help);
+	throw new UsageError(
+		redactRejectedChoices(msg ?? "Invalid usage"),
+		help,
+		scope?.(),
+	);
 };
 
 /**
@@ -366,4 +449,17 @@ export const isBareParentCommand = (
 		positionals.length === path.length &&
 		internals.getCommandInstance().getCommands().length > 0
 	);
+};
+
+/**
+ * The command yargs is running and the commands it can route to from there. Read in
+ * `.fail`, for the same reason {@link UsageError} captures the help there.
+ */
+export const commandScope = (argv: yargs.Argv): CommandScope => {
+	assertYargsInternals(argv);
+	const internals = argv.getInternalMethods();
+	return {
+		path: [...internals.getContext().commands],
+		commands: internals.getCommandInstance().getCommands(),
+	};
 };

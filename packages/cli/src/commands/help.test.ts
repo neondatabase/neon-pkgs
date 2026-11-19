@@ -147,3 +147,58 @@ describe("usage errors print the command's help to stderr", () => {
 		});
 	}
 });
+
+const UNKNOWN_COMMANDS = [
+	{ args: ["whoami"], hint: "Did you mean `neon me`?" },
+	{
+		args: ["keys", "list"],
+		error: "Unknown commands: keys, list",
+		hint: "Did you mean `neon api-keys`?",
+	},
+	{
+		args: ["regions"],
+		hint: "There is no regions command. `neon projects create --help` lists the region IDs.",
+	},
+	{
+		args: ["functions", "logs", "digest"],
+		error: "Unknown commands: logs, digest",
+		helpFor: ["functions"],
+		hint: "Function logs are under `neon logs`, for example: neon logs query --source function",
+	},
+	{ args: ["projcts"], hint: "Did you mean `neon projects`?" },
+	{
+		args: ["projects", "lst"],
+		error: "Unknown command: lst",
+		helpFor: ["projects"],
+		hint: "Did you mean `neon projects list`?",
+	},
+	// Nothing close: the error stands alone, as before.
+	{ args: ["frobnicate"] },
+	{
+		args: ["realtime", "status"],
+		error: "Unknown command: status",
+		helpFor: ["realtime"],
+	},
+] as const;
+
+describe("an unknown command gets a suggestion under the error", () => {
+	for (const { args, ...rest } of UNKNOWN_COMMANDS) {
+		test(args.join(" "), async ({ testCliCommand }) => {
+			const { stdout, stderr } = await testCliCommand([...args], {
+				snapshot: false,
+				code: 1,
+			});
+			const { stdout: help } = await testCliCommand(
+				[...("helpFor" in rest ? rest.helpFor : []), "--help"],
+				{ snapshot: false },
+			);
+			const error =
+				"error" in rest ? rest.error : `Unknown command: ${args[0]}`;
+			const hint = "hint" in rest ? `${rest.hint}\n` : "";
+			expect(stdout).toBe("");
+			expect(strip(stderr)).toBe(
+				`${strip(help)}ERROR: ${error}\n${hint}`,
+			);
+		});
+	}
+});
