@@ -1081,6 +1081,8 @@ const report = await listNeonIncidents();
 // }
 ```
 
+Every call fetches the status page. `updated_at` is when neonstatus.com last updated the overall status, not when the report was fetched.
+
 Region names stay as neonstatus.com prints them (`AWS us-east-2`, `Azure eastus2`, `Global`). An unknown status code or a response that does not match the documented shape is a `NeonClientError`.
 
 ### `neon.auth`

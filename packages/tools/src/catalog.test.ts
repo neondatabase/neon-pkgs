@@ -111,6 +111,19 @@ describe("incidents.list", () => {
 		}
 	});
 
+	test("says updated_at is when the overall status was last updated, not when the page was fetched", () => {
+		const tool = createNeonTool("incidents.list", {});
+		expect(tool.description).toContain(
+			"updated_at is when neonstatus.com last updated the overall status",
+		);
+		const schema = z.toJSONSchema(tool.outputSchema);
+		expect(schema.properties?.updated_at).toMatchObject({
+			description: expect.stringContaining(
+				"not when this call fetched it",
+			),
+		});
+	});
+
 	test("rejects unknown input before fetching", async () => {
 		let called = false;
 		const tool = createNeonTool("incidents.list", {
