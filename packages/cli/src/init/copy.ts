@@ -77,6 +77,22 @@ export const CLAIMABLE_ACCOUNT_FLAGS =
 export const CLAIMABLE_ALREADY_LINKED =
 	"--claimable cannot run in a directory that is already linked. Omit --claimable, or unlink first.";
 
+/**
+ * `link -y` creates a project only when it has both a name and a region. The caller's
+ * other flags decide what init installs, so the message says to add the missing flag
+ * to the same command and does not print a shorter command to copy.
+ */
+export const incompleteProjectCreation = (
+	missing: "--region-id" | "--project-name",
+	command: string,
+): string =>
+	[
+		`${missing === "--region-id" ? "--project-name" : "--region-id"} requires ${missing}. Nothing was set up.`,
+		missing === "--region-id"
+			? `Add --region-id <region> (for example --region-id aws-us-east-2) to the same \`${command}\` command and run it again.`
+			: `Add --project-name <name> to the same \`${command}\` command and run it again.`,
+	].join("\n");
+
 export const PROJECT_SETUP_MESSAGE =
 	"How would you like to get a Neon project?";
 export const PROJECT_SETUP_LINK_TITLE = "Sign in to Neon";

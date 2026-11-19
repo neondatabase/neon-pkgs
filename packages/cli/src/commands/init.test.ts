@@ -1676,6 +1676,149 @@ describe("init handler", () => {
 		expect(createClaimable).not.toHaveBeenCalled();
 	});
 
+	test("-y --project-name without --region-id fails before any setup step", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-name-no-region-"));
+		const ops = makeOperations();
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					operations: ops,
+					yes: true,
+					orgId: "org-test",
+					projectName: "Billing API",
+					contextFile: join(cwd, ".neon"),
+					linkProject,
+					initConfig,
+				}),
+			),
+		).rejects.toThrow(
+			[
+				"--project-name requires --region-id. Nothing was set up.",
+				"Add --region-id <region> (for example --region-id aws-us-east-2) to the same `neon init` command and run it again.",
+			].join("\n"),
+		);
+		expect(ops.calls).toEqual([]);
+		expect(linkProject).not.toHaveBeenCalled();
+		expect(initConfig).not.toHaveBeenCalled();
+	});
+
+	test("-y --project-name with --branch and no --region-id is left to link, which reports the conflict", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-name-branch-"));
+		const ops = makeOperations();
+		const conflict =
+			"Conflicting inputs: --branch pins a branch of an existing project, but --project-name creates a new one.";
+		const linkProject = vi.fn().mockRejectedValue(new Error(conflict));
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		// However init reports the failed link, it must not ask for a region:
+		// adding one would not fix this command.
+		const message = await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				yes: true,
+				orgId: "org-test",
+				projectName: "billing-api",
+				branch: "dev",
+				contextFile: join(cwd, ".neon"),
+				linkProject,
+			}),
+		).then(
+			() => "",
+			(error: unknown) =>
+				error instanceof Error ? error.message : String(error),
+		);
+
+		expect(message).not.toMatch(/requires --region-id/);
+		expect(linkProject).toHaveBeenCalledWith(
+			expect.objectContaining({
+				projectName: "billing-api",
+				branch: "dev",
+			}),
+		);
+	});
+
+	test("-y --region-id without --project-name fails before any setup step", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-region-no-name-"));
+		const ops = makeOperations();
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					operations: ops,
+					yes: true,
+					regionId: "aws-eu-central-1",
+					contextFile: join(cwd, ".neon"),
+					linkProject,
+				}),
+			),
+		).rejects.toThrow(
+			"--region-id requires --project-name. Nothing was set up.\nAdd --project-name <name> to the same `neon init` command and run it again.",
+		);
+		expect(ops.calls).toEqual([]);
+		expect(linkProject).not.toHaveBeenCalled();
+	});
+
+	test("-y --project-name with --region-id still installs and links", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-name-region-"));
+		const ops = makeOperations();
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				yes: true,
+				projectName: "billing-api",
+				regionId: "aws-us-east-2",
+				contextFile: join(cwd, ".neon"),
+				linkProject,
+			}),
+		);
+
+		expect(stepKinds(ops)).toEqual(["skills"]);
+		expect(linkProject).toHaveBeenCalledWith(
+			expect.objectContaining({
+				projectName: "billing-api",
+				regionId: "aws-us-east-2",
+			}),
+		);
+	});
+
+	test("-y --project-name without --region-id and without credentials still defers the link", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-name-unauthed-"));
+		const ops = makeOperations();
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				yes: true,
+				projectName: "billing-api",
+				contextFile: join(cwd, ".neon"),
+				linkProject,
+				hasLocalCredentials: () => false,
+			}),
+		);
+
+		expect(stepKinds(ops)).toEqual(["skills"]);
+		expect(linkProject).not.toHaveBeenCalled();
+	});
+
 	test("-y --claimable with credentials still defaults MCP to OAuth", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claim-authed-mcp-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
@@ -2609,6 +2752,11 @@ describe("init CLI", () => {
 		expect(flat).toMatch(/forwarded to plugins, or to skills and mcp/i);
 		expect(flat).toMatch(/project-scoped key .*exits 1/);
 		expect(flat).toMatch(/fall back to oauth/);
+		// --project-name and --region-id each say they go together, and one example shows both.
+		expect(flat.match(/To create and link a project, pass/g)).toHaveLength(
+			2,
+		);
+		expect(flat).toMatch(/creating a new project and linking it/);
 		expect(help).toMatch(/Plugin agents/);
 		expect(help).toMatch(/Skills and MCP agents/);
 		expect(help).not.toMatch(/installed apps/);
