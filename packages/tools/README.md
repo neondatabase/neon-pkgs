@@ -132,7 +132,7 @@ Custom tools combine several requests into one call, or call Postgres or neon.co
 | `queryTuning.prepare` | `prepare_query_tuning` | Runs `EXPLAIN ANALYZE` on a new temporary branch and returns `{ complete, execution_plan, table_schemas, sql, baseline_metrics }`. `complete` holds `tuning_id`, `database_name`, `project_id`, `temporary_branch_id`, and `role_name` when one was passed; `baseline_metrics` holds time, cost, rows, and buffer counters of the root plan node. |
 | `queryTuning.complete` | `complete_query_tuning` | Applies `suggested_sql_statements` when `apply_changes` is true, deletes the temporary branch unless `should_delete_temporary_branch` is false, and returns `{ appliedChanges?, results?, deletedBranches?, message }`. |
 | `docs.search` | `search_docs` | `{ hits: [{ title, url, slug, category, breadcrumb, heading, excerpt }] }` from neon.com site search. |
-| `docs.get` | `get_docs` | `{ url, markdown }` for one neon.com page slug. |
+| `docs.get` | `get_docs` | `{ url, markdown }` for one neon.com page slug, without the agent skills note and feedback footer neon.com adds for agents that browse the site. |
 | `feedback.send` | `send_feedback` | Posts `{ feedback, source }` to the Neon feedback service. |
 
 ```ts

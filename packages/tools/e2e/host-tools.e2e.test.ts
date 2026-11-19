@@ -953,6 +953,18 @@ describe("e2e — @neon/tools docs and feedback tools", () => {
 		).rejects.toThrow('path traversal ("..") is not allowed');
 	});
 
+	it("docs.get drops neon.com's agent skills note and feedback footer", async () => {
+		const { data } = await tools["docs.get"].execute({
+			slug: "docs/connect/connection-pooling",
+		});
+		expect(data.markdown).toContain(
+			"> Full Neon documentation index: https://neon.com/docs/llms.txt\n",
+		);
+		expect(data.markdown).toContain("# Connection pooling");
+		expect(data.markdown).not.toContain("Agent skills:");
+		expect(data.markdown).not.toContain("Note for AI assistants");
+	});
+
 	it("feedback.send posts { feedback, source } and needs no API key", async () => {
 		const received: { body: unknown; contentType?: string }[] = [];
 		const readBody = async (request: IncomingMessage) => {
