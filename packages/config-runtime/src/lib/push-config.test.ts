@@ -1002,6 +1002,60 @@ describe("pushConfig", () => {
 			});
 			expect(deployedEnv(api)).toMatchObject({ DSN: "", GUILD: "" });
 		});
+
+		test.each([
+			{ dryRun: true },
+			{ dryRun: false },
+		])("the function change names the keys it sets and unsets, without values (dryRun: $dryRun)", async ({
+			dryRun,
+		}) => {
+			const { api, projectId } = seededFake();
+			const result = await pushConfig(
+				declaredConfig({ TOKEN: "secret-token", DSN: "secret-dsn" }),
+				{
+					api,
+					projectId,
+					branchId: "br-main",
+					bundleFunction: noBundle,
+					dryRun,
+				},
+			);
+			const change = result.applied.find(
+				(c) => c.identifier === "function:fn1",
+			);
+			expect(change?.details).toMatchObject({
+				envSet: ["DSN", "LOG_LEVEL", "TOKEN"],
+				envUnset: ["GUILD"],
+			});
+			const serialized = JSON.stringify(result);
+			expect(serialized).not.toContain("secret-token");
+			expect(serialized).not.toContain("secret-dsn");
+		});
+
+		test('a literal "" is reported as unset', async () => {
+			const { api, projectId } = seededFake();
+			const result = await pushConfig(
+				defineConfig({
+					functions: {
+						fn1: {
+							name: "Hello World",
+							source: fnSource,
+							env: { CLEARED: "" },
+						},
+					},
+				}),
+				{
+					api,
+					projectId,
+					branchId: "br-main",
+					bundleFunction: noBundle,
+				},
+			);
+			expect(
+				result.applied.find((c) => c.identifier === "function:fn1")
+					?.details,
+			).toMatchObject({ envSet: [], envUnset: ["CLEARED"] });
+		});
 	});
 
 	test("re-deploys an existing function as an update, without duplicating it", async () => {

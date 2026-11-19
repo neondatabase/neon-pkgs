@@ -133,6 +133,19 @@ describe.sequential("e2e — declared Function env", () => {
 			envFile("secrets.env", "SECRET_A=a\nSECRET_B=b\nPROD_A=p\n"),
 		);
 		expect(result.code).toBe(0);
+		const { applied } = JSON.parse(result.stdout) as {
+			applied: {
+				identifier: string;
+				details?: Record<string, unknown>;
+			}[];
+		};
+		expect(
+			applied.find((change) => change.identifier === "function:alpha")
+				?.details,
+		).toMatchObject({
+			envSet: ["PROD_A", "RATE_A", "SECRET_A"],
+			envUnset: ["OPTIONAL_A"],
+		});
 		const names = (await getFunction("alpha")).active_deployment
 			?.environment;
 		expect([...(names ?? [])].sort()).toEqual([

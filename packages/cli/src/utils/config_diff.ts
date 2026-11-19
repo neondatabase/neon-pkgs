@@ -197,6 +197,27 @@ const serviceFieldChanges = (change: AppliedChange): FieldChange[] => {
 	);
 };
 
+const stringList = (value: unknown): string[] =>
+	Array.isArray(value)
+		? value.filter((entry): entry is string => typeof entry === "string")
+		: [];
+
+const functionEnvLines = (
+	change: AppliedChange,
+	paint: ReturnType<typeof palette>,
+): string[] => {
+	const set = stringList(change.details?.envSet);
+	const unset = stringList(change.details?.envUnset);
+	return [
+		...(set.length > 0
+			? [`      env set    ${paint.added(set.join(", "))}`]
+			: []),
+		...(unset.length > 0
+			? [`      env unset  ${paint.removed(unset.join(", "))}`]
+			: []),
+	];
+};
+
 export const renderAppliedChanges = (
 	changes: AppliedChange[],
 	title: string,
@@ -230,6 +251,9 @@ export const renderAppliedChanges = (
 			lines.push(
 				...renderFieldLines(serviceFieldChanges(service), paint),
 			);
+		}
+		if (service.identifier.startsWith("function:")) {
+			lines.push(...functionEnvLines(service, paint));
 		}
 	}
 
