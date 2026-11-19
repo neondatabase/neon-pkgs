@@ -27,7 +27,11 @@ import {
 } from "../env_services.js";
 import { log } from "../log.js";
 import type { NeonService } from "../neon_services.js";
-import { loadProjectConfig } from "../project.js";
+import {
+	loadProjectConfig,
+	looksLikeMissingDependency,
+	missingDependencyMessage,
+} from "../project.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
 	formatInstallCommand,
@@ -1039,38 +1043,6 @@ const fetchAndProject = async (
  * root. Returns `null` when there is none (the common "no config" case), and
  * surfaces real load errors (e.g. a syntax error in an existing file).
  */
-/**
- * Substrings that mark a module-resolution failure while loading `neon.ts` —
- * almost always because the project's dependencies aren't installed yet (the
- * config imports `@neon/config` & friends). Deliberately specific:
- * the generic "…or a missing dependency…" hint the loader always appends is
- * NOT in here, so a real syntax/runtime error doesn't get mislabeled.
- */
-const MISSING_DEPENDENCY_HINTS = [
-	"cannot find module",
-	"cannot find package",
-	"err_module_not_found",
-	"failed to resolve",
-	"could not resolve",
-	"module not found",
-];
-
-/** Flatten an error and its `cause` chain to one lowercased string for matching. */
-const errorChainText = (err: unknown): string => {
-	const parts: string[] = [];
-	let current: unknown = err;
-	for (let depth = 0; current instanceof Error && depth < 6; depth++) {
-		parts.push(current.message);
-		current = (current as { cause?: unknown }).cause;
-	}
-	return parts.join("\n").toLowerCase();
-};
-
-const looksLikeMissingDependency = (err: unknown): boolean => {
-	const text = errorChainText(err);
-	return MISSING_DEPENDENCY_HINTS.some((hint) => text.includes(hint));
-};
-
 const loadNeonConfig = async (ctx: DevEnvContext): Promise<Config | null> => {
 	try {
 		const { config } = await loadProjectConfig({
@@ -1091,9 +1063,10 @@ const loadNeonConfig = async (ctx: DevEnvContext): Promise<Config | null> => {
 		// cryptic "Cannot find module …". Turn that into the actionable thing to do.
 		if (looksLikeMissingDependency(err)) {
 			throw new Error(
-				"Could not load neon.ts: a package it imports is not installed. " +
-					`Run \`${formatInstallCommand(resolvePackageManager(ctx.cwd))}\`, then try again.\n` +
-					`Original error: ${message}`,
+				missingDependencyMessage(
+					formatInstallCommand(resolvePackageManager(ctx.cwd)),
+					err,
+				),
 			);
 		}
 		throw err;

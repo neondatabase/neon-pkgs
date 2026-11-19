@@ -72,3 +72,48 @@ export const loadProjectConfig = async (
 		...(unsetFunctionEnv !== undefined ? { unsetFunctionEnv } : {}),
 	});
 };
+
+/**
+ * Substrings that mark a module-resolution failure while loading `neon.ts` —
+ * almost always because the project's dependencies aren't installed yet (the
+ * config imports `@neon/config` & friends). Deliberately specific:
+ * the generic "…or a missing dependency…" hint the loader always appends is
+ * NOT in here, so a real syntax/runtime error doesn't get mislabeled.
+ */
+const MISSING_DEPENDENCY_HINTS = [
+	"cannot find module",
+	"cannot find package",
+	"err_module_not_found",
+	"failed to resolve",
+	"could not resolve",
+	"module not found",
+];
+
+/** Flatten an error and its `cause` chain to one lowercased string for matching. */
+const errorChainText = (err: unknown): string => {
+	const parts: string[] = [];
+	let current: unknown = err;
+	for (let depth = 0; current instanceof Error && depth < 6; depth++) {
+		parts.push(current.message);
+		current = (current as { cause?: unknown }).cause;
+	}
+	return parts.join("\n").toLowerCase();
+};
+
+/** Whether loading `neon.ts` failed because a package it imports is not installed. */
+export const looksLikeMissingDependency = (err: unknown): boolean => {
+	const text = errorChainText(err);
+	return MISSING_DEPENDENCY_HINTS.some((hint) => text.includes(hint));
+};
+
+/**
+ * What to tell the user in that case. `installCommand` is the project's install
+ * command (`formatInstallCommand(resolvePackageManager(dir))`).
+ */
+export const missingDependencyMessage = (
+	installCommand: string,
+	err: unknown,
+): string =>
+	"Could not load neon.ts: a package it imports is not installed. " +
+	`Run \`${installCommand}\`, then try again.\n` +
+	`Original error: ${err instanceof Error ? err.message : String(err)}`;

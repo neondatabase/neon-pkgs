@@ -797,6 +797,46 @@ describe("config commands", () => {
 		expect(api.enableNeonAuthCalls).toHaveLength(0);
 	});
 
+	it("deploy and plan report a neon.ts that imports an uninstalled package the way env pull does", async () => {
+		const api = new FakeNeonApi();
+		const config = writeConfig(
+			"import 'neon-deploy-missing-dependency-xyz';\nexport default { auth: {} };\n",
+		);
+
+		for (const run of [applyCmd, planCmd]) {
+			const error = await run({
+				...baseProps(api, captureOut().stream),
+				config,
+			}).then(
+				() => undefined,
+				(err: Error) => err,
+			);
+			expect(error?.message).toMatch(
+				/^Could not load neon\.ts: a package it imports is not installed\. Run `\w+ (install|add)[^`]*`, then try again\.\nOriginal error: Failed to evaluate /,
+			);
+			expect(error?.message).toContain(
+				"neon-deploy-missing-dependency-xyz",
+			);
+		}
+		expect(api.enableNeonAuthCalls).toHaveLength(0);
+	}, 30_000);
+
+	it("deploy keeps the loader's message for a neon.ts that throws", async () => {
+		const api = new FakeNeonApi();
+		const config = writeConfig("throw new Error('boom in config');\n");
+
+		const error = await applyCmd({
+			...baseProps(api, captureOut().stream),
+			config,
+		}).then(
+			() => undefined,
+			(err: Error) => err,
+		);
+		expect(error?.message).toMatch(/^Failed to evaluate /);
+		expect(error?.message).toContain("boom in config");
+		expect(error?.message).not.toContain("is not installed");
+	}, 30_000);
+
 	it("apply actually enables Neon Auth and is not a dry run", async () => {
 		const api = new FakeNeonApi();
 		const { stream, read } = captureOut();

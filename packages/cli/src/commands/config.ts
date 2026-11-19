@@ -76,6 +76,8 @@ import {
 } from "../neon_services.js";
 import {
 	loadProjectConfig,
+	looksLikeMissingDependency,
+	missingDependencyMessage,
 	neonConfigFilename,
 	projectConfigPath,
 	projectDir,
@@ -1247,11 +1249,27 @@ const loadEnvFileIfGiven = (env?: string): void => {
 
 const loadConfig = async (props: ConfigProps): Promise<Config> => {
 	loadEnvFileIfGiven(props.env);
-	const { config } = await loadProjectConfig({
-		contextFile: props.contextFile,
-		...(props.config ? { path: props.config } : {}),
-	});
-	return config;
+	try {
+		const { config } = await loadProjectConfig({
+			contextFile: props.contextFile,
+			...(props.config ? { path: props.config } : {}),
+		});
+		return config;
+	} catch (err) {
+		// Same cause and same message as `env pull` (see `loadNeonConfig` in dev/env.ts).
+		if (looksLikeMissingDependency(err)) {
+			const dir = props.config
+				? dirname(resolve(props.config))
+				: projectDir({ contextFile: props.contextFile });
+			throw new Error(
+				missingDependencyMessage(
+					formatInstallCommand(resolvePackageManager(dir)),
+					err,
+				),
+			);
+		}
+		throw err;
+	}
 };
 
 export const status = async (props: ConfigProps): Promise<void> => {
