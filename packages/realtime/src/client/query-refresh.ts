@@ -6,6 +6,7 @@ import type { LiveQueryState, RawLiveQuerySubscription } from "./types.js";
 
 const REFRESH_EARLY_MS = 10_000;
 const REFRESH_RETRY_MS = 1_000;
+const MAX_REFRESH_RETRY_MS = 30_000;
 
 interface QueryRefreshControllerOptions<Row> {
 	/** Capability from which expiry and query identity are initially read. */
@@ -51,6 +52,7 @@ export class QueryRefreshController<Row> {
 	private refreshTimer?: ReturnType<typeof setTimeout>;
 	private refreshInFlight = false;
 	private refreshStopped = false;
+	private retryDelay = REFRESH_RETRY_MS;
 	private active = false;
 	private generation = 0;
 	private nextReplacementId = 0;
@@ -117,6 +119,7 @@ export class QueryRefreshController<Row> {
 			return;
 		this.appliedReplacementId = replacementId;
 		this.query = query;
+		this.retryDelay = REFRESH_RETRY_MS;
 		this.refreshStopped = false;
 		this.options.onSubscriptionRenewed?.();
 		this.scheduleRefresh();
@@ -127,6 +130,7 @@ export class QueryRefreshController<Row> {
 		if (this.active) return;
 		this.active = true;
 		this.refreshStopped = false;
+		this.retryDelay = REFRESH_RETRY_MS;
 		this.scheduleRefresh();
 	}
 
@@ -150,6 +154,12 @@ export class QueryRefreshController<Row> {
 			this.refreshTimer = undefined;
 			void this.refresh();
 		}, refreshDelay);
+	}
+
+	private scheduleRetry(): void {
+		const delay = this.retryDelay * (0.5 + Math.random() * 0.5);
+		this.retryDelay = Math.min(this.retryDelay * 2, MAX_REFRESH_RETRY_MS);
+		this.scheduleRefresh(delay);
 	}
 
 	private async refresh(): Promise<void> {
@@ -207,7 +217,7 @@ export class QueryRefreshController<Row> {
 				this.refreshStopped = true;
 				return;
 			}
-			this.scheduleRefresh(REFRESH_RETRY_MS);
+			this.scheduleRetry();
 		} finally {
 			if (generation === this.generation) this.refreshInFlight = false;
 		}
@@ -219,8 +229,10 @@ export class QueryRefreshController<Row> {
 	): Promise<void> {
 		try {
 			await this.options.renewSubscription(query);
-			if (this.isCurrent(generation) && this.query === query)
+			if (this.isCurrent(generation) && this.query === query) {
+				this.retryDelay = REFRESH_RETRY_MS;
 				this.options.onSubscriptionRenewed?.();
+			}
 		} catch {
 			if (!this.isCurrent(generation) || this.query !== query) return;
 			if (this.subscriptionEnded()) {
@@ -230,7 +242,7 @@ export class QueryRefreshController<Row> {
 				this.clearTimer();
 				return;
 			}
-			this.scheduleRefresh(REFRESH_RETRY_MS);
+			this.scheduleRetry();
 		}
 	}
 

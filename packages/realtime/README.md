@@ -157,7 +157,9 @@ subscription lifecycle to know when its first authoritative result is live.
 
 During an outage, the logical subscription becomes `connecting` while retaining
 its latest materialized rows. The SDK keeps minting current capabilities and
-reconnecting with backoff. If the capability expires, the subscription is
+reconnecting with backoff. Failed capability refreshes and recoverable renewal
+rejections use exponential backoff with jitter, up to a 30-second retry window.
+A successful renewal resets that delay. If the capability expires, the subscription is
 `stale` while awaiting its replacement, then becomes `connecting` while recovery
 creates a new wire subscription behind the same public object. It returns to
 `live` after receiving a fresh authoritative result.

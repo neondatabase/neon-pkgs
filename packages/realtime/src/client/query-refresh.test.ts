@@ -9,9 +9,109 @@ import type { LiveQueryState, RawLiveQuerySubscription } from "./types.js";
 
 afterEach(() => {
 	vi.useRealTimers();
+	vi.restoreAllMocks();
 });
 
 describe("QueryRefreshController", () => {
+	it("spreads simultaneous refresh failures across the retry window", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		vi.spyOn(Math, "random").mockReturnValueOnce(0).mockReturnValue(0.99);
+		const callbacks = [
+			vi.fn(async () => {
+				throw new Error("outage");
+			}),
+			vi.fn(async () => {
+				throw new Error("outage");
+			}),
+		];
+		const controllers = callbacks.map(
+			(refreshQuery) =>
+				new QueryRefreshController({
+					query: query(5),
+					refreshQuery,
+					renewSubscription: async () => {},
+					onRefreshExhausted: vi.fn(),
+				}),
+		);
+		try {
+			for (const controller of controllers) controller.start();
+			await vi.advanceTimersByTimeAsync(0);
+			await vi.advanceTimersByTimeAsync(600);
+			expect(
+				callbacks.map((callback) => callback.mock.calls.length),
+			).toEqual([2, 1]);
+			await vi.advanceTimersByTimeAsync(400);
+			expect(
+				callbacks.map((callback) => callback.mock.calls.length),
+			).toEqual([2, 2]);
+		} finally {
+			for (const controller of controllers) controller.stop();
+		}
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("backs off failed refreshes with jitter and resets after recovery", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		vi.spyOn(Math, "random").mockReturnValue(0.5);
+		let failing = true;
+		const refreshQuery = vi.fn(async () => {
+			if (failing) throw new Error("authorization unavailable");
+			return query(Date.now() / 1000 + 60);
+		});
+		const controller = new QueryRefreshController({
+			query: query(5),
+			refreshQuery,
+			renewSubscription: async () => {},
+			onRefreshExhausted: vi.fn(),
+		});
+		try {
+			controller.start();
+			await vi.advanceTimersByTimeAsync(20_000);
+			expect(refreshQuery.mock.calls.length).toBeLessThanOrEqual(6);
+			expect(refreshQuery.mock.calls.length).toBeGreaterThanOrEqual(3);
+			failing = false;
+			await vi.advanceTimersToNextTimerAsync();
+			const recoveredCalls = refreshQuery.mock.calls.length;
+			failing = true;
+			await vi.advanceTimersToNextTimerAsync();
+			const failedCalls = refreshQuery.mock.calls.length;
+			expect(failedCalls).toBeGreaterThan(recoveredCalls);
+			await vi.advanceTimersByTimeAsync(1_000);
+			expect(refreshQuery.mock.calls.length).toBeGreaterThan(failedCalls);
+		} finally {
+			controller.stop();
+		}
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("backs off rejected renewals even when issuing fresh capabilities succeeds", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		vi.spyOn(Math, "random").mockReturnValue(0.5);
+		const renewSubscription = vi.fn(async () => {
+			throw new Error("subscription temporarily unavailable");
+		});
+		const controller = new QueryRefreshController({
+			query: query(5),
+			refreshQuery: async () => query(Date.now() / 1000 + 60),
+			renewSubscription,
+			onRefreshExhausted: vi.fn(),
+		});
+		try {
+			controller.start();
+			await vi.advanceTimersByTimeAsync(60_000);
+			expect(renewSubscription.mock.calls.length).toBeLessThanOrEqual(9);
+			expect(renewSubscription.mock.calls.length).toBeGreaterThanOrEqual(
+				3,
+			);
+		} finally {
+			controller.stop();
+		}
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
 	it("paces successful refreshes within the early-refresh window", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);
@@ -134,6 +234,7 @@ describe("QueryRefreshController", () => {
 
 	it("continues retrying capability issuance after expiry", async () => {
 		vi.useFakeTimers();
+		vi.spyOn(Math, "random").mockReturnValue(0.5);
 		vi.setSystemTime(0);
 		const refreshQuery = vi.fn(async () => {
 			throw new Error("unavailable");
@@ -152,11 +253,11 @@ describe("QueryRefreshController", () => {
 		controller.start();
 		await vi.advanceTimersByTimeAsync(4_000);
 
-		expect(refreshQuery).toHaveBeenCalledTimes(5);
+		expect(refreshQuery).toHaveBeenCalledTimes(3);
 		expect(onRefreshExhausted).not.toHaveBeenCalled();
 		expect(
 			events.filter((event) => event === "query_refresh_callback_failed"),
-		).toHaveLength(5);
+		).toHaveLength(3);
 		expect(events).toContain("query_refresh_callback_started");
 		expect(events).toContain("query_refresh_scheduled");
 		controller.stop();
@@ -396,6 +497,7 @@ describe("QueryRefreshController", () => {
 
 	it("keeps retrying renewal while the subscription can recover", async () => {
 		vi.useFakeTimers();
+		vi.spyOn(Math, "random").mockReturnValue(0.5);
 		vi.setSystemTime(0);
 		const refreshQuery = vi.fn(async () => query(Date.now() / 1_000 + 60));
 		const renewSubscription = vi.fn(async () => {
@@ -412,7 +514,7 @@ describe("QueryRefreshController", () => {
 		controller.start();
 		await vi.advanceTimersByTimeAsync(13_000);
 
-		expect(refreshQuery).toHaveBeenCalledTimes(4);
+		expect(refreshQuery).toHaveBeenCalledTimes(3);
 		controller.stop();
 	});
 });
