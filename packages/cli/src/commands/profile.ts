@@ -31,6 +31,8 @@ import {
 	canDropProfilesFile,
 	credentialsDisplay,
 	DEFAULT_PROFILE,
+	type HostUpdate,
+	hostsOf,
 	isKeyringPointer,
 	KEYRING_CREDENTIALS,
 	listProfiles,
@@ -53,6 +55,12 @@ import { auth, revokeToken } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
 import { storeFor } from "../credential_io.js";
 import { isCi } from "../env.js";
+import {
+	type Hosts,
+	hostsForProfile,
+	hostUpdateFor,
+	issuingHosts,
+} from "../hosts.js";
 import { log } from "../log.js";
 import {
 	identityFromAuthDetails,
@@ -195,7 +203,8 @@ export const builder = (argv: yargs.Argv) =>
 						"$0 profile create work --keyring",
 						"Store the credential in the OS keyring instead of a file",
 					),
-			async (args) => await create(args as unknown as CreateProps),
+			async (args) =>
+				await create(withProfileHosts(args as unknown as CreateProps)),
 		)
 		.command(
 			"rotate-key <name>",
@@ -211,7 +220,9 @@ export const builder = (argv: yargs.Argv) =>
 					.check(noPassthrough("profile rotate-key")),
 			async (args) =>
 				await rotateKey(
-					args as unknown as ProfileProps & { name: string },
+					withProfileHosts(
+						args as unknown as ProfileProps & { name: string },
+					),
 				),
 		)
 		.command(
@@ -234,16 +245,26 @@ export const builder = (argv: yargs.Argv) =>
 					.check(noPassthrough("profile remove")),
 			async (args) =>
 				await remove(
-					args as unknown as ProfileProps & {
-						name: string;
-						yes: boolean;
-					},
+					withProfileHosts(
+						args as unknown as ProfileProps & {
+							name: string;
+							yes: boolean;
+						},
+					),
 				),
 		);
 
 export const handler = (_args: yargs.Arguments) => {
 	/* subcommands only */
 };
+
+/**
+ * These subcommands act on the profile they name, which credential selection never picked, so
+ * the hosts the middleware resolved may belong to another profile.
+ */
+const withProfileHosts = <T extends ProfileProps & { name: string }>(
+	props: T,
+): T => ({ ...props, ...hostsForProfile(props.configDir, props.name) });
 
 /**
  * Refuse a global credential flag that a `profile` subcommand cannot honour.
@@ -377,6 +398,8 @@ const list = async (props: ProfileProps) => {
 		return {
 			active: p.name === active ? "*" : "",
 			name: p.name,
+			...(p.apiHost !== undefined ? { apiHost: p.apiHost } : {}),
+			...(p.oauthHost !== undefined ? { oauthHost: p.oauthHost } : {}),
 			account: p.label ?? p.userId ?? storedUserId ?? "-",
 			auth,
 			scope:
@@ -394,10 +417,24 @@ const list = async (props: ProfileProps) => {
 		};
 	});
 
-	writer(props).end(rows, {
-		title: "Profiles",
-		fields: ["active", "name", "account", "auth", "credentials", "scope"],
-	});
+	const fields = [
+		"active",
+		"name",
+		"account",
+		"auth",
+		"credentials",
+		"scope",
+	] as const;
+	if (props.output !== "table") {
+		writer(props).end(rows, { title: "Profiles", fields });
+		return;
+	}
+	// Table headers are title-cased from snake_case, so `api_host` reads "API Host". A column no
+	// profile fills is left out.
+	writer(props).end(
+		rows.map(({ apiHost, ...row }) => ({ ...row, api_host: apiHost })),
+		{ title: "Profiles", fields: [...fields, "api_host"] },
+	);
 };
 
 const credentialsListValue = (
@@ -585,6 +622,8 @@ const create = async (props: CreateProps) => {
 	assertValidProfileName(name);
 	// Before the key is read from stdin, verified against the API, or minted in a browser.
 	assertProfilesUsable(props.configDir, name);
+	const hosts = hostUpdateFor(name);
+	const previousHosts = issuingHosts(props.configDir, name, props);
 	if (props.keyring === true) {
 		storeFor(props.configDir).assertKeyringWritable(
 			existingLocation(props.configDir, name)?.storage === "keyring"
@@ -603,7 +642,7 @@ const create = async (props: CreateProps) => {
 				"--mint creates a new key, so it cannot be combined with --api-key. Drop one.",
 			);
 		}
-		await createByMinting(props);
+		await createByMinting(props, hosts, previousHosts);
 		return;
 	}
 
@@ -636,6 +675,7 @@ const create = async (props: CreateProps) => {
 				_: ["auth"],
 				profile: name,
 				keyring: props.keyring,
+				hosts,
 			})) === ""
 		) {
 			throw new Error(
@@ -644,7 +684,11 @@ const create = async (props: CreateProps) => {
 		}
 		// authFlow retires keyring replacements; repeating it here would revoke the session twice.
 		if (at.storage !== "keyring") {
-			await retirePreviousCredential(props, name, previous);
+			await retirePreviousCredential(
+				{ ...props, ...previousHosts },
+				name,
+				previous,
+			);
 		}
 		const signedIn = readProfiles(props.configDir, log.warning)?.profiles[
 			name
@@ -691,7 +735,7 @@ const create = async (props: CreateProps) => {
 		}),
 	);
 	try {
-		recordProfile(props, name, at, identity);
+		recordProfile(props, name, at, identity, hosts);
 	} catch (err) {
 		if (at.storage === "keyring" && existing?.storage !== "keyring") {
 			warnIfKeyringRollbackUnconfirmed(
@@ -701,7 +745,12 @@ const create = async (props: CreateProps) => {
 		}
 		throw err instanceof Error ? err : new Error(String(err));
 	}
-	await retirePreviousCredential(props, name, previous, apiKey);
+	await retirePreviousCredential(
+		{ ...props, ...previousHosts },
+		name,
+		previous,
+		apiKey,
+	);
 	if (at.storage === "keyring" && existing?.storage === "file") {
 		deleteLeftoverOwnedFile(props.configDir, existing.path, name);
 	}
@@ -769,18 +818,21 @@ const report = (
 	},
 ): void => {
 	const out = writer(props);
+	const entry = readProfiles(props.configDir)?.profiles[record.name];
+	const hosts = entry === undefined ? {} : hostsOf(entry);
 	if (props.output === "table") {
 		log.info(
-			'Profile "%s" now holds %s for %s (%s), in %s',
+			'Profile "%s" now holds %s for %s (%s), in %s%s',
 			record.name,
 			record.auth,
 			record.account,
 			record.scope,
 			record.credentials,
+			hosts.apiHost !== undefined ? `, for ${hosts.apiHost}` : "",
 		);
 		return;
 	}
-	out.end(record as never, {
+	out.end({ ...record, ...hosts } as never, {
 		fields: [
 			"name",
 			"account",
@@ -799,11 +851,13 @@ const recordProfile = (
 	name: string,
 	at: CredentialLocation,
 	identity: { label?: string; userId?: string },
+	hosts: HostUpdate,
 ): void => {
 	upsertProfile(props.configDir, name, {
 		credentials: at.storage === "keyring" ? KEYRING_CREDENTIALS : at.path,
 		...(identity.label ? { label: identity.label } : {}),
 		...(identity.userId ? { userId: identity.userId } : {}),
+		...hosts,
 	});
 };
 
@@ -815,7 +869,11 @@ const recordProfile = (
  * it, so no half-forgotten login is left behind — which also means the file holds exactly one
  * credential, for exactly one account.
  */
-const createByMinting = async (props: CreateProps) => {
+const createByMinting = async (
+	props: CreateProps,
+	hosts: HostUpdate,
+	previousHosts: Hosts,
+) => {
 	const { name } = props;
 
 	// `authFlow` refuses to open a browser in CI; minting calls `auth` directly and so has to
@@ -884,7 +942,7 @@ const createByMinting = async (props: CreateProps) => {
 			}),
 		);
 		try {
-			recordProfile(props, name, at, identity);
+			recordProfile(props, name, at, identity, hosts);
 		} catch (err) {
 			if (at.storage === "keyring" && existing?.storage !== "keyring") {
 				warnIfKeyringRollbackUnconfirmed(
@@ -896,7 +954,12 @@ const createByMinting = async (props: CreateProps) => {
 			}
 			throw err instanceof Error ? err : new Error(String(err));
 		}
-		await retirePreviousCredential(props, name, previous, minted.key);
+		await retirePreviousCredential(
+			{ ...props, ...previousHosts },
+			name,
+			previous,
+			minted.key,
+		);
 		if (at.storage === "keyring" && existing?.storage === "file") {
 			deleteLeftoverOwnedFile(props.configDir, existing.path, name);
 		}

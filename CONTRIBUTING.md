@@ -91,13 +91,14 @@ Decide the layer before writing the change, and name it in the PR with the reaso
 
 ## Staging-only features
 
-A CLI feature whose API is only on Neon's staging console ships **staging-only**: the CLI exposes it only when the host requests go to (`--api-host`, else `NEON_API_HOST`) has the staging hostname `console-stage.neon.build`. Everywhere else it is hidden from `--help` and fails with a "coming soon" error. No feature is gated today; Neon Realtime was until its API reached production. To try one, point the CLI at staging with a staging API key:
+A CLI feature whose API is only on Neon's staging console ships **staging-only**: the CLI exposes it only when the host requests go to (`--api-host`, else the selected named profile's recorded host, else `NEON_API_HOST`) has the staging hostname `console-stage.neon.build`. Everywhere else it is hidden from `--help` and fails with a "coming soon" error. No feature is gated today; Neon Realtime was until its API reached production. To try one, store a staging API key in a named profile that records the staging host, then select that profile:
 
 ```bash
-export NEON_API_HOST=https://console-stage.neon.build/api/v2
-export NEON_API_KEY=<staging key>
-neon <command> --help
+echo "$STAGING_KEY" | neon profile create staging --api-key - --api-host https://console-stage.neon.build/api/v2
+neon --profile staging <command> --help
 ```
+
+The profile keeps `--api-host` and `--oauth-host` (for `neon login --profile staging`) until you pass them again; passing the production URL removes them. `NEON_API_HOST` with `NEON_API_KEY` also works.
 
 - **An endpoint that answers HTTP 500 in production but works on staging is most likely staging-only for now** and needs the gate. Production answered the unreleased Realtime route with 500, not 404.
 - **Confirm with the feature's owner that it should be staging-only** before adding or removing a gate.

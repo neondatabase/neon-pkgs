@@ -30,7 +30,7 @@ import {
 	expect,
 	vi,
 } from "vitest";
-import type { NeonApiClient } from "../api.js";
+import { getApiClient, type NeonApiClient } from "../api.js";
 import * as authModule from "../auth";
 import { AuthRefreshError, NEONCTL_SCOPES, refreshToken } from "../auth";
 import { claimableCredentialsPath } from "../claimable/state.js";
@@ -42,6 +42,7 @@ import {
 	authFlow,
 	deleteCredentialsAt,
 	ensureAuth,
+	handler,
 	locationForAuth,
 } from "./auth";
 
@@ -99,6 +100,104 @@ describe("auth", () => {
 		expect(credentials.user_id).toEqual(expect.any(String));
 		expect(info).toHaveBeenCalledWith("Auth complete (profile DEFAULT)");
 		info.mockRestore();
+	});
+
+	describe("hosts a named profile records", () => {
+		const argv = process.argv;
+		let dir = "";
+		beforeEach(() => {
+			dir = mkdtempSync(join(tmpdir(), "neon-login-hosts-"));
+		});
+		afterEach(() => {
+			process.argv = argv;
+			rmSync(dir, { recursive: true, force: true });
+		});
+		const invoke = (args: string[]) => {
+			process.argv = ["node", "neon", ...args];
+		};
+		const entry = (name: string) =>
+			JSON.parse(readFileSync(join(dir, "profiles.json"), "utf8"))
+				.profiles[name];
+		const unreachable = "http://127.0.0.1:9";
+
+		test("login records the typed hosts, and a later login without them signs in at the recorded ones", async ({
+			runMockServer,
+		}) => {
+			const server = await runMockServer("main");
+			const apiHost = `http://localhost:${(server.address() as AddressInfo).port}`;
+			const oauthHost = `http://localhost:${oauthServer.address().port}`;
+			const props = {
+				_: ["login"],
+				clientId: "test-client-id",
+				configDir: dir,
+				forceAuth: true,
+				allowUnsafeTls: true,
+				profile: "stage",
+			};
+
+			invoke([
+				"login",
+				"--profile",
+				"stage",
+				"--api-host",
+				apiHost,
+				"--oauth-host",
+				oauthHost,
+			]);
+			await handler({ ...props, apiHost, oauthHost });
+			expect(entry("stage")).toMatchObject({ apiHost, oauthHost });
+
+			invoke(["login", "--profile", "stage"]);
+			await handler({
+				...props,
+				apiHost: unreachable,
+				oauthHost: unreachable,
+			});
+			expect(entry("stage")).toMatchObject({ apiHost, oauthHost });
+		});
+
+		test("a sign-in a command starts for a named profile records the typed hosts", async ({
+			runMockServer,
+		}) => {
+			const server = await runMockServer("main");
+			const apiHost = `http://localhost:${(server.address() as AddressInfo).port}`;
+			const oauthHost = `http://localhost:${oauthServer.address().port}`;
+
+			writeFileSync(
+				join(dir, "profiles.json"),
+				JSON.stringify({
+					version: 1,
+					profiles: {
+						fresh: { credentials: "credentials.fresh.json" },
+					},
+				}),
+			);
+			invoke([
+				"projects",
+				"list",
+				"--profile",
+				"fresh",
+				"--api-host",
+				apiHost,
+				"--oauth-host",
+				oauthHost,
+			]);
+			await ensureAuth({
+				_: ["projects", "list"],
+				apiHost,
+				oauthHost,
+				clientId: "test-client-id",
+				configDir: dir,
+				forceAuth: true,
+				allowUnsafeTls: true,
+				profile: "fresh",
+				apiKey: "",
+				apiClient: getApiClient({ apiKey: "", apiHost }),
+				help: false,
+			});
+
+			expect(entry("fresh")).toMatchObject({ apiHost, oauthHost });
+		});
 	});
 
 	test("completes a browser sign-in that finishes minutes after the URL is printed", async ({
