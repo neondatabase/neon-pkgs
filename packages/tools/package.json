@@ -1,6 +1,6 @@
 {
 	"name": "@neon/tools",
-	"version": "2.17.3",
+	"version": "2.18.0",
 	"description": "Agent tools for the Neon SDK ergonomic client, compatible with MCP, Eve, and Mastra.",
 	"keywords": [
 		"neon",
@@ -88,7 +88,7 @@
 		"zod": "^4.5.4"
 	},
 	"peerDependencies": {
-		"@neon/effect": "^0.5.5",
+		"@neon/effect": "^0.5.6",
 		"effect": "^4.1.2"
 	},
 	"peerDependenciesMeta": {
