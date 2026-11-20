@@ -349,7 +349,7 @@ await neon.projects.transfer({
 | `get({ projectId, branchId })` | `Branch` | |
 | `create({ projectId, …input })` | `Branch` | RW compute on by default. `noCompute: true` skips the endpoint. No connection string. Readiness polling on by default. `input`: `{ name?, parent_id?, parent_lsn?, parent_timestamp?, protected?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? }, noCompute? }` |
 | `update({ projectId, branchId, …input })` | `Branch` | `input`: `{ name?, protected?, expires_at? }` |
-| `delete({ projectId, branchId })` | **→void** | With readiness polling on, a failed cleanup operation resolves the call only if the branch then reads back 404, while other cleanup may still be running; otherwise `NeonOperationError` (`NeonAbortError` if aborted) |
+| `delete({ projectId, branchId })` | `Branch \| null` | The deleted branch as Neon returned it, or `null` when the project has no branch with that id (Neon answers 204). With readiness polling on, a failed cleanup operation resolves the call only if the branch then reads back 404, while other cleanup may still be running; otherwise `NeonOperationError` (`NeonAbortError` if aborted) |
 | `createAndConnect({ projectId, …input, pooled? }, options?)` | **[W]** `{ branch, endpoint, connectionString }` | `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }`; `pooled` default `true` |
 | `getDefault({ projectId })` | `Branch` | resolves the default branch by the `default` flag |
 | `setDefault({ projectId, branchId })` | `Branch` | |

@@ -421,7 +421,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "branches.delete",
 			generated: "deleteProjectBranch",
-			output: z.null(),
+			output: output.Branch.nullable(),
 			run: (neon, input, signal) =>
 				neon.branches.delete(
 					{ projectId: input.project_id, branchId: input.branch_id },

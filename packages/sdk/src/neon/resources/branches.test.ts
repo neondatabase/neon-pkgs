@@ -254,7 +254,7 @@ describe("branches.delete", () => {
 			{ waitForReadiness: true },
 		);
 
-		expect(result).toEqual({ data: undefined, error: undefined });
+		expect(result).toEqual({ data: { id: "br-1" }, error: undefined });
 		expect(readBacks(calls)).toHaveLength(1);
 	});
 
@@ -269,7 +269,7 @@ describe("branches.delete", () => {
 				{ projectId: "p-1", branchId: "br-1" },
 				{ throwOnError: true },
 			),
-		).resolves.toBeUndefined();
+		).resolves.toEqual({ id: "br-1" });
 	});
 
 	it("throws the operation error on a throwing call while the branch is still readable", async () => {
@@ -297,7 +297,7 @@ describe("branches.delete", () => {
 			{ waitForReadiness: true },
 		);
 
-		expect(result.error).toBeUndefined();
+		expect(result).toEqual({ data: { id: "br-1" }, error: undefined });
 		expect(calls.some((call) => call.url.includes("/operations/"))).toBe(
 			false,
 		);
@@ -383,8 +383,27 @@ describe("branches.delete", () => {
 			{ waitForReadiness: true },
 		);
 
-		expect(result.error).toBeUndefined();
+		expect(result).toEqual({ data: { id: "br-1" }, error: undefined });
 		expect(readBacks(calls)).toHaveLength(0);
+	});
+
+	it.each([
+		["no", {}],
+		["a JSON", { "content-type": "application/json" }],
+	])("resolves to null when Neon answers 204 with %s content type", async (_, headers) => {
+		const neon = createNeonClient({
+			apiKey: "test",
+			retries: 0,
+			...waiting,
+			fetch: async () => new Response(null, { status: 204, headers }),
+		});
+
+		const result = await neon.branches.delete(
+			{ projectId: "p-1", branchId: "br-1" },
+			{ waitForReadiness: true },
+		);
+
+		expect(result).toEqual({ data: null, error: undefined });
 	});
 
 	it("neither polls nor reads back without readiness polling", async () => {
@@ -395,7 +414,7 @@ describe("branches.delete", () => {
 			branchId: "br-1",
 		});
 
-		expect(result.error).toBeUndefined();
+		expect(result).toEqual({ data: { id: "br-1" }, error: undefined });
 		expect(calls).toHaveLength(1);
 	});
 });

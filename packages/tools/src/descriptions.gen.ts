@@ -22,7 +22,7 @@ export const toolDescriptions: Readonly<Partial<Record<NeonToolId, string>>> = {
 	"branches.list": "Lists a project's branches with id (br-...), name, parent, and default flag; search finds a branch's id by name.",
 	"branches.get": "Gets a branch record: name, parent, state, protection, size, and timestamps. For its databases and tables, use {{branches.describe}}.",
 	"branches.update": "Renames a branch, protects or unprotects it, or sets when it expires.",
-	"branches.delete": "Deletes a branch with all its data and disconnects its clients. NEVER run autonomously; always ask the user first. The root, the default, and a branch with children cannot be deleted. For the whole project, use {{projects.delete}}.",
+	"branches.delete": "Deletes a branch with all its data and disconnects its clients. NEVER run autonomously; always ask the user first. The root, the default, and a branch with children cannot be deleted. Returns the deleted branch, or null when the project has no branch with that id. For the whole project, use {{projects.delete}}.",
 	"branches.setDefault": "Makes a branch the project's default; the previous default loses the flag.",
 	"branches.finalizeRestore": "Finalizes a branch restored with finalize false: moves the original branch's computes onto it, restarting them, and takes over its name. NEVER run autonomously; always ask the user first.",
 	"postgres.endpoints.list": "Lists the compute endpoints of every branch in a project. For one branch, use {{postgres.endpoints.listByBranch}}.",

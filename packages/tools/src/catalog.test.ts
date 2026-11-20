@@ -1440,11 +1440,59 @@ describe("special mappings", () => {
 
 		await expect(
 			tool.execute({ project_id: "p", branch_id: "br" }),
-		).resolves.toEqual({ data: null });
+		).resolves.toEqual({ data: { id: "br" } });
 		expect(requests.map((request) => request.method)).toEqual([
 			"DELETE",
 			"GET",
 			"GET",
 		]);
+	});
+
+	test("branches.delete returns the deleted branch, or null when Neon answers 204", async () => {
+		const branch = {
+			id: "br",
+			project_id: "p",
+			name: "scratch",
+			current_state: "ready",
+			pending_state: "storage_deleted",
+			state_changed_at: "2026-01-01T00:00:00Z",
+			creation_source: "console",
+			default: false,
+			protected: false,
+			cpu_used_sec: 0,
+			compute_time_seconds: 0,
+			active_time_seconds: 0,
+			written_data_bytes: 0,
+			data_transfer_bytes: 0,
+			created_at: "2026-01-01T00:00:00Z",
+			updated_at: "2026-01-01T00:00:00Z",
+		};
+		let status = 200;
+		const tool = createNeonTool("branches.delete", {
+			apiKey: "test-key",
+			fetch: async () =>
+				status === 204
+					? new Response(null, { status })
+					: jsonResponse({ branch, operations: [] }),
+		});
+		const published = toMcpOutputSchema(tool.outputSchema);
+
+		const deleted = await tool.execute({
+			project_id: "p",
+			branch_id: "br",
+		});
+		expect(deleted).toEqual({ data: branch });
+		expect(published["~standard"].validate(deleted)).toEqual({
+			value: deleted,
+		});
+		status = 204;
+		const missing = await tool.execute({
+			project_id: "p",
+			branch_id: "br",
+		});
+		expect(missing).toEqual({ data: null });
+		expect(published["~standard"].validate(missing)).toEqual({
+			value: missing,
+		});
 	});
 });

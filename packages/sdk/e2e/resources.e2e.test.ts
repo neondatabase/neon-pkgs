@@ -216,7 +216,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		);
 		expect(none).toEqual([]);
 
-		expectOk(
+		const deleted = expectOk(
 			await neon.branches.delete(
 				{ projectId, branchId: withCompute.id },
 				{
@@ -224,6 +224,15 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 				},
 			),
 		);
+		expect(deleted?.id).toBe(withCompute.id);
+		expect(
+			expectOk(
+				await neon.branches.delete({
+					projectId,
+					branchId: withCompute.id,
+				}),
+			),
+		).toBeNull();
 		expectOk(
 			await neon.branches.delete(
 				{ projectId, branchId: bare.id },
