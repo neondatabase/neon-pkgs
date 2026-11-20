@@ -698,7 +698,7 @@ The span records every failure's tag as `error.type` and fails only for the serv
 
 Anything else a tool throws becomes a defect. `toNeonToolError` is the mapping, for promise code you wrap yourself.
 
-Retries are off unless you pass `retry`. The SDK already retries 423, 429, and 503 responses and honours `Retry-After`. `retryReadOnlyNetworkFailures` retries a read-only tool that got no response, twice with jittered exponential backoff from 200 ms; mutations are never retried, since one may have reached the API. A retry runs the whole tool again, including `onExecute` hooks and every page of a list. Pass your own `NeonToolRetryPolicy` (`schedule`, `times`, `shouldRetry`) for a different policy. Whatever it says, the adapter only retries read-only tools and never a 423, 429, or 503 response.
+Retries are off unless you pass `retry`. The SDK already retries 423, 429, and 503 responses and honours `Retry-After`, and its ergonomic client resends a `GET` whose connection dropped before a response. `retryReadOnlyNetworkFailures` retries a read-only tool that got no response, twice with jittered exponential backoff from 200 ms; mutations are never retried, since one may have reached the API. A retry runs the whole tool again, including `onExecute` hooks and every page of a list. Pass your own `NeonToolRetryPolicy` (`schedule`, `times`, `shouldRetry`) for a different policy. Whatever it says, the adapter only retries read-only tools and never a 423, 429, or 503 response.
 
 ## Safety and binary data
 
