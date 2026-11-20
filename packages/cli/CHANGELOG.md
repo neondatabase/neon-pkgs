@@ -1,5 +1,11 @@
 # neon
 
+## 9.9.0
+
+### Minor Changes
+
+- b71be7c: Named profiles now remember the `--api-host` and `--oauth-host` they were created or signed in with, so `neon --profile staging <command>` reaches that environment without setting `NEON_API_HOST` on every command. `neon profile list` shows the recorded host.
+
 ## 9.8.0
 
 ### Minor Changes
