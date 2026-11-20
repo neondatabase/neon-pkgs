@@ -1175,7 +1175,7 @@ neon credentials rotate nak_live_…
 neon credentials revoke nak_live_…
 ```
 
-`create` always issues a customer-managed (`user`) credential. `--scope` is repeatable; `--help` lists the values. `reveal` and `rotate` print `api_token` and `s3_secret_access_key`. Rotation keeps the same `token_id` (it is the `AWS_ACCESS_KEY_ID`) and is not idempotent: a retry after a lost response mints another secret.
+`create` always issues a customer-managed (`user`) credential. `--scope` is repeatable; `--help` lists the values. `reveal` and `rotate` print `api_token` and `s3_secret_access_key`. `reveal` also prints the credential's `name` and `scopes` from `list`, plus its `branch_id` in JSON and YAML output. `branch_id` is the branch the credential was issued on, which can be an ancestor of `--branch`. When `--branch` does not list the credential, `reveal` warns and prints no `branch_id`. Rotation keeps the same `token_id` (it is the `AWS_ACCESS_KEY_ID`) and is not idempotent: a retry after a lost response mints another secret.
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
 
