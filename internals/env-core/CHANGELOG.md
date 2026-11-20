@@ -1,5 +1,11 @@
 # @neon-internals/env-core
 
+## 0.0.56
+
+### Patch Changes
+
+- @neon/config@1.14.5
+
 ## 0.0.55
 
 ### Patch Changes

@@ -1,5 +1,23 @@
 # neon
 
+## 9.8.0
+
+### Minor Changes
+
+- 402ab97: `neon init` now writes `neon.ts` from the branch's current services when it links an existing project, as `neon config init --from-branch` does, so `neon env pull` returns those services' variables (Neon Auth, Data API, Object Storage, Realtime). New projects still get the starter policy, `--services` still picks the services, and `--no-config` still skips `neon.ts`.
+
+### Patch Changes
+
+- eba4c88: `neon init`, `neon config init`, and `neon functions new` no longer fail with `spawn ENOENT` in a project that has lockfiles from several package managers, such as `bun.lockb` next to `package-lock.json`, when one of those package managers is not installed. They now install with one that is on PATH, unless `package.json` pins one with `packageManager`, or the project is a pnpm workspace or was installed by pnpm.
+- 9b241ad: `neon credentials reveal` now prints the credential's `branch_id`, `name`, and `scopes` next to its secrets, as `create` and `rotate` do. When the branch you pass does not list the credential, it prints the secrets without that metadata and warns.
+- 23aa7d2: `neon data-api create --help` now says `--add-default-grants` also covers tables the database owner creates later.
+- d0d33f9: The router `index.ts` that `neon functions new` writes now names its default export (`export default handler;`), so Next.js's ESLint config no longer warns on it with `import/no-anonymous-default-export`.
+- 5692070: `list_incidents` and `neon incidents --help` now say that `updated_at` is when neonstatus.com last updated the overall status, not when the call fetched the page.
+- Updated dependencies [2fe06c0]
+  - @neon/sdk@7.14.3
+  - @neon/config@1.14.5
+  - @neon/config-runtime@1.12.8
+
 ## 9.7.2
 
 ### Patch Changes

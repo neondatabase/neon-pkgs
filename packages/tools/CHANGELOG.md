@@ -1,5 +1,23 @@
 # @neon/tools
 
+## 2.18.0
+
+### Minor Changes
+
+- c693143: `postgres.dataApi.get` (`get_data_api` on the Neon MCP server) returns `{ enabled: false }` for a database without a Data API instead of throwing a 404 `NeonNotFoundError`, and adds `enabled: true` to a configured Data API's result. A missing branch or database still throws. TypeScript callers narrow on `enabled` before reading `url`.
+
+### Patch Changes
+
+- 23aa7d2: The `add_default_grants` input of `postgres.dataApi.create` now says the grants also cover tables the database owner creates later, that without the flag the Data API can read no table until you grant access, and that `anonymous` is never granted.
+- e4556ed: `branches.describe` and the branch result of `resources.fetch` no longer list Neon's reserved `postgres` database. The Neon API never lists it, so `sql.run`, `database.inspect`, `queries.listSlow`, and the other SQL tools return 404 for it.
+- ba66529: `docs.get` (the MCP server's `get_doc`) drops the agent skills note and feedback footer that neon.com adds to its markdown pages for agents browsing the site.
+- 5692070: `list_incidents` and `neon incidents --help` now say that `updated_at` is when neonstatus.com last updated the overall status, not when the call fetched the page.
+- d2f4c51: The `sql.run` description now says to send several statements one per call or through `sql.runTransaction`, since a `sql.run` call with more than one statement fails.
+- 8fce12a: SQL tools and `postgres.connectionString` make one fewer Neon API request when `branch_id` is omitted and `database_name` is given with `role_name` or a pinned `postgresRole`.
+- Updated dependencies [2fe06c0]
+  - @neon/sdk@7.14.3
+  - @neon/effect@0.5.6
+
 ## 2.17.3
 
 ### Patch Changes

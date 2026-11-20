@@ -1,5 +1,11 @@
 # @neon/sdk
 
+## 7.14.3
+
+### Patch Changes
+
+- 2fe06c0: `createNeonClient` now retries a `GET` whose connection dropped before a response (`ECONNRESET`, `EPIPE`, `UND_ERR_SOCKET`) within the `retries` budget. This includes the lookups in `postgres.connectionString`, which also start retrying `423`, `429`, and `503`.
+
 ## 7.14.2
 
 ### Patch Changes
