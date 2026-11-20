@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createNeonClient } from "../client.js";
 import type { NeonConfig } from "../config.js";
-import { NeonClientError, NeonOperationError } from "../errors.js";
+import {
+	NeonApiError,
+	NeonClientError,
+	NeonOperationError,
+} from "../errors.js";
 
 function neonRouting(
 	respond: (request: { url: string; method: string; body: unknown }) => {
@@ -147,6 +151,79 @@ describe("branches.create", () => {
 			kind: "client",
 			message: "Pass compute settings or noCompute, not both.",
 		});
+	});
+});
+
+describe("creating a branch from a parent with an expiration date", () => {
+	const API_MESSAGE =
+		"Branches with an expiration date cannot have child branches";
+	const refused = (code: string, message: string) => ({
+		status: 400,
+		body: { request_id: "req-1", code, message },
+	});
+
+	it("names the parent and both ways forward, keeping the API error", async () => {
+		const { neon, calls } = neonRouting(() =>
+			refused("BRANCHING_IS_NOT_ALLOWED", API_MESSAGE),
+		);
+
+		const { error } = await neon.branches.create({
+			projectId: "p-1",
+			name: "scratch",
+			parent_id: "br-expiring",
+		});
+
+		expect(error).toBeInstanceOf(NeonApiError);
+		expect(error).toMatchObject({
+			kind: "api",
+			status: 400,
+			code: "BRANCHING_IS_NOT_ALLOWED",
+			requestId: "req-1",
+			body: { code: "BRANCHING_IS_NOT_ALLOWED", message: API_MESSAGE },
+		});
+		expect(error?.message).toBe(
+			`Cannot branch from br-expiring because it has an expiration date. Create the branch from a parent without one, or remove the expiration from br-expiring (update it with expires_at: null) and retry. Removing it keeps br-expiring until someone deletes it, so get the user's agreement first. (API error: "${API_MESSAGE}")`,
+		);
+		expect(calls).toHaveLength(1);
+
+		await expect(
+			neon.branches.create(
+				{ projectId: "p-1", parent_id: "br-expiring" },
+				{ throwOnError: true },
+			),
+		).rejects.toMatchObject({
+			code: "BRANCHING_IS_NOT_ALLOWED",
+			message: expect.stringMatching(/^Cannot branch from br-expiring /),
+		});
+	});
+
+	it("explains the same refusal from createAndConnect", async () => {
+		const { neon } = neonRouting(() =>
+			refused("BRANCHING_IS_NOT_ALLOWED", API_MESSAGE),
+		);
+
+		const { error } = await neon.branches.createAndConnect({
+			projectId: "p-1",
+			parentId: "br-expiring",
+		});
+
+		expect(error?.message).toMatch(
+			/^Cannot branch from br-expiring because it has an expiration date\./,
+		);
+	});
+
+	it("keeps the API message for another BRANCHING_IS_NOT_ALLOWED rule", async () => {
+		const message = "Branching is not allowed for this branch";
+		const { neon } = neonRouting(() =>
+			refused("BRANCHING_IS_NOT_ALLOWED", message),
+		);
+
+		const { error } = await neon.branches.create({
+			projectId: "p-1",
+			parent_id: "br-expiring",
+		});
+
+		expect(error?.message).toBe(message);
 	});
 });
 

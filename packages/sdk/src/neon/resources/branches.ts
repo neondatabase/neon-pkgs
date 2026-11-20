@@ -22,7 +22,9 @@ import { withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import {
 	NeonAbortError,
+	NeonApiError,
 	NeonClientError,
+	type NeonErrorUnion,
 	NeonNotFoundError,
 	NeonOperationError,
 } from "../errors.js";
@@ -67,6 +69,35 @@ export interface BranchConnection {
 }
 
 const NO_COMPUTE_WITH_COMPUTE = "Pass compute settings or noCompute, not both.";
+
+/**
+ * `BRANCHING_IS_NOT_ALLOWED` covers more than one rule, so the message decides
+ * whether the parent's expiration date is the cause.
+ */
+const EXPIRING_PARENT_MESSAGE = /expiration date cannot have child branches/i;
+
+function explainExpiringParent(
+	error: NeonErrorUnion,
+	parentId: string | undefined,
+): NeonErrorUnion {
+	if (
+		parentId === undefined ||
+		error.kind !== "api" ||
+		error.code !== "BRANCHING_IS_NOT_ALLOWED" ||
+		!EXPIRING_PARENT_MESSAGE.test(error.message)
+	)
+		return error;
+	return new NeonApiError(
+		`Cannot branch from ${parentId} because it has an expiration date. Create the branch from a parent without one, or remove the expiration from ${parentId} (update it with expires_at: null) and retry. Removing it keeps ${parentId} until someone deletes it, so get the user's agreement first. (API error: "${error.message}")`,
+		{
+			status: error.status,
+			code: error.code,
+			requestId: error.requestId,
+			response: error.response,
+			body: error.body,
+		},
+	);
+}
 
 const readWriteEndpoint = (compute?: ComputeSettings) => ({
 	type: "read_write" as const,
@@ -247,7 +278,7 @@ export class Branches<DThrow extends boolean> {
 		if (parsed.error) {
 			return finalize(err<Branch>(parsed.error), shouldThrow);
 		}
-		return this.#ctx.run(
+		const result = await this.#ctx.execute(
 			{
 				...opts,
 				waitForReadiness: this.#ctx.resolveWait(opts, true),
@@ -270,6 +301,17 @@ export class Branches<DThrow extends boolean> {
 					signal,
 				}),
 			(data) => data.branch,
+		);
+		return finalize(
+			result.error
+				? err<Branch>(
+						explainExpiringParent(
+							result.error,
+							parsed.branch.parent_id,
+						),
+					)
+				: result,
+			shouldThrow,
 		);
 	}
 
@@ -412,6 +454,14 @@ export class Branches<DThrow extends boolean> {
 				}),
 			(data) => data,
 		);
+		if (result.error) {
+			return finalize(
+				err<BranchConnection>(
+					explainExpiringParent(result.error, parentId),
+				),
+				shouldThrow,
+			);
+		}
 		const out = withConnectionString(
 			result,
 			(data) => data.connection_uris,
