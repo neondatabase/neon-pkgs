@@ -176,6 +176,21 @@ function withDeployFunctionEnv(
 }
 
 /**
+ * The env key names a function deployment sends, split by whether the deploy API sets them or
+ * removes them (`""`). Values stay out: `details` reaches `-o json` output and hooks.
+ */
+function functionEnvDetails(env: Record<string, string>): {
+	envSet: string[];
+	envUnset: string[];
+} {
+	const keys = Object.keys(env).sort();
+	return {
+		envSet: keys.filter((key) => env[key] !== ""),
+		envUnset: keys.filter((key) => env[key] === ""),
+	};
+}
+
+/**
  * Push a Neon branch policy to a specific project + branch.
  *
  * Filesystem- and env-agnostic: the caller supplies an already-validated `Config` object
@@ -490,6 +505,7 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 					slug: step.fn.slug,
 					source: step.fn.source,
 					runtime: step.fn.runtime,
+					...functionEnvDetails(step.fn.env),
 				},
 			};
 		case "create-trigger":
@@ -866,6 +882,7 @@ async function applyStep(
 					source: step.fn.source,
 					runtime: step.fn.runtime,
 					deploymentId: deployment.id,
+					...functionEnvDetails(step.fn.env),
 				},
 			};
 		}

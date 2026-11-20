@@ -293,6 +293,42 @@ describe("renderAppliedChanges", () => {
 		expect(text).not.toContain("https://");
 	});
 
+	it("lists the env keys a function deploy sets and unsets under its line", () => {
+		const changes: AppliedChange[] = [
+			{
+				kind: "service",
+				action: "update",
+				identifier: "function:api",
+				details: {
+					slug: "api",
+					envSet: ["LOG_LEVEL", "RESEND_API_KEY"],
+					envUnset: ["SENTRY_DSN"],
+				},
+			},
+			{
+				kind: "service",
+				action: "create",
+				identifier: "function:worker",
+				details: { slug: "worker", envSet: [], envUnset: ["TOKEN"] },
+			},
+		];
+		const plain = renderAppliedChanges(changes, "Planned changes", {
+			color: false,
+		});
+		expect(plain.split("\n")).toEqual([
+			"Planned changes",
+			"  ~ function api",
+			"      env set    LOG_LEVEL, RESEND_API_KEY",
+			"      env unset  SENTRY_DSN",
+			"  + function worker",
+			"      env unset  TOKEN",
+		]);
+		const colored = renderAppliedChanges(changes, "Planned changes", {
+			color: true,
+		});
+		expect(stripAnsi(colored)).toBe(plain);
+	});
+
 	it("renders a Data API disable as a - line", () => {
 		const changes: AppliedChange[] = [
 			{ kind: "service", action: "delete", identifier: "dataApi" },
