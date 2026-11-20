@@ -669,6 +669,66 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		);
 	});
 
+	it("outliers, calls, and queries.listSlow leave out Neon's own statements and their own SQL", async () => {
+		const sessionReset = [
+			"CLOSE ALL",
+			"SET SESSION AUTHORIZATION DEFAULT",
+			"RESET ALL",
+			"DEALLOCATE ALL",
+			"UNLISTEN *",
+			"SELECT pg_advisory_unlock_all()",
+			"DISCARD TEMP",
+			"DISCARD SEQUENCES",
+		];
+		// Result rows carry no role, and the user's role also runs some of the
+		// same statements (`COMMIT`), so compare only what `cloud_admin` alone ran.
+		const { data: platform } = await run(
+			`SELECT s.query FROM pg_stat_statements s
+			 JOIN pg_roles r ON r.oid = s.userid
+			 WHERE r.rolname = 'cloud_admin'
+			   AND NOT EXISTS (
+			     SELECT 1 FROM pg_stat_statements o
+			     WHERE o.queryid = s.queryid AND o.userid <> s.userid
+			   )`,
+			{ max_rows: 1000 },
+		);
+		const platformQueries = platform.rows.map((row) => String(row.query));
+		const { data: counts } = await run(
+			`SELECT
+			   count(*) FILTER (
+			     WHERE query IN (${sessionReset.map((query) => `'${query}'`).join(", ")})
+			   )::int AS resets,
+			   count(*) FILTER (WHERE query LIKE '%/* neon inspect */%')::int AS tagged
+			 FROM pg_stat_statements`,
+		);
+		// Without each kind of statement in the stats, the checks below pass on
+		// unfiltered output too. `tagged` counts the earlier listSlow run's SQL.
+		expect(platformQueries.length).toBeGreaterThan(0);
+		expect(counts.rows[0]?.resets).toBeGreaterThan(0);
+		expect(counts.rows[0]?.tagged).toBeGreaterThan(0);
+
+		const notWorkload = (query: string) =>
+			platformQueries.includes(query) ||
+			sessionReset.includes(query) ||
+			query.includes("/* neon inspect */");
+		for (const check of ["outliers", "calls"] as const) {
+			const { data } = await tools["database.inspect"].execute({
+				project_id: projectId,
+				check,
+			});
+			const queries = data.rows.map((row) => String(row.query));
+			expect(queries.length, check).toBeGreaterThan(0);
+			expect(queries.filter(notWorkload), check).toEqual([]);
+		}
+		const { data } = await tools["queries.listSlow"].execute({
+			project_id: projectId,
+			limit: 1000,
+		});
+		const queries = data.slow_queries.map((row) => String(row.query));
+		expect(queries.filter(notWorkload)).toEqual([]);
+		expect(queries).toContain("SELECT count(*) FROM items");
+	});
+
 	it("database.inspect runs table-sizes across every database", async () => {
 		const { data } = await tools["database.inspect"].execute({
 			project_id: projectId,
