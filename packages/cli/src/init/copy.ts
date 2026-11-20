@@ -10,7 +10,7 @@ export const INIT_SUBTITLE =
 export const MODE_MESSAGE = "How would you like to set up Neon?";
 export const MODE_RECOMMENDED_TITLE = "Recommended setup";
 export const MODE_RECOMMENDED_DESCRIPTION =
-	"Set up detected agents, link a project, and add a default neon.ts in this directory.";
+	"Set up detected agents, link a project, and add neon.ts in this directory.";
 export const MODE_CUSTOM_TITLE = "Custom setup";
 export const MODE_CUSTOM_DESCRIPTION =
 	"Choose agent tooling, project setup, and the services declared in neon.ts.";
