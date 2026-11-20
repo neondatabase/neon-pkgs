@@ -1,10 +1,11 @@
-import { hideBin, Parser } from "yargs/helpers";
+import { hideBin } from "yargs/helpers";
+import { invocationHosts } from "../hosts.js";
 
 /**
  * Staging-only features ship in a release before their API reaches production. The CLI
- * exposes them only when the API host it sends requests to (`--api-host`, else
- * `NEON_API_HOST`) is Neon's staging console; with production or no host set, they are
- * hidden from help and fail with a "coming soon" message.
+ * exposes them only when the API host it sends requests to (`--api-host`, else the selected
+ * profile's recorded host, else `NEON_API_HOST`) is Neon's staging console; with production or
+ * no host set, they are hidden from help and fail with a "coming soon" message.
  */
 export const STAGING_API_HOST = "https://console-stage.neon.build/api/v2";
 
@@ -20,20 +21,7 @@ export const isStagingApiHost = (apiHost: string | undefined): boolean =>
 /** The API host this process was invoked with, read before or without yargs. */
 export const stagingFeaturesEnabledForArgv = (
 	args: readonly string[] = hideBin(process.argv),
-): boolean => {
-	const { argv } = Parser.detailed([...args], {
-		string: ["api-host"],
-		alias: { "api-host": ["apiHost"] },
-		configuration: {
-			"populate--": true,
-			"parse-positional-numbers": false,
-		},
-	});
-	const flag = argv["api-host"];
-	return isStagingApiHost(
-		typeof flag === "string" ? flag : process.env.NEON_API_HOST,
-	);
-};
+): boolean => isStagingApiHost(invocationHosts(args).apiHost);
 
 /** `apiHost` is a command's resolved host; without one, the host this process was invoked with. */
 export const stagingFeaturesEnabled = (apiHost?: string): boolean =>

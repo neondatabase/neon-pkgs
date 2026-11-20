@@ -1,7 +1,7 @@
 {
 	"scenarios": {
 		"--help": {
-			"modules": 374,
+			"modules": 375,
 			"requests": {},
 			"inventory": {
 				"@lukeed/uuid": 1,
@@ -51,6 +51,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -98,7 +99,7 @@
 			}
 		},
 		"--version": {
-			"modules": 374,
+			"modules": 375,
 			"requests": {},
 			"inventory": {
 				"@lukeed/uuid": 1,
@@ -148,6 +149,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -195,7 +197,7 @@
 			}
 		},
 		"api /projects/test": {
-			"modules": 450,
+			"modules": 451,
 			"requests": {
 				"GET /projects/test": 1
 			},
@@ -249,6 +251,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -299,7 +302,7 @@
 			}
 		},
 		"branches delete test_branch --project-id test": {
-			"modules": 458,
+			"modules": 459,
 			"requests": {
 				"DELETE /projects/test/branches/br-sunny-branch-123456": 1,
 				"GET /projects/test/branches": 1
@@ -356,6 +359,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -412,7 +416,7 @@
 			}
 		},
 		"branches get test_branch --project-id test": {
-			"modules": 458,
+			"modules": 459,
 			"requests": {
 				"GET /projects/test/branches": 1
 			},
@@ -468,6 +472,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -524,7 +529,7 @@
 			}
 		},
 		"branches list --project-id test": {
-			"modules": 458,
+			"modules": 459,
 			"requests": {
 				"GET /projects/test/branches": 1
 			},
@@ -580,6 +585,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -636,7 +642,7 @@
 			}
 		},
 		"branches reset test_branch --parent --project-id test": {
-			"modules": 458,
+			"modules": 459,
 			"requests": {
 				"GET /projects/test/branches": 1,
 				"POST /projects/test/branches/br-sunny-branch-123456/restore": 1
@@ -693,6 +699,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -749,7 +756,7 @@
 			}
 		},
 		"branches restore test_branch ^parent --project-id test": {
-			"modules": 458,
+			"modules": 459,
 			"requests": {
 				"GET /projects/test/branches": 1,
 				"POST /projects/test/branches/br-sunny-branch-123456/restore": 1
@@ -806,6 +813,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -862,7 +870,7 @@
 			}
 		},
 		"connection-string br-sunny-branch-123456 --project-id test --database-name test_db": {
-			"modules": 455,
+			"modules": 456,
 			"requests": {
 				"GET /projects/test/branches/br-sunny-branch-123456/databases": 1,
 				"GET /projects/test/branches/br-sunny-branch-123456/endpoints": 1,
@@ -920,6 +928,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -974,7 +983,7 @@
 			}
 		},
 		"connection-string test_branch --project-id test --database-name test_db": {
-			"modules": 455,
+			"modules": 456,
 			"requests": {
 				"GET /projects/test/branches": 1,
 				"GET /projects/test/branches/br-sunny-branch-123456/databases": 1,
@@ -1033,6 +1042,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -1087,7 +1097,7 @@
 			}
 		},
 		"databases list --project-id test": {
-			"modules": 451,
+			"modules": 452,
 			"requests": {
 				"GET /projects/test/branches": 1,
 				"GET /projects/test/branches/br-main-branch-123456/databases": 1
@@ -1142,6 +1152,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -1193,7 +1204,7 @@
 			}
 		},
 		"databases list --project-id test --branch br-sunny-branch-123456": {
-			"modules": 451,
+			"modules": 452,
 			"requests": {
 				"GET /projects/test/branches/br-sunny-branch-123456/databases": 1
 			},
@@ -1247,6 +1258,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -1298,7 +1310,7 @@
 			}
 		},
 		"me": {
-			"modules": 449,
+			"modules": 450,
 			"requests": {
 				"GET /users/me": 1
 			},
@@ -1352,6 +1364,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -1401,7 +1414,7 @@
 			}
 		},
 		"orgs list": {
-			"modules": 450,
+			"modules": 451,
 			"requests": {
 				"GET /users/me/organizations": 1
 			},
@@ -1455,6 +1468,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -1505,7 +1519,7 @@
 			}
 		},
 		"projects get test": {
-			"modules": 452,
+			"modules": 453,
 			"requests": {
 				"GET /projects/test": 1
 			},
@@ -1559,6 +1573,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -1611,7 +1626,7 @@
 			}
 		},
 		"projects list": {
-			"modules": 452,
+			"modules": 453,
 			"requests": {
 				"GET /projects": 1,
 				"GET /projects/shared": 1
@@ -1666,6 +1681,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -1718,7 +1734,7 @@
 			}
 		},
 		"projects list --help": {
-			"modules": 452,
+			"modules": 453,
 			"requests": {},
 			"inventory": {
 				"@lukeed/uuid": 1,
@@ -1770,6 +1786,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -1822,7 +1839,7 @@
 			}
 		},
 		"projects not-a-command": {
-			"modules": 452,
+			"modules": 453,
 			"requests": {},
 			"inventory": {
 				"@lukeed/uuid": 1,
@@ -1874,6 +1891,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -1926,7 +1944,7 @@
 			}
 		},
 		"roles list --project-id test": {
-			"modules": 451,
+			"modules": 452,
 			"requests": {
 				"GET /projects/test/branches": 1,
 				"GET /projects/test/branches/br-main-branch-123456/roles": 1
@@ -1981,6 +1999,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,
@@ -2032,7 +2051,7 @@
 			}
 		},
 		"roles list --project-id test --branch br-sunny-branch-123456": {
-			"modules": 451,
+			"modules": 452,
 			"requests": {
 				"GET /projects/test/branches/br-sunny-branch-123456/roles": 1
 			},
@@ -2086,6 +2105,7 @@
 				"dist/env.js": 1,
 				"dist/errors.js": 1,
 				"dist/help.js": 1,
+				"dist/hosts.js": 1,
 				"dist/human_table.js": 1,
 				"dist/index.js": 1,
 				"dist/init/unknown_agent_arg.js": 1,

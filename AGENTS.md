@@ -471,13 +471,18 @@ so "reach into an internal" is not a thing it can do.
 
 #### Staging-only features
 
-A CLI feature can ship before its API reaches production. Until then it is **staging-only**: it is exposed only when the host requests go to (`--api-host` or `--apiHost`, else `NEON_API_HOST`) has the staging hostname `console-stage.neon.build` (`https://console-stage.neon.build/api/v2`). With production or no host set, it is left out of `--help`, anything that asks for it fails with a "coming soon" error, and reads the CLI makes on its own (such as `neon env pull` without a `neon.ts`) skip it. No feature is gated today. Neon Realtime was gated until its API reached production.
+A CLI feature can ship before its API reaches production. Until then it is **staging-only**: it is exposed only when the host requests go to (`--api-host` or `--apiHost`, else the selected named profile's recorded `apiHost`, else `NEON_API_HOST`) has the staging hostname `console-stage.neon.build` (`https://console-stage.neon.build/api/v2`). With production or no host set, it is left out of `--help`, anything that asks for it fails with a "coming soon" error, and reads the CLI makes on its own (such as `neon env pull` without a `neon.ts`) skip it. No feature is gated today. Neon Realtime was gated until its API reached production.
 
-Run the CLI against staging with a staging API key:
+Run the CLI against staging with a named profile that records the staging host, or with environment variables:
 
 ```bash
+echo "$STAGING_KEY" | neon profile create staging --api-key - --api-host https://console-stage.neon.build/api/v2
+neon --profile staging <command> --help
+
 NEON_API_HOST=https://console-stage.neon.build/api/v2 NEON_API_KEY=<staging key> neon <command> --help
 ```
+
+`neon login --profile <name>` and `neon profile create <name>` record the `--api-host` and `--oauth-host` typed with them in the profile's `profiles.json` entry (`apiHost`, `oauthHost`); the production URL removes a recorded host, and omitting the flag keeps it. Per host, a command uses the flag, else the profile's recorded host when that profile supplies the credential (`--profile`, or `NEON_PROFILE` without `NEON_API_KEY`), else the environment variable, else production. `DEFAULT` cannot record hosts. The resolution is `packages/cli/src/hosts.ts`; the schema is `internals/cli-core/src/profiles.ts`.
 
 **A production HTTP 500 from an endpoint that works on staging most likely means the feature is staging-only for now** and needs this gate. Production answered the unreleased Realtime route `GET /projects/{id}/branches/{branch}/realtime` with HTTP 500 rather than 404, so on neon 8.4.0 `neon env pull` without a `neon.ts` failed for every project until the read was gated.
 
