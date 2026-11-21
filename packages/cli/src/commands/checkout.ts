@@ -9,6 +9,7 @@ import { isClaimableEnvTarget } from "../claimable/state.js";
 import { applyContext, contextBranch, readContextFile } from "../context.js";
 import { isCi } from "../env.js";
 import { loadEnvFileIntoProcess } from "../env_file.js";
+import { ProjectNotLinkedError } from "../errors.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import {
@@ -646,8 +647,9 @@ const tryAutoDetectProject = async (
 	} catch (err) {
 		// `fillSingleProject` throws on "No projects found" / "Multiple projects
 		// found" — both mean we can't pick a project automatically. Network/auth
-		// errors are real and should surface to the user.
-		if (isNeonApiError(err)) {
+		// errors are real and should surface to the user, and so does a project-scoped
+		// key, which `link` cannot help with because it cannot list projects either.
+		if (isNeonApiError(err) || err instanceof ProjectNotLinkedError) {
 			throw err;
 		}
 		log.debug(
