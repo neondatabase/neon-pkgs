@@ -43,7 +43,7 @@ import {
 	defaultClientID,
 	refreshToken,
 } from "../auth.js";
-import { setAuthContext } from "../auth_context.js";
+import { setAuthContext, signInGuidance } from "../auth_context.js";
 import { ClaimableClient, ClaimableServiceError } from "../claimable/api.js";
 import {
 	assertionHasExpired,
@@ -74,7 +74,7 @@ import {
 	readContextFile,
 } from "../context.js";
 import { storeFor } from "../credential_io.js";
-import { hasTerminal, isCi } from "../env.js";
+import { hasTerminal, isAgentContext, isCi } from "../env.js";
 import { hostsForProfile, hostUpdateFor, issuingHosts } from "../hosts.js";
 import { log } from "../log.js";
 import { withExclusiveLock } from "../refresh_lock.js";
@@ -1027,7 +1027,15 @@ export const ensureAuth = async (
 		loaded === null
 			? "has no stored credential"
 			: "holds a session that has expired";
-	const signInHint = `Run \`${getCliName()} login --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.`;
+	const signInHint = isAgentContext(process.env, hasTerminal())
+		? signInGuidance({
+				cli: getCliName(),
+				profile: selection.profile,
+				explicitProfile: selection.explicit,
+				offerClaimable:
+					loaded === null && localContext.projectId === undefined,
+			})
+		: `Run \`${getCliName()} login --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.`;
 
 	// `me` is how scripts and agents check who is signed in. Signing in to answer that
 	// changes the answer, and leaves the caller waiting on a browser it may not see.

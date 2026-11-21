@@ -57,7 +57,10 @@ export const clearAuthContext = (): void => {
  * What to tell the user when the API rejects their credential, naming the profile and file
  * when one is involved so they know which of several accounts failed and what to re-run.
  */
-export const authFailureMessage = (context: AuthContext | null): string => {
+export const authFailureMessage = (
+	context: AuthContext | null,
+	agent = false,
+): string => {
 	const profile = context?.profile ?? "the selected profile";
 	const where =
 		context?.storage === "keyring"
@@ -82,5 +85,39 @@ export const authFailureMessage = (context: AuthContext | null): string => {
 		return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session${where}. Sign in again with \`neon login --profile ${profile}\`.`;
 	}
 
-	return "Authentication failed: the Neon API rejected the API key. Check --api-key or NEON_API_KEY.";
+	const rejected =
+		context?.apiKeyFrom === "env"
+			? "Authentication failed: the Neon API rejected NEON_API_KEY. It takes precedence over a saved sign-in, so unset it to use that session, or set a valid key."
+			: context?.apiKeyFrom === "flag"
+				? "Authentication failed: the Neon API rejected the key passed with --api-key. Pass a valid key, or drop --api-key to use a saved sign-in."
+				: "Authentication failed: the Neon API rejected the API key. Check --api-key or NEON_API_KEY.";
+	return agent ? `${rejected} ${NO_NEW_API_KEY}` : rejected;
+};
+
+export const NO_NEW_API_KEY = "Do not ask the user to create an API key.";
+
+/**
+ * What an agent does when the CLI has no usable credential. Claimable Neon makes a separate,
+ * temporary project, so it is offered only when nothing was ever stored (an expired session
+ * means the user has an account) and the directory isn't linked to a project.
+ */
+export const signInGuidance = (input: {
+	cli: string;
+	profile: string;
+	/** True when --profile or NEON_PROFILE chose the profile; NEON_API_KEY can't apply then. */
+	explicitProfile: boolean;
+	offerClaimable: boolean;
+}): string => {
+	const { cli, profile } = input;
+	const existingKey = input.explicitProfile
+		? `store an API key the user already has with \`${cli} profile create ${profile} --api-key -\``
+		: "set an API key the user already has as NEON_API_KEY";
+	const fallback = input.offerClaimable
+		? `If no one can, ${existingKey}, or create a separate temporary project without an account with \`${cli} claim create\` (it expires in 72 hours unless claimed).`
+		: `If no one can, tell the user they need to sign in or to ${existingKey}, and stop.`;
+	return [
+		`If someone can open the sign-in URL in a browser that reaches this machine's 127.0.0.1 callback, run \`${cli} login --profile ${profile}\`.`,
+		fallback,
+		NO_NEW_API_KEY,
+	].join(" ");
 };

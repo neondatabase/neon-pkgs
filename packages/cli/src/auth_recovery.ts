@@ -9,7 +9,10 @@ import {
 	refreshStoredCredentials,
 } from "./commands/auth.js";
 import { storeFor } from "./credential_io.js";
+import { hasTerminal, isAgentContext } from "./env.js";
 import { log } from "./log.js";
+
+const agent = () => isAgentContext(process.env, hasTerminal());
 
 const supersededOnDisk = (rejectedToken: string | undefined): boolean => {
 	if (rejectedToken === undefined) return false;
@@ -32,12 +35,12 @@ const supersededOnDisk = (rejectedToken: string | undefined): boolean => {
 export const recoverFrom401 = async (canRetry: boolean): Promise<boolean> => {
 	const context = getAuthContext();
 	if (context === null || context.source !== "stored-credentials") {
-		log.error(authFailureMessage(context));
+		log.error(authFailureMessage(context, agent()));
 		return false;
 	}
 
 	if (context.refreshed === true || !canRetry) {
-		log.error(authFailureMessage(context));
+		log.error(authFailureMessage(context, agent()));
 		return false;
 	}
 
@@ -54,7 +57,7 @@ export const recoverFrom401 = async (canRetry: boolean): Promise<boolean> => {
 		context.oauthHost === undefined ||
 		context.clientId === undefined
 	) {
-		log.error(authFailureMessage(context));
+		log.error(authFailureMessage(context, agent()));
 		return false;
 	}
 
@@ -86,6 +89,6 @@ export const recoverFrom401 = async (canRetry: boolean): Promise<boolean> => {
 		);
 	}
 
-	log.error(authFailureMessage(context));
+	log.error(authFailureMessage(context, agent()));
 	return false;
 };

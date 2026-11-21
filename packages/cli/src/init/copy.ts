@@ -1,3 +1,4 @@
+import { NO_NEW_API_KEY } from "../auth_context.js";
 import {
 	pluginsCommandProblemText,
 	type UnusablePluginsCommand,
@@ -164,10 +165,13 @@ export const PROGRESS = {
 } as const;
 
 /** `deferred` carries the account and credential flags init was given. */
-export const unattendedUnauthedNext = (deferred?: {
-	login: string;
-	link: string;
-}): string[] =>
+export const unattendedUnauthedNext = (
+	deferred?: {
+		login: string;
+		link: string;
+	},
+	agent = false,
+): string[] =>
 	deferred === undefined
 		? [
 				"Link a project with a Neon account and an authenticated CLI.",
@@ -177,6 +181,12 @@ export const unattendedUnauthedNext = (deferred?: {
 				"",
 				"Or create a claimable project without an account. It expires in 72 hours unless claimed.",
 				`${getCliName()} claim create`,
+				...(agent
+					? [
+							"",
+							`Or set an API key the user already has as NEON_API_KEY, then run \`${getCliName()} link\`. ${NO_NEW_API_KEY}`,
+						]
+					: []),
 			]
 		: [
 				"Link the project once the CLI is authenticated.",

@@ -10,10 +10,13 @@ import { fileURLToPath } from "node:url";
 import open from "open";
 import * as client from "openid-client";
 import { sendError } from "./analytics.js";
+import { NO_NEW_API_KEY } from "./auth_context.js";
+import { hasTerminal, isAgentContext } from "./env.js";
 import { matchErrorCode } from "./errors.js";
 import { log } from "./log.js";
 import type { ExtendedTokenSet } from "./types.js";
 import { extendTokenSet } from "./utils/auth.js";
+import { getCliName } from "./utils/cli_name.js";
 
 // oauth server timeouts
 const SERVER_TIMEOUT = 10_000;
@@ -360,6 +363,11 @@ export const auth = async ({
 			`Awaiting authentication in web browser (up to ${AUTH_TIMEOUT_MINUTES} minutes).`,
 		);
 		log.info(`Auth Url: ${authUrl}`);
+		if (isAgentContext(process.env, hasTerminal())) {
+			log.info(
+				`If no one can open this URL in a browser that reaches this machine's 127.0.0.1 callback, sign-in can't finish: stop this command and run \`${getCliName()} me\` for what to do instead. ${NO_NEW_API_KEY}`,
+			);
+		}
 
 		open(authUrl.href).catch((err: unknown) => {
 			const msg = `Failed to open web browser. Please copy & paste auth url to authenticate in browser.`;

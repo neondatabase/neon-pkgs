@@ -20,6 +20,7 @@ import {
 	parseConfigInitServices,
 } from "../config_template.js";
 import { contextBranch, readContextFile } from "../context.js";
+import { hasTerminal, isAgentContext } from "../env.js";
 import { log } from "../log.js";
 import { type AgentType, getAgentDisplayName } from "../mcp/agents.js";
 import { CannotMintApiKeyError } from "../mcp/mint.js";
@@ -1552,6 +1553,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					hasExplicitLinkInputs
 						? deferredLinkCommands(props, linkInputs)
 						: undefined,
+					isAgentContext(process.env, hasTerminal()),
 				),
 			);
 			const deferredMcp = mcpDeferredNext();
