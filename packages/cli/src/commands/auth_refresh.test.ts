@@ -338,6 +338,15 @@ describe("no usable credential", () => {
 			'Cannot run interactive auth in CI. Profile "DEFAULT" has no stored credential.\nSet NEON_API_KEY to an API key.',
 		);
 	});
+
+	it("points `login --profile` in CI at saving a key on that profile, which NEON_API_KEY can't override", async () => {
+		const result = await runCli(["login", "--profile", "work"]);
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(
+			'Cannot run interactive auth in CI. Save an API key to this profile: `echo "$KEY" | neon profile create work --api-key -`',
+		);
+	});
 });
 
 describe("no usable credential and no terminal, outside CI", () => {

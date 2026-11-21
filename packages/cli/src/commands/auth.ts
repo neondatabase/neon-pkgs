@@ -43,7 +43,11 @@ import {
 	defaultClientID,
 	refreshToken,
 } from "../auth.js";
-import { setAuthContext, signInGuidance } from "../auth_context.js";
+import {
+	saveKeyCommand,
+	setAuthContext,
+	signInGuidance,
+} from "../auth_context.js";
 import { ClaimableClient, ClaimableServiceError } from "../claimable/api.js";
 import {
 	assertionHasExpired,
@@ -242,7 +246,10 @@ export const authFlow = async ({
 	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
 	if (!allowInteractiveAuth && isCi()) {
 		throw new Error(
-			"Cannot run interactive auth in CI. Set NEON_API_KEY to an API key.",
+			// A named profile overrides NEON_API_KEY.
+			isNamed
+				? `Cannot run interactive auth in CI. Save an API key to this profile: \`${saveKeyCommand(getCliName(), profileName)}\``
+				: "Cannot run interactive auth in CI. Set NEON_API_KEY to an API key.",
 		);
 	}
 

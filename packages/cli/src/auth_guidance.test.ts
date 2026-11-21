@@ -75,4 +75,18 @@ describe("signInGuidance", () => {
 			].join("\n"),
 		);
 	});
+
+	it("saves the key on a selected profile in CI, where NEON_API_KEY would not apply", () => {
+		expect(
+			signInGuidance({
+				cli: "neon",
+				profile: "work",
+				explicitProfile: true,
+				offerClaimable: false,
+				ci: true,
+			}),
+		).toBe(
+			'Save an API key to this profile: `echo "$KEY" | neon profile create work --api-key -`',
+		);
+	});
 });

@@ -113,7 +113,12 @@ export const signInGuidance = (input: {
 	const { cli, profile } = input;
 	return [
 		...(input.ci
-			? ["Set NEON_API_KEY to an API key."]
+			? [
+					// A selected profile overrides NEON_API_KEY.
+					input.explicitProfile
+						? `Save an API key to this profile: \`${saveKeyCommand(cli, profile)}\``
+						: "Set NEON_API_KEY to an API key.",
+				]
 			: [
 					`Sign in with a browser on this machine: \`${cli} login${input.explicitProfile ? ` --profile ${profile}` : ""}\``,
 					`Or save an API key you already have: \`${saveKeyCommand(cli, profile)}\``,
