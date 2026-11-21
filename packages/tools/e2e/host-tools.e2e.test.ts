@@ -638,20 +638,79 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		);
 	});
 
-	it("queries.listSlow needs pg_stat_statements, then lists statements", async () => {
-		const { data: extension } = await run(
-			"SELECT count(*)::int AS n FROM pg_extension WHERE extname = 'pg_stat_statements'",
+	it("queries.listSlow and database.inspect give the same guidance for a missing extension", async () => {
+		const { data: installed } = await run(
+			"SELECT extname FROM pg_extension WHERE extname IN ('pg_stat_statements', 'neon')",
 		);
-		if (extension.rows[0]?.n === 0) {
-			const missing = tools["queries.listSlow"].execute({
-				project_id: projectId,
-			});
-			await expect(missing).rejects.toBeInstanceOf(NeonClientError);
-			await expect(missing).rejects.toThrow(
-				"pg_stat_statements extension is not installed on the database.",
+		expect(installed.rows).toEqual([]);
+		const expectMissing = async (
+			call: Promise<unknown>,
+			needs: string,
+			extension: string,
+		) => {
+			await expect(call).rejects.toBeInstanceOf(NeonClientError);
+			await expect(call).rejects.toThrow(
+				`${needs} needs the "${extension}" extension, which is not installed on database "neondb". Installing it writes to the user's database, so ask the user first, then run \`CREATE EXTENSION IF NOT EXISTS ${extension};\`.`,
 			);
-			await run("CREATE EXTENSION pg_stat_statements");
+		};
+		await expectMissing(
+			tools["queries.listSlow"].execute({ project_id: projectId }),
+			"Listing slow queries",
+			"pg_stat_statements",
+		);
+		await expectMissing(
+			tools["database.inspect"].execute({
+				project_id: projectId,
+				database_name: "neondb",
+				check: "outliers",
+			}),
+			'The "outliers" check',
+			"pg_stat_statements",
+		);
+		await expectMissing(
+			tools["database.inspect"].execute({
+				project_id: projectId,
+				database_name: "neondb",
+				check: "lfc-hit-rate",
+			}),
+			'The "lfc-hit-rate" check',
+			"neon",
+		);
+	});
+
+	it("queries.listSlow and database.inspect read extensions installed in a schema off the search_path", async () => {
+		await run('CREATE SCHEMA "Extensions"');
+		try {
+			await run(
+				'CREATE EXTENSION pg_stat_statements SCHEMA "Extensions"',
+			);
+			await run('CREATE EXTENSION neon SCHEMA "Extensions"');
+			await run("SELECT count(*) FROM items");
+			const { data: slow } = await tools["queries.listSlow"].execute({
+				project_id: projectId,
+				limit: 5,
+			});
+			expect(slow.slow_queries.length).toBeGreaterThan(0);
+			for (const check of [
+				"outliers",
+				"calls",
+				"lfc-hit-rate",
+				"working-set",
+			] as const) {
+				const { data } = await tools["database.inspect"].execute({
+					project_id: projectId,
+					database_name: "neondb",
+					check,
+				});
+				expect(data.rows.length, check).toBeGreaterThan(0);
+			}
+		} finally {
+			await run('DROP SCHEMA IF EXISTS "Extensions" CASCADE');
 		}
+	});
+
+	it("queries.listSlow lists statements from pg_stat_statements", async () => {
+		await run("CREATE EXTENSION pg_stat_statements");
 		await run("SELECT count(*) FROM items");
 		const { data } = await tools["queries.listSlow"].execute({
 			project_id: projectId,

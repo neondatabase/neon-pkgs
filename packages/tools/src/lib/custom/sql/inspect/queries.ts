@@ -58,7 +58,9 @@ export type InspectQuery = {
 	sqlLimit?: number;
 	/**
 	 * Postgres extension the query needs (e.g. `pg_stat_statements`). When set,
-	 * the handler verifies the extension is installed before running the query.
+	 * the handler verifies the extension is installed, then runs the query with
+	 * `search_path` set to only the extension's schema, so anything outside
+	 * `pg_catalog` and the extension must be schema-qualified.
 	 */
 	requiresExtension?: string;
 	/**
