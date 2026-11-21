@@ -16,7 +16,7 @@ import type {
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { invalidParamsResult, validateParams } from "../params.js";
-import type { NeonResult, Outcome } from "../result.js";
+import { finalize, type NeonResult, type Outcome } from "../result.js";
 
 type CreateInput = EndpointCreateRequest["endpoint"];
 type UpdateInput = EndpointUpdateRequest["endpoint"];
@@ -45,12 +45,42 @@ export type EndpointsSuspendParams = EndpointsGetParams;
 
 export type EndpointsRestartParams = EndpointsGetParams;
 
-/** Compute endpoint resource (project-scoped). */
+/**
+ * Compute endpoint resource (project-scoped).
+ *
+ * Mutations respond with the endpoint as it was when Neon accepted the request. With
+ * readiness polling on, `create`, `update`, `start`, `suspend`, and `restart` read the
+ * endpoint again after the operations finish and return that read.
+ */
 export class Endpoints<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
 
 	constructor(ctx: RequestContext) {
 		this.#ctx = ctx;
+	}
+
+	async #settle(
+		opts: CallOptions | undefined,
+		projectId: string,
+		accepted: NeonResult<Endpoint>,
+	): Promise<Endpoint | NeonResult<Endpoint>> {
+		const shouldThrow = this.#ctx.shouldThrow(opts);
+		if (accepted.error || !this.#ctx.resolveWait(opts, false)) {
+			return finalize(accepted, shouldThrow);
+		}
+		const endpointId = accepted.data.id;
+		const settled = await this.#ctx.execute(
+			opts,
+			(client, signal) =>
+				getProjectEndpoint({
+					client,
+					path: { project_id: projectId, endpoint_id: endpointId },
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data.endpoint,
+		);
+		return finalize(settled, shouldThrow);
 	}
 
 	/** @apiCall GET /projects/{project_id}/endpoints */
@@ -156,13 +186,16 @@ export class Endpoints<DThrow extends boolean> {
 		);
 	}
 
-	/** @apiCall POST /projects/{project_id}/endpoints */
+	/**
+	 * @apiCall POST /projects/{project_id}/endpoints
+	 * @apiCall GET /projects/{project_id}/endpoints/{endpoint_id}
+	 */
 	create(params: EndpointsCreateParams): Promise<Outcome<Endpoint, DThrow>>;
 	create<Throw extends boolean = DThrow>(
 		params: EndpointsCreateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Endpoint, Throw>>;
-	create(
+	async create(
 		params: EndpointsCreateParams,
 		opts?: CallOptions,
 	): Promise<Endpoint | NeonResult<Endpoint>> {
@@ -176,7 +209,7 @@ export class Endpoints<DThrow extends boolean> {
 			);
 		}
 		const { projectId, ...input } = params;
-		return this.#ctx.run(
+		const accepted = await this.#ctx.execute(
 			opts,
 			(client, signal) =>
 				createProjectEndpoint({
@@ -188,15 +221,19 @@ export class Endpoints<DThrow extends boolean> {
 				}),
 			(data) => data.endpoint,
 		);
+		return this.#settle(opts, projectId, accepted);
 	}
 
-	/** @apiCall PATCH /projects/{project_id}/endpoints/{endpoint_id} */
+	/**
+	 * @apiCall PATCH /projects/{project_id}/endpoints/{endpoint_id}
+	 * @apiCall GET /projects/{project_id}/endpoints/{endpoint_id}
+	 */
 	update(params: EndpointsUpdateParams): Promise<Outcome<Endpoint, DThrow>>;
 	update<Throw extends boolean = DThrow>(
 		params: EndpointsUpdateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Endpoint, Throw>>;
-	update(
+	async update(
 		params: EndpointsUpdateParams,
 		opts?: CallOptions,
 	): Promise<Endpoint | NeonResult<Endpoint>> {
@@ -211,7 +248,7 @@ export class Endpoints<DThrow extends boolean> {
 			);
 		}
 		const { projectId, endpointId, ...input } = params;
-		return this.#ctx.run(
+		const accepted = await this.#ctx.execute(
 			opts,
 			(client, signal) =>
 				updateProjectEndpoint({
@@ -223,6 +260,7 @@ export class Endpoints<DThrow extends boolean> {
 				}),
 			(data) => data.endpoint,
 		);
+		return this.#settle(opts, projectId, accepted);
 	}
 
 	/** @apiCall DELETE /projects/{project_id}/endpoints/{endpoint_id} */
@@ -256,13 +294,16 @@ export class Endpoints<DThrow extends boolean> {
 		);
 	}
 
-	/** @apiCall POST /projects/{project_id}/endpoints/{endpoint_id}/start */
+	/**
+	 * @apiCall POST /projects/{project_id}/endpoints/{endpoint_id}/start
+	 * @apiCall GET /projects/{project_id}/endpoints/{endpoint_id}
+	 */
 	start(params: EndpointsStartParams): Promise<Outcome<Endpoint, DThrow>>;
 	start<Throw extends boolean = DThrow>(
 		params: EndpointsStartParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Endpoint, Throw>>;
-	start(
+	async start(
 		params: EndpointsStartParams,
 		opts?: CallOptions,
 	): Promise<Endpoint | NeonResult<Endpoint>> {
@@ -277,7 +318,7 @@ export class Endpoints<DThrow extends boolean> {
 			);
 		}
 		const { projectId, endpointId } = params;
-		return this.#ctx.run(
+		const accepted = await this.#ctx.execute(
 			opts,
 			(client, signal) =>
 				startProjectEndpoint({
@@ -288,15 +329,19 @@ export class Endpoints<DThrow extends boolean> {
 				}),
 			(data) => data.endpoint,
 		);
+		return this.#settle(opts, projectId, accepted);
 	}
 
-	/** @apiCall POST /projects/{project_id}/endpoints/{endpoint_id}/suspend */
+	/**
+	 * @apiCall POST /projects/{project_id}/endpoints/{endpoint_id}/suspend
+	 * @apiCall GET /projects/{project_id}/endpoints/{endpoint_id}
+	 */
 	suspend(params: EndpointsSuspendParams): Promise<Outcome<Endpoint, DThrow>>;
 	suspend<Throw extends boolean = DThrow>(
 		params: EndpointsSuspendParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Endpoint, Throw>>;
-	suspend(
+	async suspend(
 		params: EndpointsSuspendParams,
 		opts?: CallOptions,
 	): Promise<Endpoint | NeonResult<Endpoint>> {
@@ -311,7 +356,7 @@ export class Endpoints<DThrow extends boolean> {
 			);
 		}
 		const { projectId, endpointId } = params;
-		return this.#ctx.run(
+		const accepted = await this.#ctx.execute(
 			opts,
 			(client, signal) =>
 				suspendProjectEndpoint({
@@ -322,15 +367,19 @@ export class Endpoints<DThrow extends boolean> {
 				}),
 			(data) => data.endpoint,
 		);
+		return this.#settle(opts, projectId, accepted);
 	}
 
-	/** @apiCall POST /projects/{project_id}/endpoints/{endpoint_id}/restart */
+	/**
+	 * @apiCall POST /projects/{project_id}/endpoints/{endpoint_id}/restart
+	 * @apiCall GET /projects/{project_id}/endpoints/{endpoint_id}
+	 */
 	restart(params: EndpointsRestartParams): Promise<Outcome<Endpoint, DThrow>>;
 	restart<Throw extends boolean = DThrow>(
 		params: EndpointsRestartParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Endpoint, Throw>>;
-	restart(
+	async restart(
 		params: EndpointsRestartParams,
 		opts?: CallOptions,
 	): Promise<Endpoint | NeonResult<Endpoint>> {
@@ -345,7 +394,7 @@ export class Endpoints<DThrow extends boolean> {
 			);
 		}
 		const { projectId, endpointId } = params;
-		return this.#ctx.run(
+		const accepted = await this.#ctx.execute(
 			opts,
 			(client, signal) =>
 				restartProjectEndpoint({
@@ -356,5 +405,6 @@ export class Endpoints<DThrow extends boolean> {
 				}),
 			(data) => data.endpoint,
 		);
+		return this.#settle(opts, projectId, accepted);
 	}
 }

@@ -412,6 +412,40 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		expect(fetched.branch_id).toBe(defaultBranchId);
 	});
 
+	it("restart with waitForReadiness returns the endpoint a later get reads", async () => {
+		const [endpoint] = expectOk(
+			await neon.postgres.endpoints.listByBranch({
+				projectId,
+				branchId: defaultBranchId,
+			}),
+		);
+		if (!endpoint) throw new Error("default branch has no endpoint");
+		const params = { projectId, endpointId: endpoint.id };
+		// Restart rejects a suspended compute, and the suspend timeout may have passed.
+		expectOk(
+			await neon.postgres.endpoints.start(params, {
+				waitForReadiness: true,
+			}),
+		);
+
+		const restarted = expectOk(
+			await neon.postgres.endpoints.restart(params, {
+				waitForReadiness: true,
+			}),
+		);
+		const fetched = expectOk(await neon.postgres.endpoints.get(params));
+		expect(fetched.current_state).toBe("active");
+		expect({
+			current_state: restarted.current_state,
+			pending_state: restarted.pending_state,
+			started_at: restarted.started_at,
+		}).toEqual({
+			current_state: fetched.current_state,
+			pending_state: fetched.pending_state,
+			started_at: fetched.started_at,
+		});
+	});
+
 	it("waitFor resolves against operations the project has already run", async () => {
 		const operations = expectOk(
 			await neon.operations.list({ projectId }).all(),
