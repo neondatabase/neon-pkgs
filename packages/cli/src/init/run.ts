@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { DEFAULT_PROFILE } from "../_shared/profiles.js";
 import {
 	type CommandAgentSetup,
 	recordCommandSuccessExtras,
@@ -20,7 +21,6 @@ import {
 	parseConfigInitServices,
 } from "../config_template.js";
 import { contextBranch, readContextFile } from "../context.js";
-import { hasTerminal, isAgentContext } from "../env.js";
 import { log } from "../log.js";
 import { type AgentType, getAgentDisplayName } from "../mcp/agents.js";
 import { CannotMintApiKeyError } from "../mcp/mint.js";
@@ -260,7 +260,7 @@ const commandLine = (command: string, pairs: FlagPairs): string =>
 const deferredLinkCommands = (
 	props: InitProps,
 	inputs: InitLinkInputs,
-): { login: string; link: string; envPull: string; storeKey?: string } => {
+): { login: string; link: string; envPull: string; saveKey: string } => {
 	const session: FlagPairs = [
 		["--profile", props.profile],
 		[
@@ -286,15 +286,11 @@ const deferredLinkCommands = (
 			...session,
 		]),
 		envPull: commandLine("env pull", [...context, ...session]),
-		// --profile overrides NEON_API_KEY, so a key the user already has goes on the profile.
-		...(props.profile !== undefined
-			? {
-					storeKey: commandLine(
-						`profile create ${quoteFlagValue(props.profile)}`,
-						[["--api-key", "-"], session[1]],
-					),
-				}
-			: {}),
+		// `--api-key -` refuses a terminal on stdin, so the key is piped in.
+		saveKey: `echo "$KEY" | ${commandLine(
+			`profile create ${quoteFlagValue(props.profile ?? DEFAULT_PROFILE)}`,
+			[["--api-key", "-"], session[1]],
+		)}`,
 	};
 };
 
@@ -1546,29 +1542,22 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			pendingExisting;
 
 		const next: string[] = [];
+		const commands = deferredLinkCommands(props, linkInputs);
 		if (pinnedOffline) {
-			const commands = deferredLinkCommands(props, linkInputs);
 			next.push(
-				...offlinePinNext(
-					{
-						login: commands.login,
-						...(extraServices || existingConfig
-							? {}
-							: { envPull: commands.envPull }),
-						...(commands.storeKey !== undefined
-							? { storeKey: commands.storeKey }
-							: {}),
-					},
-					isAgentContext(process.env, hasTerminal()),
-				),
+				...offlinePinNext({
+					login: commands.login,
+					...(extraServices || existingConfig
+						? {}
+						: { envPull: commands.envPull }),
+					saveKey: commands.saveKey,
+				}),
 			);
 		} else if (pendingUnauthed) {
 			next.push(
 				...unattendedUnauthedNext(
-					hasExplicitLinkInputs
-						? deferredLinkCommands(props, linkInputs)
-						: undefined,
-					isAgentContext(process.env, hasTerminal()),
+					commands.saveKey,
+					hasExplicitLinkInputs ? commands : undefined,
 					readContextFile(contextFile).projectId === undefined &&
 						readContextFile(contextFile).orgId === undefined,
 				),

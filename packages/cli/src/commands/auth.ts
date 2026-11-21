@@ -43,11 +43,7 @@ import {
 	defaultClientID,
 	refreshToken,
 } from "../auth.js";
-import {
-	NO_NEW_API_KEY,
-	setAuthContext,
-	signInGuidance,
-} from "../auth_context.js";
+import { setAuthContext, signInGuidance } from "../auth_context.js";
 import { ClaimableClient, ClaimableServiceError } from "../claimable/api.js";
 import {
 	assertionHasExpired,
@@ -78,7 +74,7 @@ import {
 	readContextFile,
 } from "../context.js";
 import { storeFor } from "../credential_io.js";
-import { getCliAgent, hasTerminal, isAgentContext, isCi } from "../env.js";
+import { getCliAgent, hasTerminal, isCi } from "../env.js";
 import { hostsForProfile, hostUpdateFor, issuingHosts } from "../hosts.js";
 import { log } from "../log.js";
 import { withExclusiveLock } from "../refresh_lock.js";
@@ -248,7 +244,7 @@ export const authFlow = async ({
 		throw new Error(
 			getCliAgent(process.env) === undefined
 				? "Cannot run interactive auth in CI"
-				: `Cannot run interactive auth in CI. Set an API key the user already has as NEON_API_KEY. ${NO_NEW_API_KEY}`,
+				: "Cannot run interactive auth in CI. Set NEON_API_KEY to an API key.",
 		);
 	}
 
@@ -1035,23 +1031,18 @@ export const ensureAuth = async (
 		loaded === null
 			? "has no stored credential"
 			: "holds a session that has expired";
-	const agent = isAgentContext(process.env, hasTerminal());
-	const guidance = (browser: boolean) =>
-		signInGuidance({
-			cli: getCliName(),
-			profile: selection.profile,
-			explicitProfile: selection.explicit,
-			// `claim create` refuses a directory that pins a project or an organization.
-			offerClaimable:
-				loaded === null &&
-				localContext.projectId === undefined &&
-				localContext.orgId === undefined,
-			browser,
-		});
 	const forceAuth = props.forceAuth ?? props["force-auth"];
-	const signInHint = agent
-		? guidance(!(isCi() && !forceAuth))
-		: `Run \`${getCliName()} login --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.`;
+	const signInHint = signInGuidance({
+		cli: getCliName(),
+		profile: selection.profile,
+		explicitProfile: selection.explicit,
+		// `claim create` refuses a directory that pins a project or an organization.
+		offerClaimable:
+			loaded === null &&
+			localContext.projectId === undefined &&
+			localContext.orgId === undefined,
+		ci: isCi() && !forceAuth,
+	});
 
 	// `me` is how scripts and agents check who is signed in. Signing in to answer that
 	// changes the answer, and leaves the caller waiting on a browser it may not see.
@@ -1059,7 +1050,7 @@ export const ensureAuth = async (
 	// `neon me && …` usable as a check. The handler sees no client and prints nothing.
 	if (props._[0] === "me") {
 		log.info(
-			`Not signed in: profile "${selection.profile}" ${state}. ${signInHint}`,
+			`Not signed in: profile "${selection.profile}" ${state}.\n${signInHint}`,
 		);
 		process.exitCode = 1;
 		return;
@@ -1071,14 +1062,14 @@ export const ensureAuth = async (
 	// `login` returned above and still opens the browser from there.
 	if (!forceAuth && !isCi() && !hasTerminal()) {
 		throw new Error(
-			`Not signed in: profile "${selection.profile}" ${state}, and this shell has no terminal to start a browser sign-in from. ${signInHint}`,
+			`Not signed in: profile "${selection.profile}" ${state}, and this shell has no terminal to start a browser sign-in from.\n${signInHint}`,
 		);
 	}
 
 	// CI never has a terminal, so only a detected agent gets guidance here; CI jobs keep the refusal.
 	if (isCi() && getCliAgent(process.env) !== undefined && !forceAuth) {
 		throw new Error(
-			`Cannot run interactive auth in CI. Profile "${selection.profile}" ${state}. ${guidance(false)}`,
+			`Cannot run interactive auth in CI. Profile "${selection.profile}" ${state}.\n${signInHint}`,
 		);
 	}
 

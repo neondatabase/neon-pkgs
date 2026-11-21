@@ -17,60 +17,62 @@ describe("isAgentContext", () => {
 });
 
 describe("signInGuidance", () => {
-	it("offers Claimable Neon when nothing was stored and the directory isn't linked", () => {
+	it("lists sign-in, a saved key, and Claimable Neon when nothing was stored and the directory isn't linked", () => {
 		expect(
 			signInGuidance({
 				cli: "neon",
 				profile: "DEFAULT",
 				explicitProfile: false,
 				offerClaimable: true,
-				browser: true,
+				ci: false,
 			}),
 		).toBe(
-			"If someone can complete a browser sign-in that reaches this machine's 127.0.0.1 callback, run `neon login --profile DEFAULT`. If no one can, set an API key the user already has as NEON_API_KEY, or create a separate temporary project without an account with `neon claim create` (it expires in 72 hours unless claimed). Do not ask the user to create an API key.",
+			[
+				"Sign in with a browser on this machine: `neon login`",
+				'Or save an API key you already have: `echo "$KEY" | neon profile create DEFAULT --api-key -`',
+				"Or create a temporary project without an account: `neon claim create` (it expires in 72 hours unless claimed)",
+			].join("\n"),
 		);
 	});
 
-	it("stops instead of offering a new project for a linked directory or an expired session", () => {
-		const text = signInGuidance({
-			cli: "neon",
-			profile: "DEFAULT",
-			explicitProfile: false,
-			offerClaimable: false,
-			browser: true,
-		});
-		expect(text).not.toContain("claim create");
-		expect(text).toContain(
-			"If no one can, tell the user they need to sign in or to set an API key the user already has as NEON_API_KEY, and stop.",
-		);
+	it("leaves out Claimable Neon for a linked directory or an expired session", () => {
+		expect(
+			signInGuidance({
+				cli: "neon",
+				profile: "DEFAULT",
+				explicitProfile: false,
+				offerClaimable: false,
+				ci: false,
+			}),
+		).not.toContain("claim create");
 	});
 
-	it("stores a key on an explicitly selected profile, where NEON_API_KEY would not apply", () => {
+	it("names an explicitly selected profile in every command", () => {
 		const text = signInGuidance({
 			cli: "neon",
 			profile: "work",
 			explicitProfile: true,
-			offerClaimable: true,
-			browser: true,
+			offerClaimable: false,
+			ci: false,
 		});
-		expect(text).toContain("run `neon login --profile work`");
-		expect(text).toContain(
-			"store an API key the user already has with `neon profile create work --api-key -`",
-		);
-		expect(text).not.toContain("NEON_API_KEY");
+		expect(text).toContain("`neon login --profile work`");
+		expect(text).toContain("neon profile create work --api-key -");
 	});
 
-	it("names only the alternatives where interactive sign-in is refused", () => {
+	it("points CI at NEON_API_KEY, where browser sign-in is refused", () => {
 		expect(
 			signInGuidance({
 				cli: "neon",
 				profile: "DEFAULT",
 				explicitProfile: false,
 				offerClaimable: true,
-				browser: false,
+				ci: true,
 			}),
 		).toBe(
-			"Set an API key the user already has as NEON_API_KEY, or create a separate temporary project without an account with `neon claim create` (it expires in 72 hours unless claimed). Do not ask the user to create an API key.",
+			[
+				"Set NEON_API_KEY to an API key.",
+				"Or create a temporary project without an account: `neon claim create` (it expires in 72 hours unless claimed)",
+			].join("\n"),
 		);
 	});
 });

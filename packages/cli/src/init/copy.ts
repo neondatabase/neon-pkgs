@@ -1,4 +1,3 @@
-import { NO_NEW_API_KEY } from "../auth_context.js";
 import {
 	pluginsCommandProblemText,
 	type UnusablePluginsCommand,
@@ -164,52 +163,37 @@ export const PROGRESS = {
 	env: "Pulling Neon environment variables...",
 } as const;
 
-const SIGN_IN_CONDITION =
-	"Sign in only if someone can complete a browser sign-in that reaches this machine's 127.0.0.1 callback:";
-
-/** `storeKey` is set when --profile chose the profile, which NEON_API_KEY can't override. */
-const existingKeyNext = (then: string | undefined, storeKey?: string): string =>
-	[
-		storeKey === undefined
-			? "Otherwise set an API key the user already has as NEON_API_KEY"
-			: `Otherwise store an API key the user already has with \`${storeKey}\``,
-		then === undefined ? "." : `, then run \`${then}\`.`,
-		` ${NO_NEW_API_KEY}`,
-	].join("");
+const saveKeyNext = (saveKey: string): string[] => [
+	"",
+	"No browser on this machine? Save an API key you already have instead of signing in:",
+	saveKey,
+];
 
 /** `deferred` carries the account and credential flags init was given. */
 export const unattendedUnauthedNext = (
+	saveKey: string,
 	deferred?: {
 		login: string;
 		link: string;
-		storeKey?: string;
 	},
-	agent = false,
 	/** `claim create` refuses a directory that pins a project or an organization. */
 	claimable = true,
 ): string[] => {
 	const cli = getCliName();
 	if (deferred !== undefined) {
-		return agent
-			? [
-					`Link the project once the CLI is authenticated. ${SIGN_IN_CONDITION}`,
-					deferred.login,
-					deferred.link,
-					"",
-					existingKeyNext(deferred.link, deferred.storeKey),
-				]
-			: [
-					"Link the project once the CLI is authenticated.",
-					deferred.login,
-					deferred.link,
-				];
+		return [
+			"Link the project once the CLI is authenticated.",
+			deferred.login,
+			deferred.link,
+			...saveKeyNext(saveKey),
+		];
 	}
 	return [
 		"Link a project with a Neon account and an authenticated CLI.",
 		"Sign up: https://neon.com/signup",
-		...(agent ? [SIGN_IN_CONDITION] : []),
 		`${cli} login`,
 		`${cli} link`,
+		...saveKeyNext(saveKey),
 		...(claimable
 			? [
 					"",
@@ -217,28 +201,22 @@ export const unattendedUnauthedNext = (
 					`${cli} claim create`,
 				]
 			: []),
-		...(agent ? ["", existingKeyNext(`${cli} link`)] : []),
 	];
 };
 
 export const PROJECT_PINNED_OFFLINE = "linked, not verified";
 
-export const offlinePinNext = (
-	input: {
-		login: string;
-		envPull?: string;
-		storeKey?: string;
-	},
-	agent = false,
-): string[] => [
-	agent
-		? `The link was written without contacting Neon. ${SIGN_IN_CONDITION}`
-		: "The link was written without contacting Neon. Sign in to use it:",
+export const offlinePinNext = (input: {
+	login: string;
+	envPull?: string;
+	saveKey: string;
+}): string[] => [
+	"The link was written without contacting Neon. Sign in to use it:",
 	input.login,
 	...(input.envPull !== undefined
 		? ["Then pull the branch's environment variables:", input.envPull]
 		: []),
-	...(agent ? ["", existingKeyNext(input.envPull, input.storeKey)] : []),
+	...saveKeyNext(input.saveKey),
 ];
 
 export const skippedLinkNext = (): string[] => [

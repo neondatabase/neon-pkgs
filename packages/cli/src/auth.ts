@@ -10,7 +10,6 @@ import { fileURLToPath } from "node:url";
 import open from "open";
 import * as client from "openid-client";
 import { sendError } from "./analytics.js";
-import { NO_NEW_API_KEY } from "./auth_context.js";
 import { hasTerminal, isAgentContext } from "./env.js";
 import { matchErrorCode } from "./errors.js";
 import { log } from "./log.js";
@@ -365,7 +364,7 @@ export const auth = async ({
 		log.info(`Auth Url: ${authUrl}`);
 		if (isAgentContext(process.env, hasTerminal())) {
 			log.info(
-				`If no one can open this URL in a browser that reaches this machine's 127.0.0.1 callback, sign-in can't finish: stop this command and run \`${getCliName()} me\` for what to do instead. ${NO_NEW_API_KEY}`,
+				`Sign-in finishes only in a browser on this machine. If that isn't possible, stop this command and run \`${getCliName()} me\` for other ways to authenticate.`,
 			);
 		}
 

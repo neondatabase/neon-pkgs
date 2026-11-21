@@ -57,10 +57,7 @@ export const clearAuthContext = (): void => {
  * What to tell the user when the API rejects their credential, naming the profile and file
  * when one is involved so they know which of several accounts failed and what to re-run.
  */
-export const authFailureMessage = (
-	context: AuthContext | null,
-	agent = false,
-): string => {
+export const authFailureMessage = (context: AuthContext | null): string => {
 	const profile = context?.profile ?? "the selected profile";
 	const where =
 		context?.storage === "keyring"
@@ -70,12 +67,8 @@ export const authFailureMessage = (
 				: "";
 
 	if (context?.source === "profile-api-key") {
-		// `--mint` needs a browser sign-in, which an agent may have no one to finish.
-		if (agent) {
-			return `Authentication failed: the Neon API rejected profile "${profile}"'s API key${where}. Replace it with an API key the user already has: \`neon profile create ${profile} --api-key -\`. ${NO_NEW_API_KEY}`;
-		}
 		// Not `rotate-key`: a rejected key cannot authenticate to mint its own replacement.
-		return `Authentication failed: the Neon API rejected profile "${profile}"'s API key${where}. Replace it with \`neon profile create ${profile} --mint\`, or store another with \`neon profile create ${profile} --api-key -\`.`;
+		return `Authentication failed: the Neon API rejected profile "${profile}"'s API key${where}. Save a valid key with \`${saveKeyCommand("neon", profile)}\`, or sign in with a browser on this machine to mint one with \`neon profile create ${profile} --mint\`.`;
 	}
 
 	if (context?.source === "claimable") {
@@ -89,45 +82,46 @@ export const authFailureMessage = (
 		return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session${where}. Sign in again with \`neon login --profile ${profile}\`.`;
 	}
 
-	const rejected =
-		context?.apiKeyFrom === "env"
-			? "Authentication failed: the Neon API rejected NEON_API_KEY. It takes precedence over a saved sign-in, so unset it to use that session, or set a valid key."
-			: context?.apiKeyFrom === "flag"
-				? "Authentication failed: the Neon API rejected the key passed with --api-key. Pass a valid key, or drop --api-key to use a saved sign-in."
-				: "Authentication failed: the Neon API rejected the API key. Check --api-key or NEON_API_KEY.";
-	return agent ? `${rejected} ${NO_NEW_API_KEY}` : rejected;
+	if (context?.apiKeyFrom === "env") {
+		return "Authentication failed: the Neon API rejected NEON_API_KEY. It takes precedence over a saved sign-in, so unset it to use that session, or set a valid key.";
+	}
+	if (context?.apiKeyFrom === "flag") {
+		return "Authentication failed: the Neon API rejected the key passed with --api-key. Pass a valid key, or drop --api-key to use a saved sign-in.";
+	}
+	return "Authentication failed: the Neon API rejected the API key. Check --api-key or NEON_API_KEY.";
 };
 
-export const NO_NEW_API_KEY = "Do not ask the user to create an API key.";
+/** `--api-key -` refuses a terminal on stdin, so the key is piped in. */
+export const saveKeyCommand = (cli: string, profile: string): string =>
+	`echo "$KEY" | ${cli} profile create ${profile} --api-key -`;
 
 /**
- * What an agent does when the CLI has no usable credential. Claimable Neon makes a separate,
- * temporary project, so it is offered only when nothing was ever stored (an expired session
- * means the user has an account) and the directory isn't linked to a project.
+ * The ways to authenticate when the CLI has no usable credential, one per line. Claimable
+ * Neon makes a separate, temporary project, so it is offered only when nothing was ever
+ * stored (an expired session means the user has an account) and the directory isn't linked
+ * to a project.
  */
 export const signInGuidance = (input: {
 	cli: string;
 	profile: string;
-	/** True when --profile or NEON_PROFILE chose the profile; NEON_API_KEY can't apply then. */
+	/** True when --profile or NEON_PROFILE chose the profile, so commands must name it. */
 	explicitProfile: boolean;
 	offerClaimable: boolean;
-	/** False where interactive sign-in is refused (CI), so only the alternatives are named. */
-	browser: boolean;
+	/** CI refuses browser sign-in and keeps keys in its secrets, so NEON_API_KEY is the key path. */
+	ci: boolean;
 }): string => {
 	const { cli, profile } = input;
-	const existingKey = input.explicitProfile
-		? `store an API key the user already has with \`${cli} profile create ${profile} --api-key -\``
-		: "set an API key the user already has as NEON_API_KEY";
-	const options = input.offerClaimable
-		? `${existingKey}, or create a separate temporary project without an account with \`${cli} claim create\` (it expires in 72 hours unless claimed)`
-		: `tell the user they need to sign in or to ${existingKey}, and stop`;
 	return [
-		...(input.browser
+		...(input.ci
+			? ["Set NEON_API_KEY to an API key."]
+			: [
+					`Sign in with a browser on this machine: \`${cli} login${input.explicitProfile ? ` --profile ${profile}` : ""}\``,
+					`Or save an API key you already have: \`${saveKeyCommand(cli, profile)}\``,
+				]),
+		...(input.offerClaimable
 			? [
-					`If someone can complete a browser sign-in that reaches this machine's 127.0.0.1 callback, run \`${cli} login --profile ${profile}\`.`,
-					`If no one can, ${options}.`,
+					`Or create a temporary project without an account: \`${cli} claim create\` (it expires in 72 hours unless claimed)`,
 				]
-			: [`${options.charAt(0).toUpperCase()}${options.slice(1)}.`]),
-		NO_NEW_API_KEY,
-	].join(" ");
+			: []),
+	].join("\n");
 };

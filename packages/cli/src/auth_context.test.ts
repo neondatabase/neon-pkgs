@@ -13,22 +13,15 @@ describe("authFailureMessage", () => {
 		);
 	});
 
-	test("an agent replaces a rejected profile key with one the user already has, not --mint", () => {
-		const message = authFailureMessage(
-			{ source: "profile-api-key", configDir: "/c", profile: "work" },
-			true,
+	test("a rejected profile key offers saving a valid key before minting one in a browser", () => {
+		const message = authFailureMessage({
+			source: "profile-api-key",
+			configDir: "/c",
+			profile: "work",
+		});
+		expect(message).toContain(
+			'Save a valid key with `echo "$KEY" | neon profile create work --api-key -`, or sign in with a browser on this machine to mint one with `neon profile create work --mint`.',
 		);
-		expect(message).toContain("neon profile create work --api-key -");
-		expect(message).not.toContain("--mint");
-		expect(message).toMatch(/Do not ask the user to create an API key\.$/);
-	});
-
-	test("an agent is told not to ask for a new key", () => {
-		const message = authFailureMessage(
-			{ source: "api-key", apiKeyFrom: "env", configDir: "/c" },
-			true,
-		);
-		expect(message).toMatch(/Do not ask the user to create an API key\.$/);
 	});
 
 	test("a profile key names the profile, the file, and how to replace it", () => {
