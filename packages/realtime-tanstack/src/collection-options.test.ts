@@ -695,6 +695,50 @@ describe("Realtime TanStack DB collection", () => {
 			);
 		});
 
+		it("does not let a reentrant reload inherit the retired snapshot receipt", async () => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+			let reload: Promise<void> | undefined;
+			const changes = collection.subscribeChanges(() => {
+				reload ??= collection.reload();
+			});
+			try {
+				const retired = collection.utils
+					.awaitInitialSnapshot()
+					.catch(identity);
+				client
+					.latest()
+					.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+				expect(client.subscriptions).toHaveLength(2);
+				await expect(retired).resolves.toMatchObject({
+					message: "Realtime collection was cleaned up",
+				});
+				await expect(
+					collection.utils.awaitInitialSnapshot(0),
+				).rejects.toThrow(
+					"Timed out waiting for the live-query snapshot",
+				);
+				const current = collection.utils.awaitInitialSnapshot(100);
+				client.latest().reset([]);
+				await current;
+				await reload;
+				expect(collection.size).toBe(0);
+			} finally {
+				changes.unsubscribe();
+			}
+		});
+
+		it("rejects timeouts that cannot be represented by a JavaScript timer", async () => {
+			const collection = createTestCollection(
+				new TestClient<MessageRow>(),
+			);
+			await expect(
+				collection.utils.awaitInitialSnapshot(2_147_483_648),
+			).rejects.toThrow(
+				"Live-query snapshot timeout must be between 0 and 2147483647 milliseconds",
+			);
+		});
+
 		it("times out before sync starts and waits again after cleanup", async () => {
 			const client = new TestClient<MessageRow>();
 			const collection = createTestCollection(client);

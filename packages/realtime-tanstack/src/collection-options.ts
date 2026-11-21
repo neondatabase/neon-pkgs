@@ -28,8 +28,8 @@ export interface RealtimeCollectionUtils extends UtilsRecord {
 	 * waits for the next run. Once a snapshot has applied, later calls in the
 	 * same run resolve immediately, including during automatic reconnects.
 	 *
-	 * @param timeout - Optional maximum wait in milliseconds, including any
-	 * wait for synchronization to start.
+	 * @param timeout - Optional wait of 0 to 2,147,483,647 milliseconds,
+	 * including any wait for synchronization to start.
 	 * @throws If the timeout is invalid or elapses, or the run terminates
 	 * or is cleaned up before its first snapshot applies.
 	 */
@@ -146,6 +146,8 @@ type SyncStart<Row> =
 
 type InitialSnapshotResult = { readonly error: unknown } | true;
 
+const MAX_TIMER_TIMEOUT_MS = 2_147_483_647;
+
 function monotonicNow(): number {
 	return typeof performance === "undefined" ? Date.now() : performance.now();
 }
@@ -236,10 +238,12 @@ function createRealtimeCollectionOptions<
 		awaitInitialSnapshot: async (timeout) => {
 			if (
 				timeout !== undefined &&
-				(!Number.isFinite(timeout) || timeout < 0)
+				(!Number.isFinite(timeout) ||
+					timeout < 0 ||
+					timeout > MAX_TIMER_TIMEOUT_MS)
 			) {
-				throw new Error(
-					"Live-query snapshot timeout must be a non-negative number",
+				throw new RangeError(
+					`Live-query snapshot timeout must be between 0 and ${MAX_TIMER_TIMEOUT_MS} milliseconds`,
 				);
 			}
 			if (initialSnapshotResult === true) return;
@@ -389,16 +393,16 @@ function createRealtimeCollectionOptions<
 					receipt: SyncAppliedReceipt,
 					onApplied?: () => void,
 				) => {
-					if (receipt === true) {
-						onApplied?.();
-					} else {
-						void receipt.then(
-							() => {
-								if (!cleaned && !stopped) onApplied?.();
-							},
-							(error) => stop(error),
+					// A synchronous commit can notify subscribers that reload or
+					// clean up the Collection before commit returns.
+					const onCurrentRunApplied = () => {
+						if (!cleaned && !stopped) onApplied?.();
+					};
+					if (receipt === true) onCurrentRunApplied();
+					else
+						void receipt.then(onCurrentRunApplied, (error) =>
+							stop(error),
 						);
-					}
 				};
 				const reportRecovered = () => {
 					if (!interrupted) return;
