@@ -163,38 +163,60 @@ export const PROGRESS = {
 	env: "Pulling Neon environment variables...",
 } as const;
 
+const saveKeyNext = (saveKey: string): string[] => [
+	"",
+	"No browser on this machine? Save an API key you already have instead of signing in:",
+	saveKey,
+];
+
 /** `deferred` carries the account and credential flags init was given. */
-export const unattendedUnauthedNext = (deferred?: {
-	login: string;
-	link: string;
-}): string[] =>
-	deferred === undefined
-		? [
-				"Link a project with a Neon account and an authenticated CLI.",
-				"Sign up: https://neon.com/signup",
-				`${getCliName()} login`,
-				`${getCliName()} link`,
-				"",
-				"Or create a claimable project without an account. It expires in 72 hours unless claimed.",
-				`${getCliName()} claim create`,
-			]
-		: [
-				"Link the project once the CLI is authenticated.",
-				deferred.login,
-				deferred.link,
-			];
+export const unattendedUnauthedNext = (
+	saveKey: string,
+	deferred?: {
+		login: string;
+		link: string;
+	},
+	/** `claim create` refuses a directory that pins a project or an organization. */
+	claimable = true,
+): string[] => {
+	const cli = getCliName();
+	if (deferred !== undefined) {
+		return [
+			"Link the project once the CLI is authenticated.",
+			deferred.login,
+			deferred.link,
+			...saveKeyNext(saveKey),
+		];
+	}
+	return [
+		"Link a project with a Neon account and an authenticated CLI.",
+		"Sign up: https://neon.com/signup",
+		`${cli} login`,
+		`${cli} link`,
+		...saveKeyNext(saveKey),
+		...(claimable
+			? [
+					"",
+					"Or create a claimable project without an account. It expires in 72 hours unless claimed.",
+					`${cli} claim create`,
+				]
+			: []),
+	];
+};
 
 export const PROJECT_PINNED_OFFLINE = "linked, not verified";
 
 export const offlinePinNext = (input: {
 	login: string;
 	envPull?: string;
+	saveKey: string;
 }): string[] => [
 	"The link was written without contacting Neon. Sign in to use it:",
 	input.login,
 	...(input.envPull !== undefined
 		? ["Then pull the branch's environment variables:", input.envPull]
 		: []),
+	...saveKeyNext(input.saveKey),
 ];
 
 export const skippedLinkNext = (): string[] => [

@@ -43,7 +43,11 @@ import {
 	defaultClientID,
 	refreshToken,
 } from "../auth.js";
-import { setAuthContext } from "../auth_context.js";
+import {
+	saveKeyCommand,
+	setAuthContext,
+	signInGuidance,
+} from "../auth_context.js";
 import { ClaimableClient, ClaimableServiceError } from "../claimable/api.js";
 import {
 	assertionHasExpired,
@@ -241,7 +245,12 @@ export const authFlow = async ({
 
 	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
 	if (!allowInteractiveAuth && isCi()) {
-		throw new Error("Cannot run interactive auth in CI");
+		throw new Error(
+			// A selected profile overrides NEON_API_KEY.
+			profile?.trim() || process.env.NEON_PROFILE?.trim()
+				? `Cannot run interactive auth in CI. Save an API key to this profile: \`${saveKeyCommand(getCliName(), profileName)}\``
+				: "Cannot run interactive auth in CI. Set NEON_API_KEY to an API key.",
+		);
 	}
 
 	let previousFile: string | undefined;
@@ -1027,7 +1036,18 @@ export const ensureAuth = async (
 		loaded === null
 			? "has no stored credential"
 			: "holds a session that has expired";
-	const signInHint = `Run \`${getCliName()} login --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.`;
+	const forceAuth = props.forceAuth ?? props["force-auth"];
+	const signInHint = signInGuidance({
+		cli: getCliName(),
+		profile: selection.profile,
+		explicitProfile: selection.explicit,
+		// `claim create` refuses a directory that pins a project or an organization.
+		offerClaimable:
+			loaded === null &&
+			localContext.projectId === undefined &&
+			localContext.orgId === undefined,
+		ci: isCi() && !forceAuth,
+	});
 
 	// `me` is how scripts and agents check who is signed in. Signing in to answer that
 	// changes the answer, and leaves the caller waiting on a browser it may not see.
@@ -1035,7 +1055,7 @@ export const ensureAuth = async (
 	// `neon me && …` usable as a check. The handler sees no client and prints nothing.
 	if (props._[0] === "me") {
 		log.info(
-			`Not signed in: profile "${selection.profile}" ${state}. ${signInHint}`,
+			`Not signed in: profile "${selection.profile}" ${state}.\n${signInHint}`,
 		);
 		process.exitCode = 1;
 		return;
@@ -1045,13 +1065,15 @@ export const ensureAuth = async (
 	// may be watching for a browser, so name the sign-in command instead of waiting out the
 	// sign-in timeout. One terminal stream is enough to keep `neon psql < q.sql` signing in.
 	// `login` returned above and still opens the browser from there.
-	if (
-		!(props.forceAuth ?? props["force-auth"]) &&
-		!isCi() &&
-		!hasTerminal()
-	) {
+	if (!forceAuth && !isCi() && !hasTerminal()) {
 		throw new Error(
-			`Not signed in: profile "${selection.profile}" ${state}, and this shell has no terminal to start a browser sign-in from. ${signInHint}`,
+			`Not signed in: profile "${selection.profile}" ${state}, and this shell has no terminal to start a browser sign-in from.\n${signInHint}`,
+		);
+	}
+
+	if (isCi() && !forceAuth) {
+		throw new Error(
+			`Cannot run interactive auth in CI. Profile "${selection.profile}" ${state}.\n${signInHint}`,
 		);
 	}
 

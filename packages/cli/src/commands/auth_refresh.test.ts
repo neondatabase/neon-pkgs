@@ -290,7 +290,9 @@ describe("a 401 from the Neon API", () => {
 		const result = await runCli(["me", "--api-key", "some-key"]);
 
 		expect(result.code).toBe(1);
-		expect(result.stderr).toContain("rejected the API key");
+		expect(result.stderr).toContain(
+			"rejected the key passed with --api-key. Pass a valid key, or drop --api-key to use a saved sign-in.",
+		);
 		expect(oauth.refreshAttempts()).toBe(0);
 		expect(existsSync(credentialsFile())).toBe(true);
 	});
@@ -302,7 +304,12 @@ describe("no usable credential", () => {
 
 		expect(result.code).toBe(1);
 		expect(result.stderr).toBe(
-			'Not signed in: profile "DEFAULT" has no stored credential. Run `neon login --profile DEFAULT` to sign in, or use an API key with --api-key or NEON_API_KEY.\n',
+			[
+				'Not signed in: profile "DEFAULT" has no stored credential.',
+				"Set NEON_API_KEY to an API key.",
+				"Or create a temporary project without an account: `neon claim create` (it expires in 72 hours unless claimed)",
+				"",
+			].join("\n"),
 		);
 		expect(result.stdout).toBe("");
 	});
@@ -323,11 +330,25 @@ describe("no usable credential", () => {
 		expect(existsSync(credentialsFile())).toBe(true);
 	});
 
-	it("still sends other commands to the sign-in flow in CI", async () => {
+	it("refuses interactive sign-in in CI and points at NEON_API_KEY", async () => {
 		const result = await runCli(["projects", "list"]);
 
 		expect(result.code).toBe(1);
-		expect(result.stderr).toContain("Cannot run interactive auth in CI");
+		expect(result.stderr).toContain(
+			'Cannot run interactive auth in CI. Profile "DEFAULT" has no stored credential.\nSet NEON_API_KEY to an API key.',
+		);
+	});
+
+	it.each([
+		"work",
+		"DEFAULT",
+	])("points `login --profile %s` in CI at saving a key on that profile, which NEON_API_KEY can't override", async (profile) => {
+		const result = await runCli(["login", "--profile", profile]);
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(
+			`Cannot run interactive auth in CI. Save an API key to this profile: \`echo "$KEY" | neon profile create ${profile} --api-key -\``,
+		);
 	});
 });
 
@@ -367,7 +388,12 @@ describe("no usable credential and no terminal, outside CI", () => {
 		expect(result.code).toBe(1);
 		expect(result.stderr).not.toContain("Awaiting authentication");
 		expect(result.stderr).toContain(
-			'Not signed in: profile "DEFAULT" has no stored credential, and this shell has no terminal to start a browser sign-in from. Run `neon login --profile DEFAULT` to sign in, or use an API key with --api-key or NEON_API_KEY.',
+			[
+				'Not signed in: profile "DEFAULT" has no stored credential, and this shell has no terminal to start a browser sign-in from.',
+				"Sign in with a browser on this machine: `neon login`",
+				'Or save an API key you already have: `echo "$KEY" | neon profile create DEFAULT --api-key -`',
+				"Or create a temporary project without an account: `neon claim create` (it expires in 72 hours unless claimed)",
+			].join("\n"),
 		);
 		const message = result.stderr.slice(
 			result.stderr.indexOf("Not signed in:"),

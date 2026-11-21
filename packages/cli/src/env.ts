@@ -77,6 +77,16 @@ export const getCliAgent = (env: NodeJS.Dict<string>): string | undefined => {
 	return declared && AI_AGENT_NAME.test(declared) ? declared : undefined;
 };
 
+/**
+ * A coding agent runs the CLI, or no stdio stream has a terminal a person could be watching.
+ * Nested agents whose markers conflict are not attributed by `getCliAgent`, so with a terminal
+ * they get the human text.
+ */
+export const isAgentContext = (
+	env: NodeJS.Dict<string>,
+	terminal: boolean,
+): boolean => getCliAgent(env) !== undefined || !terminal;
+
 export const getGithubEnvVars = (env: NodeJS.Dict<string>) => {
 	const vars = [
 		// github action info

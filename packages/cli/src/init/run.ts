@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { selectProfileName } from "../_shared/profiles.js";
 import {
 	type CommandAgentSetup,
 	recordCommandSuccessExtras,
@@ -259,7 +260,7 @@ const commandLine = (command: string, pairs: FlagPairs): string =>
 const deferredLinkCommands = (
 	props: InitProps,
 	inputs: InitLinkInputs,
-): { login: string; link: string; envPull: string } => {
+): { login: string; link: string; envPull: string; saveKey: string } => {
 	const session: FlagPairs = [
 		["--profile", props.profile],
 		[
@@ -285,6 +286,11 @@ const deferredLinkCommands = (
 			...session,
 		]),
 		envPull: commandLine("env pull", [...context, ...session]),
+		// `--api-key -` refuses a terminal on stdin, so the key is piped in.
+		saveKey: `echo "$KEY" | ${commandLine(
+			`profile create ${quoteFlagValue(selectProfileName(props.profile))}`,
+			[["--api-key", "-"], session[1]],
+		)}`,
 	};
 };
 
@@ -1536,22 +1542,24 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			pendingExisting;
 
 		const next: string[] = [];
+		const commands = deferredLinkCommands(props, linkInputs);
 		if (pinnedOffline) {
-			const commands = deferredLinkCommands(props, linkInputs);
 			next.push(
 				...offlinePinNext({
 					login: commands.login,
 					...(extraServices || existingConfig
 						? {}
 						: { envPull: commands.envPull }),
+					saveKey: commands.saveKey,
 				}),
 			);
 		} else if (pendingUnauthed) {
 			next.push(
 				...unattendedUnauthedNext(
-					hasExplicitLinkInputs
-						? deferredLinkCommands(props, linkInputs)
-						: undefined,
+					commands.saveKey,
+					hasExplicitLinkInputs ? commands : undefined,
+					readContextFile(contextFile).projectId === undefined &&
+						readContextFile(contextFile).orgId === undefined,
 				),
 			);
 			const deferredMcp = mcpDeferredNext();
