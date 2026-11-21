@@ -20,6 +20,7 @@ import {
 	assertProfilesUsable,
 	assertValidProfileName,
 	DEFAULT_PROFILE,
+	type HostUpdate,
 	isKeyringPointer,
 	KEYRING_CREDENTIALS,
 	locationForName,
@@ -35,13 +36,18 @@ import type yargs from "yargs";
 import type { NeonApiClient } from "../api.js";
 import { getApiClient, isNeonApiError } from "../api.js";
 import {
+	AUTH_TIMEOUT_MINUTES,
 	AuthRefreshError,
 	auth,
 	classifyRefreshFailure,
 	defaultClientID,
 	refreshToken,
 } from "../auth.js";
-import { setAuthContext } from "../auth_context.js";
+import {
+	saveKeyCommand,
+	setAuthContext,
+	signInGuidance,
+} from "../auth_context.js";
 import { ClaimableClient, ClaimableServiceError } from "../claimable/api.js";
 import {
 	assertionHasExpired,
@@ -73,6 +79,7 @@ import {
 } from "../context.js";
 import { storeFor } from "../credential_io.js";
 import { hasTerminal, isCi } from "../env.js";
+import { hostsForProfile, hostUpdateFor, issuingHosts } from "../hosts.js";
 import { log } from "../log.js";
 import { withExclusiveLock } from "../refresh_lock.js";
 import {
@@ -98,6 +105,8 @@ type AuthProps = {
 	keyring?: boolean;
 	contextFile?: string | ((cwd?: string) => string);
 	dbUrl?: string;
+	/** What a named profile's entry records about its hosts. Omitted, it keeps what it had. */
+	hosts?: HostUpdate;
 };
 
 export const locationForAuth = (
@@ -132,6 +141,9 @@ const wrapAuthHelp = (text: string): string => wrapHelpText(text, helpWidth());
 const authHelpEpilogue = (): string => {
 	const cli = getCliName();
 	return helpEpilogue(
+		wrapAuthHelp(
+			`Browser sign-in prints its Auth Url to stderr and waits up to ${AUTH_TIMEOUT_MINUTES} minutes for it to finish. A coding agent can run ${cli} login in the background and pass the URL to the person signing in on this machine.`,
+		),
 		wrapAuthHelp("Non-interactive (CI, scripts, agents):"),
 		wrapAuthHelp("Use an existing API key or an API-key profile."),
 		`  ${cli} projects list --profile agent`,
@@ -190,7 +202,13 @@ export const builder = (yargs: yargs.Argv) =>
 		)
 		.epilogue(authHelpEpilogue());
 export const handler = async (args: AuthProps) => {
-	await authFlow(args);
+	// `--profile` here names where to write, which credential selection may not have picked.
+	const target = selectProfileName(args.profile);
+	await authFlow({
+		...args,
+		...hostsForProfile(args.configDir, target),
+		hosts: hostUpdateFor(target),
+	});
 };
 
 export const authFlow = async ({
@@ -203,6 +221,7 @@ export const authFlow = async ({
 	allowUnsafeTls,
 	profile,
 	keyring,
+	hosts,
 }: AuthProps) => {
 	// A named profile that doesn't exist yet is created here rather than erroring: `neon
 	// login --profile work` is how you make one, so it must work before there is anything
@@ -226,12 +245,21 @@ export const authFlow = async ({
 
 	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
 	if (!allowInteractiveAuth && isCi()) {
-		throw new Error("Cannot run interactive auth in CI");
+		throw new Error(
+			// A selected profile overrides NEON_API_KEY.
+			profile?.trim() || process.env.NEON_PROFILE?.trim()
+				? `Cannot run interactive auth in CI. Save an API key to this profile: \`${saveKeyCommand(getCliName(), profileName)}\``
+				: "Cannot run interactive auth in CI. Set NEON_API_KEY to an API key.",
+		);
 	}
 
 	let previousFile: string | undefined;
 	let previousWasKeyring = false;
 	let previousOutgoing: OutgoingCredential | null = null;
+	const previousHosts = issuingHosts(configDir, profileName, {
+		apiHost,
+		oauthHost,
+	});
 	try {
 		const previous = resolveProfile(configDir, profileName);
 		previousWasKeyring = previous.storage === "keyring";
@@ -274,6 +302,7 @@ export const authFlow = async ({
 					at.storage === "keyring" ? KEYRING_CREDENTIALS : at.path,
 				...(identity.email ? { label: identity.email } : {}),
 				...(identity.id ? { userId: identity.id } : {}),
+				...hosts,
 			});
 		} catch (err) {
 			if (at.storage === "keyring" && !previousWasKeyring) {
@@ -293,8 +322,7 @@ export const authFlow = async ({
 		if (at.storage === "keyring") {
 			await retirePreviousCredential(
 				{
-					apiHost,
-					oauthHost,
+					...previousHosts,
 					clientId,
 					...(allowUnsafeTls ? { allowUnsafeTls } : {}),
 				},
@@ -848,6 +876,10 @@ export const ensureAuth = async (
 			source: "claimable",
 			configDir: props.configDir,
 			credentialsPath: path,
+			claimableProject: {
+				id: stored.projectId,
+				expiresAt: stored.expiresAt,
+			},
 		});
 		log.debug(
 			"Using the linked Claimable Neon project's short-lived access token",
@@ -1008,7 +1040,18 @@ export const ensureAuth = async (
 		loaded === null
 			? "has no stored credential"
 			: "holds a session that has expired";
-	const signInHint = `Run \`${getCliName()} login --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.`;
+	const forceAuth = props.forceAuth ?? props["force-auth"];
+	const signInHint = signInGuidance({
+		cli: getCliName(),
+		profile: selection.profile,
+		explicitProfile: selection.explicit,
+		// `claim create` refuses a directory that pins a project or an organization.
+		offerClaimable:
+			loaded === null &&
+			localContext.projectId === undefined &&
+			localContext.orgId === undefined,
+		ci: isCi() && !forceAuth,
+	});
 
 	// `me` is how scripts and agents check who is signed in. Signing in to answer that
 	// changes the answer, and leaves the caller waiting on a browser it may not see.
@@ -1016,7 +1059,7 @@ export const ensureAuth = async (
 	// `neon me && …` usable as a check. The handler sees no client and prints nothing.
 	if (props._[0] === "me") {
 		log.info(
-			`Not signed in: profile "${selection.profile}" ${state}. ${signInHint}`,
+			`Not signed in: profile "${selection.profile}" ${state}.\n${signInHint}`,
 		);
 		process.exitCode = 1;
 		return;
@@ -1024,20 +1067,26 @@ export const ensureAuth = async (
 
 	// Agents and scripts run commands with every stdio stream on a pipe or file, where nobody
 	// may be watching for a browser, so name the sign-in command instead of waiting out the
-	// 60-second timeout. One terminal stream is enough to keep `neon psql < q.sql` signing in.
+	// sign-in timeout. One terminal stream is enough to keep `neon psql < q.sql` signing in.
 	// `login` returned above and still opens the browser from there.
-	if (
-		!(props.forceAuth ?? props["force-auth"]) &&
-		!isCi() &&
-		!hasTerminal()
-	) {
+	if (!forceAuth && !isCi() && !hasTerminal()) {
 		throw new Error(
-			`Not signed in: profile "${selection.profile}" ${state}, and this shell has no terminal to start a browser sign-in from. ${signInHint}`,
+			`Not signed in: profile "${selection.profile}" ${state}, and this shell has no terminal to start a browser sign-in from.\n${signInHint}`,
+		);
+	}
+
+	if (isCi() && !forceAuth) {
+		throw new Error(
+			`Cannot run interactive auth in CI. Profile "${selection.profile}" ${state}.\n${signInHint}`,
 		);
 	}
 
 	// Use the resolved profile so `NEON_PROFILE` cannot overwrite `DEFAULT`.
-	const apiKey = await authFlow({ ...props, profile: selection.profile });
+	const apiKey = await authFlow({
+		...props,
+		profile: selection.profile,
+		hosts: hostUpdateFor(selection.profile),
+	});
 	props.apiKey = apiKey;
 	props.apiClient = getApiClient({
 		apiKey,

@@ -124,15 +124,15 @@ Custom tools combine several requests into one call, or call Postgres or neon.co
 | `sql.explain` | `explain_sql` | The `EXPLAIN (FORMAT JSON)` rows. `analyze: true` executes the statement. |
 | `schema.listTables` | `list_tables_schema` | `{ table_schema, table_name, table_type }` for every table outside `pg_catalog` and `information_schema`. |
 | `schema.describeTable` | `describe_table_schema` | `{ raw, formatted }`: columns, indexes, constraints, and sizes. A missing table, or a name that matches two tables, throws `NeonClientError`. |
-| `branches.describe` | `describe_branches` | `{ branch, console_url, text, database_structure }`, where `database_structure` is `[[], rows]`: one `{ tree_structure }` row per database, then the connected database's schemas and objects, read from the system catalogs in a `READ ONLY` transaction. When that query fails it is `null` and `database_structure_error` says why. |
-| `queries.listSlow` | `list_slow_queries` | `{ slow_queries, total_queries_found }` from `pg_stat_statements`, slowest mean time first. Without the extension it throws `NeonClientError`. |
+| `branches.describe` | `describe_branches` | `{ branch, console_url, text, database_structure }`, where `database_structure` is `[[], rows]`: one `{ tree_structure }` row per database except Neon's reserved `postgres`, which the other SQL tools reject, then the connected database's schemas and objects, read from the system catalogs in a `READ ONLY` transaction. When that query fails it is `null` and `database_structure_error` says why. |
+| `queries.listSlow` | `list_slow_queries` | `{ slow_queries, total_queries_found }` from `pg_stat_statements`, slowest mean time first. Without the extension it throws `NeonClientError` with the same message `database.inspect` gives: ask the user, then run the `CREATE EXTENSION` statement it names. |
 | `database.inspect` | `inspect_database` | One `neon inspect db` check: `{ check, describe, projectId, branchId, databases, fields, totalRowCount, rows, truncated, note? }`. |
 | `migrations.prepare` | `prepare_migrations` | Runs `migration_sql` on a new temporary branch and returns `{ complete, temporary_branch, migration_result }`. `complete` holds exactly the fields `migrations.complete` takes (`migration_id`, `migration_sql`, `database_name`, `project_id`, `temporary_branch_id`, `parent_branch_id`); `temporary_branch` is `{ id, name, parent_id }`; `migration_result` holds each statement's rows. |
 | `migrations.complete` | `complete_migrations` | Applies the migration to the parent unless `apply_changes` is false, deletes the temporary branch, and returns `{ applied, deletedBranchId?, cleanupError?, migrationResult? }`. |
 | `queryTuning.prepare` | `prepare_query_tuning` | Runs `EXPLAIN ANALYZE` on a new temporary branch and returns `{ complete, execution_plan, table_schemas, sql, baseline_metrics }`. `complete` holds `tuning_id`, `database_name`, `project_id`, `temporary_branch_id`, and `role_name` when one was passed; `baseline_metrics` holds time, cost, rows, and buffer counters of the root plan node. |
 | `queryTuning.complete` | `complete_query_tuning` | Applies `suggested_sql_statements` when `apply_changes` is true, deletes the temporary branch unless `should_delete_temporary_branch` is false, and returns `{ appliedChanges?, results?, deletedBranches?, message }`. |
 | `docs.search` | `search_docs` | `{ hits: [{ title, url, slug, category, breadcrumb, heading, excerpt }] }` from neon.com site search. |
-| `docs.get` | `get_docs` | `{ url, markdown }` for one neon.com page slug. |
+| `docs.get` | `get_docs` | `{ url, markdown }` for one neon.com page slug, without the agent skills note and feedback footer neon.com adds for agents that browse the site. |
 | `feedback.send` | `send_feedback` | Posts `{ feedback, source }` to the Neon feedback service. |
 
 ```ts
@@ -227,7 +227,7 @@ await tools["sql.run"].execute(
 
 | Field | Effect |
 | --- | --- |
-| `readOnly` | A tool whose `metadata.readOnlySafe` is `false` throws `NeonClientError` without a request (see [Read-only](#read-only)). `sql.run` and `sql.explain` run the statement in a `READ ONLY` transaction, so Postgres rejects writes. `sql.runTransaction`, `migrations.*`, and `queryTuning.*` are not read-only safe, because a caller statement such as `COMMIT` or `SET TRANSACTION READ WRITE` can leave a read-only transaction. `schema.*` and `queries.listSlow` behave like `sql.run`; `branches.describe` and `database.inspect` always use a `READ ONLY` transaction. |
+| `readOnly` | A tool whose `metadata.readOnlySafe` is `false` throws `NeonClientError` without a request (see [Read-only](#read-only)). `sql.run` and `sql.explain` run the statement in a `READ ONLY` transaction, so Postgres rejects writes. `sql.runTransaction`, `migrations.*`, and `queryTuning.*` are not read-only safe, because a caller statement such as `COMMIT` or `SET TRANSACTION READ WRITE` can leave a read-only transaction. `schema.*` behave like `sql.run`; `branches.describe`, `queries.listSlow`, and `database.inspect` always use a `READ ONLY` transaction. |
 | `postgresRole` | Every SQL connection logs in as this role, and `postgres.connectionString` returns a URI for it. A `role_name` that differs throws `NeonClientError`. |
 | `caller` | Sent with `docs.search` as `x-caller-source`, `x-caller-user-agent`, and `x-caller-client`. Without it, or when `source` cannot be a header value, `x-caller-source` is `neon_tools`. The search service records `website`, `cli`, `mcp`, and `monitor` by name and counts any other source as `rest`. |
 
@@ -375,7 +375,7 @@ An abort `signal` on `execute` or a wait timeout stops the poll, not the create:
 
 `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there.
 
-These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, `storage.objects.get`, `credentials.reveal`, `logs.loki.labels`, and `logs.loki.labelValues`. Waiting is what the write tools already do. Loki labels are the log fields, so `logs.fields` and `logs.fieldValues` are the discovery tools for both `logs.query` and `logs.loki.queryRange`; the latter returns Loki's response, with lines grouped by stream labels, and nanosecond timestamp strings. `realtime.secret` is a GET that requires approval: it returns the branch's Realtime secret, which an application backend seals queries with. After `realtime.rotateSecret`, it returns the new value once `pending` is `false`. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI. `triggers.create` and `triggers.update` take the OpenAPI discriminator as a nested `body` field. `credentials.rotate` requires approval and is not idempotent: a lost success already replaced the secret; create a replacement and revoke the rotated credential.
+These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, `storage.objects.get`, `credentials.reveal`, `logs.loki.labels`, and `logs.loki.labelValues`. Waiting is what the write tools already do. Loki labels are the log fields, so `logs.fields` and `logs.fieldValues` are the discovery tools for both `logs.query` and `logs.loki.queryRange`; the latter returns Loki's response, with lines grouped by stream labels, and nanosecond timestamp strings. `realtime.secret` is a GET that requires approval: it returns the branch's Realtime secret, which an application backend seals queries with. After `realtime.rotateSecret`, it returns the new value once `pending` is `false`. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI. `postgres.dataApi.get` returns `{ enabled: false }` for a database without a Data API, where the SDK method throws `NeonNotFoundError`, and adds `enabled: true` to a configured one; a missing branch or database still throws. `triggers.create` and `triggers.update` take the OpenAPI discriminator as a nested `body` field. `credentials.rotate` requires approval and is not idempotent: a lost success already replaced the secret; create a replacement and revoke the rotated credential.
 
 ## Roles
 
@@ -411,7 +411,7 @@ const tools = createNeonTools({
 		"postgres.connectionString":
 			"Get a connection string. Call it after {{projects.create}}.",
 		delete_projects:
-			"Delete a Neon project and all its data. NEVER run autonomously; always ask the user first.",
+			"Delete a Neon project and all its data. NEVER run autonomously: run it only when the user's own message asks for it and unambiguously identifies its target; otherwise ask first.",
 	},
 });
 tools["projects.create"].description;
@@ -698,7 +698,7 @@ The span records every failure's tag as `error.type` and fails only for the serv
 
 Anything else a tool throws becomes a defect. `toNeonToolError` is the mapping, for promise code you wrap yourself.
 
-Retries are off unless you pass `retry`. The SDK already retries 423, 429, and 503 responses and honours `Retry-After`. `retryReadOnlyNetworkFailures` retries a read-only tool that got no response, twice with jittered exponential backoff from 200 ms; mutations are never retried, since one may have reached the API. A retry runs the whole tool again, including `onExecute` hooks and every page of a list. Pass your own `NeonToolRetryPolicy` (`schedule`, `times`, `shouldRetry`) for a different policy. Whatever it says, the adapter only retries read-only tools and never a 423, 429, or 503 response.
+Retries are off unless you pass `retry`. The SDK already retries 423, 429, and 503 responses and honours `Retry-After`, and its ergonomic client resends a `GET` whose connection dropped before a response. `retryReadOnlyNetworkFailures` retries a read-only tool that got no response, twice with jittered exponential backoff from 200 ms; mutations are never retried, since one may have reached the API. A retry runs the whole tool again, including `onExecute` hooks and every page of a list. Pass your own `NeonToolRetryPolicy` (`schedule`, `times`, `shouldRetry`) for a different policy. Whatever it says, the adapter only retries read-only tools and never a 423, 429, or 503 response.
 
 ## Safety and binary data
 

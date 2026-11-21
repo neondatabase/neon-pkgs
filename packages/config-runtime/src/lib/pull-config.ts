@@ -330,7 +330,13 @@ export function buildPulledBranchConfig(
 		bucketDefs[b.name] = { access: b.accessLevel };
 	}
 	const policyPreview: NonNullable<Config["preview"]> = {};
-	if (previewState?.realtime?.enabled) policyPreview.realtime = true;
+	const realtime = previewState?.realtime;
+	if (realtime?.enabled) {
+		// An empty list allows every origin, which is what `realtime: true` gets by default.
+		policyPreview.realtime = realtime.allowedOrigins?.length
+			? { allowedOrigins: [...realtime.allowedOrigins] }
+			: true;
+	}
 	if (Object.keys(bucketDefs).length > 0) policyPreview.buckets = bucketDefs;
 	const authEnabled = previewState?.authEnabled === true;
 	const dataApi = previewState?.dataApi

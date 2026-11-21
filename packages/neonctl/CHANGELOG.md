@@ -1,5 +1,63 @@
 # neonctl
 
+## 9.9.2
+
+### Patch Changes
+
+- Updated dependencies [22dbd41]
+  - neon@9.9.2
+
+## 9.9.1
+
+### Patch Changes
+
+- Updated dependencies [6568f37]
+- Updated dependencies [9b9a539]
+  - neon@9.9.1
+
+## 9.9.0
+
+### Patch Changes
+
+- Updated dependencies [b71be7c]
+  - neon@9.9.0
+
+## 9.8.0
+
+### Patch Changes
+
+- Updated dependencies [eba4c88]
+- Updated dependencies [9b241ad]
+- Updated dependencies [23aa7d2]
+- Updated dependencies [d0d33f9]
+- Updated dependencies [5692070]
+- Updated dependencies [402ab97]
+  - neon@9.8.0
+
+## 9.7.2
+
+### Patch Changes
+
+- Updated dependencies [c76c71d]
+- Updated dependencies [59a8bc7]
+- Updated dependencies [4ab89b2]
+- Updated dependencies [23e34f9]
+  - neon@9.7.2
+
+## 9.7.1
+
+### Patch Changes
+
+- Updated dependencies [87b3e1c]
+  - neon@9.7.1
+
+## 9.7.0
+
+### Patch Changes
+
+- Updated dependencies [dfc9ebe]
+  - neon@9.7.0
+
 ## 9.6.3
 
 ### Patch Changes

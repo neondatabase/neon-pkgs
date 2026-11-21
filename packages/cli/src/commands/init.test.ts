@@ -395,6 +395,32 @@ describe("init handler", () => {
 		expect(out).toMatch(/neon claim create/);
 	});
 
+	test("the saved-key step names the profile NEON_PROFILE selects", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-env-profile-"));
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		vi.stubEnv("NEON_PROFILE", "work");
+		const { handler } = await import("./init.js");
+
+		try {
+			await handler(
+				baseProps({
+					cwd,
+					operations: makeOperations(),
+					yes: true,
+					contextFile: join(cwd, ".neon"),
+					linkProject: vi.fn().mockResolvedValue(undefined),
+					hasLocalCredentials: () => false,
+				}),
+			);
+		} finally {
+			vi.unstubAllEnvs();
+		}
+
+		expect(stdoutText(stdout)).toContain(
+			'echo "$KEY" | neon profile create work --api-key -',
+		);
+	});
+
 	test("Custom -y unanswered project setup skips link when unauthenticated", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-custom-unauth-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
@@ -2195,6 +2221,86 @@ describe("init handler", () => {
 
 	test.each([
 		{
+			name: "a new link",
+			pinned: undefined,
+			services: ["ai-gateway"],
+			pulls: 1,
+			heading: "Neon setup complete.",
+			outcome: "success",
+		},
+		{
+			name: "a linked branch",
+			pinned: { projectId: "proj-1", branch: "main" },
+			services: ["ai-gateway"],
+			pulls: 1,
+			heading: "Neon setup complete.",
+			outcome: "success",
+		},
+		{
+			name: "a linked branch",
+			pinned: { projectId: "proj-1", branch: "main" },
+			services: ["ai-gateway", "auth"],
+			pulls: 1,
+			heading: "Neon setup needs a next step.",
+			outcome: "pending",
+		},
+		{
+			name: "a project pinned without a branch",
+			pinned: { projectId: "proj-1" },
+			services: ["ai-gateway"],
+			pulls: 0,
+			heading: "Neon setup needs a next step.",
+			outcome: "pending",
+		},
+	])("-y --services $services after $name reports $outcome", async ({
+		pinned,
+		services,
+		pulls,
+		heading,
+		outcome,
+	}) => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-aigw-status-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		if (pinned) {
+			writeFileSync(contextFile, `${JSON.stringify(pinned)}\n`);
+		}
+		const linkProject = vi.fn(async () => {
+			writeFileSync(
+				contextFile,
+				`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
+			);
+		});
+		const envPull = vi.fn().mockResolvedValue({ status: "empty" });
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+		const { trackEvent } = await import("../analytics.js");
+		vi.mocked(trackEvent).mockClear();
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				linkProject,
+				envPull,
+				yes: true,
+				services,
+				analytics: true,
+				contextFile,
+				detectProjectAgents: () => ["cursor"],
+			}),
+		);
+
+		expect(envPull).toHaveBeenCalledTimes(pulls);
+		expect(stdoutText(stdout)).toContain(heading);
+		const end = vi
+			.mocked(trackEvent)
+			.mock.calls.find((call) => call[0] === "cli_init_end")?.[1];
+		expect(end).toEqual(expect.objectContaining({ outcome }));
+	});
+
+	test.each([
+		{
 			name: "a Postgres-only neon.ts",
 			config: undefined,
 			expected: "neon config plan",
@@ -2403,6 +2509,160 @@ describe("init handler", () => {
 		expect(envPull).not.toHaveBeenCalled();
 	});
 
+	describe("neon.ts for the project init links", () => {
+		const linkTo = (contextFile: string, created: boolean) =>
+			vi.fn(async () => {
+				writeFileSync(
+					contextFile,
+					`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
+				);
+				return { created };
+			});
+
+		const runYes = async (
+			created: boolean,
+			overrides: Record<string, unknown> = {},
+		) => {
+			const cwd = mkdtempSync(join(tmpdir(), "neon-init-seed-"));
+			writeFileSync(join(cwd, "package.json"), "{}\n");
+			const contextFile = join(cwd, ".neon");
+			const linkProject = linkTo(contextFile, created);
+			const initConfig = vi.fn().mockResolvedValue(undefined);
+			const envPull = vi.fn().mockResolvedValue({ status: "empty" });
+			const stdout = vi
+				.spyOn(process.stdout, "write")
+				.mockReturnValue(true);
+			const { handler } = await import("./init.js");
+			await handler(
+				baseProps({
+					cwd,
+					operations: makeOperations(),
+					yes: true,
+					contextFile,
+					linkProject,
+					initConfig,
+					envPull,
+					...overrides,
+				}),
+			);
+			return {
+				linkProject,
+				initConfig,
+				envPull,
+				out: stdoutText(stdout),
+			};
+		};
+
+		test("an existing project seeds neon.ts from its branch and pulls from that policy", async () => {
+			const { trackEvent } = await import("../analytics.js");
+			vi.mocked(trackEvent).mockClear();
+			const { initConfig, envPull, out } = await runYes(false, {
+				analytics: true,
+			});
+
+			expect(initConfig).toHaveBeenCalledTimes(1);
+			expect(initConfig).toHaveBeenCalledWith(
+				expect.objectContaining({
+					install: true,
+					fromBranch: true,
+					project: expect.objectContaining({
+						projectId: "proj-1",
+						branch: "main",
+					}),
+				}),
+			);
+			expect(initConfig.mock.calls[0]?.[0]).not.toHaveProperty(
+				"services",
+			);
+			expect(envPull).toHaveBeenCalledTimes(1);
+			expect(envPull).toHaveBeenCalledWith(
+				expect.not.objectContaining({ services: expect.anything() }),
+			);
+			expect(out).toContain("neon.ts created from the linked branch");
+			const end = vi
+				.mocked(trackEvent)
+				.mock.calls.find((call) => call[0] === "cli_init_end")?.[1];
+			expect(end).toEqual(
+				expect.objectContaining({ config: "seeded", services: null }),
+			);
+		});
+
+		test("a failed neon.ts step fails init at the config step", async () => {
+			const { trackEvent } = await import("../analytics.js");
+			vi.mocked(trackEvent).mockClear();
+			const envPull = vi.fn();
+
+			await expect(
+				runYes(false, {
+					analytics: true,
+					initConfig: vi
+						.fn()
+						.mockRejectedValue(new Error("neon.ts step failed")),
+					envPull,
+				}),
+			).rejects.toThrow("neon.ts step failed");
+			expect(envPull).not.toHaveBeenCalled();
+			const end = vi
+				.mocked(trackEvent)
+				.mock.calls.find((call) => call[0] === "cli_init_end")?.[1];
+			expect(end).toEqual(
+				expect.objectContaining({ error_step: "config" }),
+			);
+		});
+
+		test("a new project keeps the starter policy", async () => {
+			const { initConfig, out } = await runYes(true);
+
+			expect(initConfig).toHaveBeenCalledWith(
+				expect.objectContaining({ services: ["postgres"] }),
+			);
+			expect(initConfig.mock.calls[0]?.[0]).not.toHaveProperty(
+				"fromBranch",
+			);
+			expect(initConfig.mock.calls[0]?.[0]).not.toHaveProperty("project");
+			expect(out).not.toContain("from the linked branch");
+		});
+
+		test("Custom skips the services picker for an existing project and seeds", async () => {
+			const pickServices = vi.fn(async () => ["auth" as const]);
+			const { initConfig } = await runYes(false, {
+				yes: false,
+				pickAgentSetup: async () => "skip",
+				pickConfig: async () => true,
+				pickServices,
+				pickPackageManager: async () => "npm",
+			});
+
+			expect(pickServices).not.toHaveBeenCalled();
+			expect(initConfig).toHaveBeenCalledWith(
+				expect.objectContaining({ fromBranch: true }),
+			);
+		});
+
+		test("--services wins over seeding on an existing project", async () => {
+			const { initConfig } = await runYes(false, { services: ["auth"] });
+
+			expect(initConfig).toHaveBeenCalledWith(
+				expect.objectContaining({ services: ["auth"] }),
+			);
+			expect(initConfig.mock.calls[0]?.[0]).not.toHaveProperty(
+				"fromBranch",
+			);
+		});
+
+		test("--no-config writes no neon.ts and leaves the env pull to link", async () => {
+			const { linkProject, initConfig, envPull } = await runYes(false, {
+				config: false,
+			});
+
+			expect(initConfig).not.toHaveBeenCalled();
+			expect(linkProject).toHaveBeenCalledWith(
+				expect.objectContaining({ envPull: true, deferEnvPull: false }),
+			);
+			expect(envPull).not.toHaveBeenCalled();
+		});
+	});
+
 	test("a failed dependency install reports its cause on screen and in cli_init_end", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-install-fails-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
@@ -2527,6 +2787,8 @@ describe("init CLI", () => {
 		expect(help).toMatch(/--no-config/);
 		expect(flat).toMatch(/does not scaffold/i);
 		expect(flat).toMatch(/forwarded to plugins, or to skills and mcp/i);
+		expect(flat).toMatch(/project-scoped key .*exits 1/);
+		expect(flat).toMatch(/fall back to oauth/);
 		expect(help).toMatch(/Plugin agents/);
 		expect(help).toMatch(/Skills and MCP agents/);
 		expect(help).not.toMatch(/installed apps/);

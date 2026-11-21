@@ -87,6 +87,7 @@ export interface NeonMaintenance {
 /** What neonstatus.com reports right now. */
 export interface NeonIncidentsReport {
 	status: NeonServiceStatus;
+	/** When neonstatus.com last updated the overall status, not when this report was fetched. */
 	updated_at: string;
 	status_page_url: typeof STATUS_PAGE_URL;
 	/** Open incidents. */

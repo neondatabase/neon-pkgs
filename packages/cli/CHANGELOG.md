@@ -1,5 +1,78 @@
 # neon
 
+## 9.9.2
+
+### Patch Changes
+
+- 22dbd41: When the CLI has no usable credential, `neon me` and other commands now list the ways to authenticate: sign in with `neon login`, save an API key you already have with `echo "$KEY" | neon profile create <profile> --api-key -`, or create a temporary project with `neon claim create`. `neon init -y` and a rejected profile key point at the same command. A rejected `NEON_API_KEY` now says that it overrides a saved sign-in.
+
+## 9.9.1
+
+### Patch Changes
+
+- 6568f37: Deploying a Function from `neon.ts` now sets the display name declared in `functions.<slug>.name`, and resets a name changed elsewhere back to it. Before, the deployed Function kept its slug as its name. A name made only of whitespace is now rejected when `neon.ts` loads, since the Functions API refuses it.
+- 9b9a539: `database.inspect` `outliers` and `calls`, `queries.listSlow`, and `neon inspect db outliers` and `calls` leave out the statements Neon runs on its own (compute setup as `cloud_admin`, and the session reset after each HTTP query) and the diagnostics' own SQL, so the rankings and the `prop_exec_time` shares cover your workload.
+- Updated dependencies [3471479]
+- Updated dependencies [8aa3363]
+- Updated dependencies [bf0da21]
+- Updated dependencies [6568f37]
+  - @neon/sdk@7.15.0
+  - @neon/config@1.14.6
+  - @neon/config-runtime@1.12.9
+
+## 9.9.0
+
+### Minor Changes
+
+- b71be7c: Named profiles now remember the `--api-host` and `--oauth-host` they were created or signed in with, so `neon --profile staging <command>` reaches that environment without setting `NEON_API_HOST` on every command. `neon profile list` shows the recorded host.
+
+## 9.8.0
+
+### Minor Changes
+
+- 402ab97: `neon init` now writes `neon.ts` from the branch's current services when it links an existing project, as `neon config init --from-branch` does, so `neon env pull` returns those services' variables (Neon Auth, Data API, Object Storage, Realtime). New projects still get the starter policy, `--services` still picks the services, and `--no-config` still skips `neon.ts`.
+
+### Patch Changes
+
+- eba4c88: `neon init`, `neon config init`, and `neon functions new` no longer fail with `spawn ENOENT` in a project that has lockfiles from several package managers, such as `bun.lockb` next to `package-lock.json`, when one of those package managers is not installed. They now install with one that is on PATH, unless `package.json` pins one with `packageManager`, or the project is a pnpm workspace or was installed by pnpm.
+- 9b241ad: `neon credentials reveal` now prints the credential's `branch_id`, `name`, and `scopes` next to its secrets, as `create` and `rotate` do. When the branch you pass does not list the credential, it prints the secrets without that metadata and warns.
+- 23aa7d2: `neon data-api create --help` now says `--add-default-grants` also covers tables the database owner creates later.
+- d0d33f9: The router `index.ts` that `neon functions new` writes now names its default export (`export default handler;`), so Next.js's ESLint config no longer warns on it with `import/no-anonymous-default-export`.
+- 5692070: `list_incidents` and `neon incidents --help` now say that `updated_at` is when neonstatus.com last updated the overall status, not when the call fetched the page.
+- Updated dependencies [2fe06c0]
+  - @neon/sdk@7.14.3
+  - @neon/config@1.14.5
+  - @neon/config-runtime@1.12.8
+
+## 9.7.2
+
+### Patch Changes
+
+- c76c71d: `neon init` now reports "Neon setup complete." when the only service beyond Postgres in the new `neon.ts` is the AI Gateway, since init already pulls its credential and `neon deploy` has nothing left to apply.
+- 59a8bc7: `neon init --help` now says that `--mcp-auth api-key` fails with an organization or project-scoped key, and that omitting the flag falls back to OAuth.
+- 4ab89b2: Browser sign-in (`neon login`, and the sign-in other commands start when no credential is found) now waits up to 10 minutes for the browser to finish, up from 60 seconds, and says so in the waiting message and in `neon login --help`.
+- 23e34f9: `neon me` now works with an organization API key: it shows the key's organization and exits 0, where it used to fail with `not allowed for organization API keys`.
+
+## 9.7.1
+
+### Patch Changes
+
+- 87b3e1c: `neon skills --skill <name>` without a terminal now falls back to the coding agent running it when no other agent is detected, as `neon skills -y` already did, instead of exiting with "No coding agents detected".
+
+## 9.7.0
+
+### Minor Changes
+
+- dfc9ebe: `neon realtime enable` now waits up to a minute until Realtime is enabled on the branch, prints `Realtime is enabled on branch <id>.`, and exits 1 if the wait times out. Pass `--no-wait` for the previous behavior, which returns right after the request with `Realtime enable requested for branch <id>.`. `neon status` shows Realtime and its allowed origins, and `neon config init --from-branch` declares Realtime in the seeded `neon.ts`.
+
+### Patch Changes
+
+- Updated dependencies [dfc9ebe]
+- Updated dependencies [dfc9ebe]
+  - @neon/config-runtime@1.12.7
+  - @neon/sdk@7.14.2
+  - @neon/config@1.14.4
+
 ## 9.6.3
 
 ### Patch Changes

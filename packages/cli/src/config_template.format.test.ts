@@ -86,6 +86,40 @@ const views: { name: string; view: NeonConfigView; branch: string }[] = [
 		branch: "main",
 	},
 	{
+		name: "realtime allowing every origin",
+		view: { preview: { realtime: true } },
+		branch: "main",
+	},
+	{
+		name: "realtime with allowed origins",
+		view: {
+			preview: {
+				realtime: {
+					allowedOrigins: [
+						"https://app.example.com",
+						"http://localhost:3000",
+					],
+				},
+			},
+		},
+		branch: "main",
+	},
+	{
+		name: "realtime with more origins than fit on a line",
+		view: {
+			preview: {
+				realtime: {
+					allowedOrigins: [
+						"https://app.example.com",
+						"https://staging.app.example.com",
+						"http://localhost:3000",
+					],
+				},
+			},
+		},
+		branch: "main",
+	},
+	{
 		name: "buckets and functions",
 		view: {
 			preview: {

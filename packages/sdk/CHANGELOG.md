@@ -1,5 +1,28 @@
 # @neon/sdk
 
+## 7.15.0
+
+### Minor Changes
+
+- 3471479: `branches.delete` now resolves to the deleted `Branch`, or `null` when the project has no branch with that id, instead of `void`. The `branches.delete` tool (`delete_branch` on the Neon MCP server) returns the same value instead of `null` for every call.
+
+### Patch Changes
+
+- 8aa3363: With `waitForReadiness`, `postgres.endpoints.create`, `update`, `start`, `suspend`, and `restart` now return the endpoint read after their operations finish, so `current_state`, `pending_state`, and `started_at` match a later `get`. The `create_postgres_endpoint`, `update_postgres_endpoint`, `start_postgres_endpoint`, `suspend_postgres_endpoint`, and `restart_postgres_endpoint` tools return that endpoint too.
+- bf0da21: When `branches.create` or `branches.createAndConnect` is refused because the parent branch has an expiration date, `error.message` now names the parent and says how to proceed: branch from a parent without an expiration date, or remove the parent's expiration (`expires_at: null`) after the user agrees. The message ends with the API's own text, which `body.message` still holds verbatim; `status`, `code`, and `requestId` are unchanged.
+
+## 7.14.3
+
+### Patch Changes
+
+- 2fe06c0: `createNeonClient` now retries a `GET` whose connection dropped before a response (`ECONNRESET`, `EPIPE`, `UND_ERR_SOCKET`) within the `retries` budget. This includes the lookups in `postgres.connectionString`, which also start retrying `423`, `429`, and `503`.
+
+## 7.14.2
+
+### Patch Changes
+
+- dfc9ebe: `realtime.enable` with `waitForReadiness` now waits until the branch reports `enabled: true` as well as `pending: false`, so a read that still shows Realtime disabled no longer resolves as success.
+
 ## 7.14.1
 
 ### Patch Changes

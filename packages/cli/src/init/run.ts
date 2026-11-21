@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { selectProfileName } from "../_shared/profiles.js";
 import {
 	type CommandAgentSetup,
 	recordCommandSuccessExtras,
@@ -162,11 +163,13 @@ export type InitConfigFn = (input: {
 	packageManager?: PackageManager;
 	install: boolean;
 	/**
-	 * The linked project, passed only when `data-api` is declared and init has credentials
-	 * for it, so the scaffolded `dataApi` follows the branch's live auth provider instead of
-	 * assuming Neon Auth.
+	 * The linked project, passed only when init has credentials for it and reads its branch:
+	 * to seed neon.ts from it (`fromBranch`), or when `data-api` is declared, so the
+	 * scaffolded `dataApi` follows the branch's live auth provider instead of assuming Neon Auth.
 	 */
 	project?: { projectId: string; branch?: string; auth: InitAuthOptions };
+	/** Write neon.ts from `project`'s branch, as `config init --from-branch` does. */
+	fromBranch?: boolean;
 }) => Promise<void>;
 
 export type InitClaimFn = (input: {
@@ -257,7 +260,7 @@ const commandLine = (command: string, pairs: FlagPairs): string =>
 const deferredLinkCommands = (
 	props: InitProps,
 	inputs: InitLinkInputs,
-): { login: string; link: string; envPull: string } => {
+): { login: string; link: string; envPull: string; saveKey: string } => {
 	const session: FlagPairs = [
 		["--profile", props.profile],
 		[
@@ -283,6 +286,11 @@ const deferredLinkCommands = (
 			...session,
 		]),
 		envPull: commandLine("env pull", [...context, ...session]),
+		// `--api-key -` refuses a terminal on stdin, so the key is piped in.
+		saveKey: `echo "$KEY" | ${commandLine(
+			`profile create ${quoteFlagValue(selectProfileName(props.profile))}`,
+			[["--api-key", "-"], session[1]],
+		)}`,
 	};
 };
 
@@ -447,8 +455,8 @@ const pickOrDetectAgents = async (input: {
 };
 
 const defaultInitConfig: InitConfigFn = async (input) => {
-	// A failed credential read must not fail init: `initCmd` without a client writes the
-	// same neon.ts it always has, and says so.
+	// For the Data API read, a failed credential read must not fail init: `initCmd` without a
+	// client writes the same neon.ts it always has, and says so. Seeding has no such fallback.
 	let project: Pick<
 		ConfigInitProps,
 		| "apiClient"
@@ -483,6 +491,9 @@ const defaultInitConfig: InitConfigFn = async (input) => {
 					: {}),
 			};
 		} catch (error) {
+			if (input.fromBranch) {
+				throw error;
+			}
 			log.warning(
 				"Couldn't authenticate to read the Data API on the linked branch (%s); declaring it with Neon Auth.",
 				error instanceof Error ? error.message : String(error),
@@ -494,6 +505,7 @@ const defaultInitConfig: InitConfigFn = async (input) => {
 		install: input.install,
 		silent: true,
 		requireInstall: true,
+		...(input.fromBranch ? { fromBranch: true } : {}),
 		...(input.services !== undefined ? { services: input.services } : {}),
 		...(input.packageManager !== undefined
 			? { packageManager: input.packageManager }
@@ -1049,6 +1061,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		step = "link";
 		let projectSetup: InitProjectSetupChoice | "skip" | "already" = "skip";
 		let claimExpiresAt: string | undefined;
+		let linkedExisting = false;
 		const noLink = props.link === false;
 		// -y never opens a browser, so without credentials it leaves linking as a next step.
 		const linkByDefault =
@@ -1162,7 +1175,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				detection.authenticated ? PROGRESS.link : PROGRESS.auth,
 			);
 			const linkProject = props.linkProject ?? runAuthenticatedLink;
-			await linkProject(linkProps);
+			const linkResult = await linkProject(linkProps);
+			linkedExisting = linkResult?.created === false;
 			funnel.link = "linked";
 		}
 
@@ -1265,10 +1279,19 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				? await (props.pickConfig ?? pickInitConfigInteractively)()
 				: undefined;
 		let configPlan = configPlanFromResolution(configResolution, accepted);
+		// An existing project's branch may already run services the starter policy would leave
+		// out of the env pull, and that a deploy would switch off, so its neon.ts is read from
+		// the branch instead of picked. `--services` still wins.
+		const seedFromBranch =
+			configPlan.kind === "write" &&
+			!existingConfig &&
+			linkedExisting &&
+			servicesFlag === undefined;
 
 		if (
 			configPlan.kind === "write" &&
 			!existingConfig &&
+			!seedFromBranch &&
 			configPlan.services === undefined &&
 			!recommended &&
 			servicesFlag === undefined &&
@@ -1283,7 +1306,12 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			};
 		}
 
-		if (recommended && configPlan.kind === "write" && !existingConfig) {
+		if (
+			recommended &&
+			configPlan.kind === "write" &&
+			!existingConfig &&
+			!seedFromBranch
+		) {
 			configPlan = {
 				kind: "write",
 				services: servicesFlag ?? ["postgres"],
@@ -1299,10 +1327,13 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			projectSetup === "link" &&
 			funnel.link === "linked";
 		if (configPlan.kind === "write") {
-			const planned = existingConfig
-				? undefined
-				: (configPlan.services ?? ["postgres"]);
-			if (planned !== undefined) {
+			const planned =
+				existingConfig || seedFromBranch
+					? undefined
+					: (configPlan.services ?? ["postgres"]);
+			if (seedFromBranch) {
+				wroteNewFile = true;
+			} else if (planned !== undefined) {
 				declared = parseConfigInitServices(planned);
 				extraServices = declared.length > 0;
 				selectedServices = expandTelemetryServices(declared);
@@ -1340,7 +1371,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			const readableProject =
 				funnel.link !== "skipped" &&
 				!pinnedOffline &&
-				declared.includes("data-api")
+				(seedFromBranch || declared.includes("data-api"))
 					? readContextFile(contextFile)
 					: undefined;
 			const readableBranch =
@@ -1353,6 +1384,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					install: true,
 					packageManager: pm,
 					...(planned !== undefined ? { services: planned } : {}),
+					...(seedFromBranch ? { fromBranch: true } : {}),
 					...(typeof readableProject?.projectId === "string"
 						? {
 								project: {
@@ -1392,7 +1424,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				}
 				throw error;
 			}
-			funnel.config = existingConfig ? "existing" : "created";
+			funnel.config = existingConfig
+				? "existing"
+				: seedFromBranch
+					? "seeded"
+					: "created";
 		} else {
 			funnel.config = "skipped";
 		}
@@ -1486,7 +1522,14 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		}
 
 		const pendingUnauthed = funnel.link === "skipped" && !noLink;
-		const pendingServices = extraServices && linked;
+		// The AI Gateway exists on every branch; its only setup is the credential the
+		// env pull mints.
+		const pendingServices =
+			linked &&
+			declared.some(
+				(service) =>
+					service !== "ai-gateway" || envPullPlan.kind === "skip",
+			);
 		const pendingClaimable =
 			funnel.link === "claimable" && claimExpiresAt !== undefined;
 		const pendingExisting =
@@ -1499,22 +1542,24 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			pendingExisting;
 
 		const next: string[] = [];
+		const commands = deferredLinkCommands(props, linkInputs);
 		if (pinnedOffline) {
-			const commands = deferredLinkCommands(props, linkInputs);
 			next.push(
 				...offlinePinNext({
 					login: commands.login,
 					...(extraServices || existingConfig
 						? {}
 						: { envPull: commands.envPull }),
+					saveKey: commands.saveKey,
 				}),
 			);
 		} else if (pendingUnauthed) {
 			next.push(
 				...unattendedUnauthedNext(
-					hasExplicitLinkInputs
-						? deferredLinkCommands(props, linkInputs)
-						: undefined,
+					commands.saveKey,
+					hasExplicitLinkInputs ? commands : undefined,
+					readContextFile(contextFile).projectId === undefined &&
+						readContextFile(contextFile).orgId === undefined,
 				),
 			);
 			const deferredMcp = mcpDeferredNext();

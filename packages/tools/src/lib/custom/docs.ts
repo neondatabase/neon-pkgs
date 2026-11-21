@@ -226,6 +226,16 @@ export const searchDocsTool = (options: ToolClientOptions) => {
 	);
 };
 
+// neon.com adds these notes to its generated .md pages for agents that browse the site.
+// In a tool result they read as instructions injected into the page, and the footer bypasses
+// feedback.send, which runs only when the user asks.
+const AGENT_SKILLS_NOTE =
+	/^(> Full Neon documentation index: [^\n]*\n)>\n> Agent skills: [^\n]*\n/m;
+const FEEDBACK_NOTE = /\n---\n\nNote for AI assistants [^\n]*\s*$/;
+
+const stripAgentNotes = (markdown: string) =>
+	markdown.replace(AGENT_SKILLS_NOTE, "$1").replace(FEEDBACK_NOTE, "");
+
 const getDocOutputSchema = z.looseObject({
 	url: z.string(),
 	markdown: z.string().describe("The page as markdown."),
@@ -271,7 +281,7 @@ export const getDocTool = (options: ToolClientOptions) => {
 					`Failed to fetch doc page "${mdSlug}": ${response.status} ${response.statusText}`,
 				);
 			}
-			return { url, markdown: await response.text() };
+			return { url, markdown: stripAgentNotes(await response.text()) };
 		},
 	);
 };

@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
 	isStagingApiHost,
 	STAGING_API_HOST,
@@ -22,6 +25,11 @@ describe("isStagingApiHost", () => {
 });
 
 describe("stagingFeaturesEnabledForArgv", () => {
+	// A profile selected from the developer's shell would bring its own recorded host.
+	beforeEach(() => {
+		vi.stubEnv("NEON_PROFILE", "");
+		vi.stubEnv("NEON_API_KEY", "");
+	});
 	afterEach(() => {
 		vi.unstubAllEnvs();
 	});
@@ -56,5 +64,35 @@ describe("stagingFeaturesEnabledForArgv", () => {
 
 		vi.stubEnv("NEON_API_HOST", "");
 		expect(stagingFeaturesEnabledForArgv(["projects", "list"])).toBe(false);
+	});
+
+	test("a selected profile's recorded host decides over NEON_API_HOST", () => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-staging-profile-"));
+		try {
+			writeFileSync(
+				join(dir, "profiles.json"),
+				JSON.stringify({
+					version: 1,
+					profiles: {
+						staging: {
+							credentials: "credentials.staging.json",
+							apiHost: STAGING_API_HOST,
+						},
+					},
+				}),
+			);
+			vi.stubEnv("NEON_API_HOST", PRODUCTION_API_HOST);
+			const args = ["projects", "list", "--config-dir", dir];
+			expect(
+				stagingFeaturesEnabledForArgv([
+					...args,
+					"--profile",
+					"staging",
+				]),
+			).toBe(true);
+			expect(stagingFeaturesEnabledForArgv(args)).toBe(false);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });

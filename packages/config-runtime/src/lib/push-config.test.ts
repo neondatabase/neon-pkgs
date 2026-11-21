@@ -1040,6 +1040,172 @@ describe("pushConfig", () => {
 		// Still exactly one function on the branch (no duplicate created).
 		const functions = await api.listBranchFunctions(projectId, "br-main");
 		expect(functions.map((f) => f.slug)).toEqual(["fn1"]);
+		const change = result.applied.find(
+			(c) => c.identifier === "function:fn1",
+		);
+		expect(change?.details).not.toHaveProperty("changes");
+	});
+
+	describe("function display name", () => {
+		const named = (name: string) =>
+			defineConfig({ functions: { fn1: { name, source: fnSource } } });
+		const noBundle = async () => new Uint8Array([1]);
+
+		test("a new function gets the name declared in neon.ts after its first deploy", async () => {
+			const { api, projectId } = seededFake();
+			const result = await pushConfig(named("Hello World"), {
+				api,
+				projectId,
+				branchId: "br-main",
+				bundleFunction: noBundle,
+			});
+
+			const writes = api.history
+				.map((h) => h.method)
+				.filter((m) => /^(deploy|update)BranchFunction$/.test(m));
+			expect(writes).toEqual([
+				"deployBranchFunction",
+				"updateBranchFunction",
+			]);
+			expect(
+				(await api.getBranchFunction(projectId, "br-main", "fn1")).name,
+			).toBe("Hello World");
+			expect(result.applied).toContainEqual(
+				expect.objectContaining({
+					action: "create",
+					identifier: "function:fn1",
+					details: expect.objectContaining({
+						changes: [
+							{
+								field: "name",
+								current: "fn1",
+								desired: "Hello World",
+							},
+						],
+					}),
+				}),
+			);
+		});
+
+		test("an existing function whose name differs is renamed", async () => {
+			const { api, projectId } = seededFake();
+			api.seedFunction(projectId, "br-main", {
+				id: "fn-existing",
+				slug: "fn1",
+				name: "Old name",
+				invocationUrl: "https://x/functions/fn1",
+			});
+			const result = await pushConfig(named("Hello World"), {
+				api,
+				projectId,
+				branchId: "br-main",
+				bundleFunction: noBundle,
+			});
+
+			expect(
+				(await api.getBranchFunction(projectId, "br-main", "fn1")).name,
+			).toBe("Hello World");
+			expect(result.applied).toContainEqual(
+				expect.objectContaining({
+					action: "update",
+					identifier: "function:fn1",
+					details: expect.objectContaining({
+						changes: [
+							{
+								field: "name",
+								current: "Old name",
+								desired: "Hello World",
+							},
+						],
+					}),
+				}),
+			);
+		});
+
+		test("a function inherited from the parent branch keeps its name after the branch's first deploy", async () => {
+			const { api, projectId } = seededFake();
+			api.seedFunction(
+				projectId,
+				"br-main",
+				{
+					id: "fn1",
+					slug: "fn1",
+					name: "Hello World",
+					invocationUrl: "https://x/functions/fn1",
+				},
+				{ inherited: true },
+			);
+			const result = await pushConfig(named("Hello World"), {
+				api,
+				projectId,
+				branchId: "br-main",
+				bundleFunction: noBundle,
+			});
+
+			expect(
+				(await api.getBranchFunction(projectId, "br-main", "fn1")).name,
+			).toBe("Hello World");
+			const change = result.applied.find(
+				(c) => c.identifier === "function:fn1",
+			);
+			expect(change?.details).not.toHaveProperty("changes");
+		});
+
+		test("dry run reports the rename without calling the API", async () => {
+			const { api, projectId } = seededFake();
+			const result = await pushConfig(named("Hello World"), {
+				api,
+				projectId,
+				branchId: "br-main",
+				dryRun: true,
+			});
+
+			expect(
+				api.history.some((h) => h.method === "updateBranchFunction"),
+			).toBe(false);
+			expect(result.applied).toContainEqual(
+				expect.objectContaining({
+					identifier: "function:fn1",
+					details: expect.objectContaining({
+						changes: [
+							{
+								field: "name",
+								current: "fn1",
+								desired: "Hello World",
+							},
+						],
+					}),
+				}),
+			);
+		});
+
+		test("an adapter without updateBranchFunction still deploys and warns that the name was not applied", async () => {
+			const { api, projectId } = seededFake();
+			Object.defineProperty(api, "updateBranchFunction", {
+				value: undefined,
+			});
+
+			const result = await pushConfig(named("Hello World"), {
+				api,
+				projectId,
+				branchId: "br-main",
+				bundleFunction: noBundle,
+			});
+
+			expect(
+				api.history.filter((h) => h.method === "deployBranchFunction"),
+			).toHaveLength(1);
+			expect(
+				(await api.getBranchFunction(projectId, "br-main", "fn1")).name,
+			).toBe("fn1");
+			expect(result.warnings).toEqual([
+				'Function "fn1" keeps the name "fn1": this NeonApi adapter does not implement updateBranchFunction, so the name "Hello World" from neon.ts was not applied.',
+			]);
+			const change = result.applied.find(
+				(c) => c.identifier === "function:fn1",
+			);
+			expect(change?.details).not.toHaveProperty("changes");
+		});
 	});
 
 	test("creates a schedule trigger after deploying the function", async () => {

@@ -180,28 +180,23 @@ export async function deleteProject(projectId: string): Promise<void> {
 			`Refusing to delete project ${projectId} ("${project.project.name}"): does not match the e2e prefix.`,
 		);
 	}
-	// Retry on 423 (locked while a previous mutation is in flight) so cleanup is robust.
 	// A 422 means a branch is still protected; clear the flag once and try again.
-	const maxAttempts = 12;
-	let delay = 500;
-	let unprotected = false;
-	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-		try {
-			await apiRequest(`/projects/${projectId}`, { method: "DELETE" });
-			return;
-		} catch (err) {
-			const status = statusOf(err);
-			if (status === 404 || status === 410) return;
-			if (status === 422 && !unprotected) {
-				unprotected = true;
-				await unprotectBranches(projectId);
-				continue;
-			}
-			if (status !== 423 || attempt === maxAttempts) throw err;
-			await sleep(delay);
-			delay = Math.min(delay * 2, 5_000);
-		}
+	try {
+		await deleteIfPresent(projectId);
+	} catch (err) {
+		if (statusOf(err) !== 422) throw err;
+		await unprotectBranches(projectId);
+		await deleteIfPresent(projectId);
 	}
+}
+
+async function deleteIfPresent(projectId: string): Promise<void> {
+	await apiRequest(`/projects/${projectId}`, { method: "DELETE" }).catch(
+		(err: unknown) => {
+			const status = statusOf(err);
+			if (status !== 404 && status !== 410) throw err;
+		},
+	);
 }
 
 /**

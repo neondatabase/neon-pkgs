@@ -465,7 +465,13 @@ const entryIncludesFiles = (
  */
 export const functionDefSchema = z
 	.strictObject({
-		name: z.string().min(1).max(255),
+		name: z
+			.string()
+			.min(1)
+			.max(255)
+			.refine((value) => value.trim() !== "", {
+				error: "must contain a non-whitespace character",
+			}),
 		source: z.string().min(1),
 		env: functionEnvSchema.optional(),
 		externalPackages: functionExternalPackagesSchema.optional(),

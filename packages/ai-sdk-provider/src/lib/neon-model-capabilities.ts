@@ -204,8 +204,9 @@ export function getNeonModelCapabilities(
 
 	// Google (Gemini): accepts standard sampling params, and Gemini 3 takes
 	// `reasoning_effort` — the gateway maps it onto Gemini's thinking config.
-	// Measured on gemini-3-6-flash: `minimal` produces 0 reasoning tokens and
-	// `high` produces 310, against 130 with the field absent.
+	// Measured on gemini-3-6-flash: `low` produces 0-111 reasoning tokens and
+	// `high` 325-376. `minimal` is answered with a 400 (`Thinking level is
+	// unsupported: THINKING_LEVEL_MINIMAL`).
 	//
 	// That mapping is broken for Gemini 4: `gemini-4-argon` and
 	// `gemini-4-carbon` answer `reasoning_effort` with a 400 (`Unknown name

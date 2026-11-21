@@ -1,5 +1,26 @@
 # @neondatabase/config-runtime
 
+## 1.12.9
+
+### Patch Changes
+
+- 6568f37: Deploying a Function from `neon.ts` now sets the display name declared in `functions.<slug>.name`, and resets a name changed elsewhere back to it. Before, the deployed Function kept its slug as its name. A name made only of whitespace is now rejected when `neon.ts` loads, since the Functions API refuses it.
+- Updated dependencies [6568f37]
+  - @neon/config@1.14.6
+
+## 1.12.8
+
+### Patch Changes
+
+- @neon/config@1.14.5
+
+## 1.12.7
+
+### Patch Changes
+
+- dfc9ebe: `pullConfig` and `inspect` report a branch's Realtime allowed origins: `config.preview.realtime` is `{ allowedOrigins: [...] }` when the branch lists origins, and stays `true` when the list is empty.
+  - @neon/config@1.14.4
+
 ## 1.12.6
 
 ### Patch Changes

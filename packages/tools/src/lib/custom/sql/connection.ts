@@ -67,7 +67,11 @@ export interface ConnectionTarget {
 export interface ResolvedConnection {
 	uri: string;
 	projectId: string;
-	branchId: string;
+	/**
+	 * Absent when the database and role were given without a branch: the
+	 * connection URI API then picks the default branch.
+	 */
+	branchId?: string;
 	databaseName: string;
 	roleName: string;
 	computeId?: string;
@@ -117,31 +121,33 @@ export const resolveConnection = async (
 		roleName = pinnedRole;
 	}
 
-	const branchId =
-		target.branch_id ??
-		(await neonClient.branches.getDefault({ projectId }, { signal })).id;
-
+	let branchId = target.branch_id;
 	let databaseName = target.database_name;
-	if (databaseName === undefined) {
-		const database = await defaultDatabase(
-			neonClient,
-			{ projectId, branchId },
-			signal,
-		);
-		databaseName = database.name;
-		roleName ??= database.owner_name;
-	} else if (roleName === undefined) {
-		const database = await neonClient.postgres.databases.get(
-			{ projectId, branchId, databaseName },
-			{ signal },
-		);
-		roleName = database.owner_name;
+	if (databaseName === undefined || roleName === undefined) {
+		branchId ??= (
+			await neonClient.branches.getDefault({ projectId }, { signal })
+		).id;
+		if (databaseName === undefined) {
+			const database = await defaultDatabase(
+				neonClient,
+				{ projectId, branchId },
+				signal,
+			);
+			databaseName = database.name;
+			roleName ??= database.owner_name;
+		} else {
+			const database = await neonClient.postgres.databases.get(
+				{ projectId, branchId, databaseName },
+				{ signal },
+			);
+			roleName = database.owner_name;
+		}
 	}
 
 	const uri = await neonClient.postgres.connectionString(
 		{
 			projectId,
-			branchId,
+			...(branchId === undefined ? {} : { branchId }),
 			databaseName,
 			roleName,
 			...(target.compute_id === undefined
@@ -154,7 +160,7 @@ export const resolveConnection = async (
 	return {
 		uri,
 		projectId,
-		branchId,
+		...(branchId === undefined ? {} : { branchId }),
 		databaseName,
 		roleName,
 		...(target.compute_id === undefined

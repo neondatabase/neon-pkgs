@@ -1,5 +1,49 @@
 # @neon/tools
 
+## 2.19.0
+
+### Minor Changes
+
+- 3471479: `branches.delete` now resolves to the deleted `Branch`, or `null` when the project has no branch with that id, instead of `void`. The `branches.delete` tool (`delete_branch` on the Neon MCP server) returns the same value instead of `null` for every call.
+
+### Patch Changes
+
+- 2b8be49: Destructive tool descriptions now tell agents to run the tool when the user's own message asks for it and unambiguously identifies its target, and to ask first otherwise. Before, they said to always ask the user first, so agents stopped to ask before deleting a branch the user had just asked them to delete.
+- 8aa3363: With `waitForReadiness`, `postgres.endpoints.create`, `update`, `start`, `suspend`, and `restart` now return the endpoint read after their operations finish, so `current_state`, `pending_state`, and `started_at` match a later `get`. The `create_postgres_endpoint`, `update_postgres_endpoint`, `start_postgres_endpoint`, `suspend_postgres_endpoint`, and `restart_postgres_endpoint` tools return that endpoint too.
+- d4a1414: `queries.listSlow` and the `database.inspect` checks that need `pg_stat_statements` or `neon` now work when the extension is installed in a schema that is not on the role's `search_path`, instead of failing because Postgres cannot find the extension's view or functions. When the extension is missing, `queries.listSlow` now returns the same guidance as `database.inspect`: ask the user before running `CREATE EXTENSION IF NOT EXISTS <extension>;`.
+- 9b9a539: `database.inspect` `outliers` and `calls`, `queries.listSlow`, and `neon inspect db outliers` and `calls` leave out the statements Neon runs on its own (compute setup as `cloud_admin`, and the session reset after each HTTP query) and the diagnostics' own SQL, so the rankings and the `prop_exec_time` shares cover your workload.
+- Updated dependencies [3471479]
+- Updated dependencies [8aa3363]
+- Updated dependencies [bf0da21]
+  - @neon/sdk@7.15.0
+  - @neon/effect@0.5.7
+
+## 2.18.0
+
+### Minor Changes
+
+- c693143: `postgres.dataApi.get` (`get_data_api` on the Neon MCP server) returns `{ enabled: false }` for a database without a Data API instead of throwing a 404 `NeonNotFoundError`, and adds `enabled: true` to a configured Data API's result. A missing branch or database still throws. TypeScript callers narrow on `enabled` before reading `url`.
+
+### Patch Changes
+
+- 23aa7d2: The `add_default_grants` input of `postgres.dataApi.create` now says the grants also cover tables the database owner creates later, that without the flag the Data API can read no table until you grant access, and that `anonymous` is never granted.
+- e4556ed: `branches.describe` and the branch result of `resources.fetch` no longer list Neon's reserved `postgres` database. The Neon API never lists it, so `sql.run`, `database.inspect`, `queries.listSlow`, and the other SQL tools return 404 for it.
+- ba66529: `docs.get` (the MCP server's `get_doc`) drops the agent skills note and feedback footer that neon.com adds to its markdown pages for agents browsing the site.
+- 5692070: `list_incidents` and `neon incidents --help` now say that `updated_at` is when neonstatus.com last updated the overall status, not when the call fetched the page.
+- d2f4c51: The `sql.run` description now says to send several statements one per call or through `sql.runTransaction`, since a `sql.run` call with more than one statement fails.
+- 8fce12a: SQL tools and `postgres.connectionString` make one fewer Neon API request when `branch_id` is omitted and `database_name` is given with `role_name` or a pinned `postgresRole`.
+- Updated dependencies [2fe06c0]
+  - @neon/sdk@7.14.3
+  - @neon/effect@0.5.6
+
+## 2.17.3
+
+### Patch Changes
+
+- Updated dependencies [dfc9ebe]
+  - @neon/sdk@7.14.2
+  - @neon/effect@0.5.5
+
 ## 2.17.2
 
 ### Patch Changes

@@ -47,7 +47,7 @@ const { project, connectionString } = data;
 | `throwOnError` | `boolean` | `false` | When `true`, methods return the resource directly and **throw** on error. When `false`, they return `{ data, error }`. **Narrows return types** at the type level. |
 | `waitForReadiness` | `boolean` | — (unset) | Omit to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll until `operations` finish, and `realtime.enable` polls until the Realtime state is no longer `pending`; other mutations do not. Set `false` to disable polling on those five. Set `true` to poll on every mutation that returns operations, and on the `neon.realtime` mutations. |
 | `wait` | `{ pollIntervalMs?: number; timeoutMs?: number }` | `1000` / `300000` | Tuning for the readiness poller. |
-| `retries` | `number` | `2` | Automatic retries on always-safe statuses (`423`, `429`, `503`) with backoff. Must be a non-negative integer (`0` disables retries). `NaN`, `Infinity`, a fraction, or a negative throws a `client`-kind error at construction. |
+| `retries` | `number` | `2` | Automatic retries with backoff on always-safe statuses (`423`, `429`, `503`), and on a `GET` whose connection dropped before a response (`ECONNRESET`, `EPIPE`, `UND_ERR_SOCKET`). Mutations are never resent after a dropped connection. Must be a non-negative integer (`0` disables retries). `NaN`, `Infinity`, a fraction, or a negative throws a `client`-kind error at construction. |
 | `requestTimeoutMs` | `number` | — (unbounded) | Deadline for a request **and** its retries. Aborts the request and resolves with a `NeonTimeoutError`. Pass `Infinity` per call to opt out of a client-wide value. Separate from `wait.timeoutMs`. |
 | `orgId` | `string` | — | Default organization for project create/list/count and as the transfer source org. Client-wide — not a `CallOptions` key. Override via method input (`org_id` on list/create/count, `fromOrgId` on transfer). |
 | `baseUrl` | `string` | `https://console.neon.tech/api/v2` | Override the API base URL. |
@@ -349,7 +349,7 @@ await neon.projects.transfer({
 | `get({ projectId, branchId })` | `Branch` | |
 | `create({ projectId, …input })` | `Branch` | RW compute on by default. `noCompute: true` skips the endpoint. No connection string. Readiness polling on by default. `input`: `{ name?, parent_id?, parent_lsn?, parent_timestamp?, protected?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? }, noCompute? }` |
 | `update({ projectId, branchId, …input })` | `Branch` | `input`: `{ name?, protected?, expires_at? }` |
-| `delete({ projectId, branchId })` | **→void** | With readiness polling on, a failed cleanup operation resolves the call only if the branch then reads back 404, while other cleanup may still be running; otherwise `NeonOperationError` (`NeonAbortError` if aborted) |
+| `delete({ projectId, branchId })` | `Branch \| null` | The deleted branch as Neon returned it, or `null` when the project has no branch with that id (Neon answers 204). With readiness polling on, a failed cleanup operation resolves the call only if the branch then reads back 404, while other cleanup may still be running; otherwise `NeonOperationError` (`NeonAbortError` if aborted) |
 | `createAndConnect({ projectId, …input, pooled? }, options?)` | **[W]** `{ branch, endpoint, connectionString }` | `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }`; `pooled` default `true` |
 | `getDefault({ projectId })` | `Branch` | resolves the default branch by the `default` flag |
 | `setDefault({ projectId, branchId })` | `Branch` | |
@@ -429,6 +429,8 @@ const { data: uri } = await neon.postgres.connectionString({
 | `update({ projectId, endpointId, …input })` | `Endpoint` |
 | `delete({ projectId, endpointId })` | **→void** |
 | `start` / `suspend` / `restart({ projectId, endpointId })` | `Endpoint` |
+
+With `waitForReadiness`, `create`, `update`, `start`, `suspend`, and `restart` read the endpoint again after the operations finish, so `current_state`, `pending_state`, and `started_at` match a later `get`. Without it, they return the endpoint as Neon accepted the request.
 
 #### `neon.postgres.roles`
 
@@ -1080,6 +1082,8 @@ const report = await listNeonIncidents();
 //   affected_components: [{ name: "Project/Branch Operations", status: "partial_disruption", regions: ["AWS us-east-2"] }],
 // }
 ```
+
+Every call fetches the status page. `updated_at` is when neonstatus.com last updated the overall status, not when the report was fetched.
 
 Region names stay as neonstatus.com prints them (`AWS us-east-2`, `Azure eastus2`, `Global`). An unknown status code or a response that does not match the documented shape is a `NeonClientError`.
 

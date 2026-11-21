@@ -435,7 +435,7 @@ export const runInspectQuery = async (
 			// `ext` is an internal constant from INSPECT_QUERIES, never user input,
 			// so interpolating it into the literal is safe.
 			const check = await connection.query(
-				`SELECT 1 FROM pg_extension WHERE extname = '${ext}';`,
+				`SELECT /* neon inspect */ 1 FROM pg_extension WHERE extname = '${ext}';`,
 			);
 			if (check.rows.length === 0) {
 				throw new Error(

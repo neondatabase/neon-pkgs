@@ -253,6 +253,11 @@ describe("generated operation coverage", () => {
 		expect(description("functions.deploy", "zip")).toBe(
 			"Base64-encoded ZIP of the function source. Omit to reuse the latest bundle; required for the first deployment.",
 		);
+		expect(
+			description("postgres.dataApi.create", "add_default_grants"),
+		).toBe(
+			"Grants the authenticated role read and write access to public-schema tables, including tables the database owner creates later. Without it, the Data API can read no table until you GRANT access. Never grants anonymous.",
+		);
 	});
 
 	test("composed create descriptions stay handwritten", () => {

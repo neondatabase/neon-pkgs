@@ -50,8 +50,8 @@ export const resolveFetchHandler = (mod: UserModule): FetchHandler => {
 
 	throw new Error(
 		"No request handler found in the source module. Export one of:\n" +
-			"  export default { fetch(req) { /* ... */ } }\n" +
-			"  export default function (req) { /* ... */ }",
+			"  const handler = { fetch(req) { /* ... */ } }; export default handler;\n" +
+			"  export default function handler(req) { /* ... */ }",
 	);
 };
 

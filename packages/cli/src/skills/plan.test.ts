@@ -350,18 +350,18 @@ describe("resolveSkillsPlan", () => {
 		expect(detectInstalledAgents).not.toHaveBeenCalled();
 	});
 
-	test("--skill without -y and no detected agents asks for -y", async () => {
+	test("--skill without -y uses the host CLI agent when the project has no folders", async () => {
 		const cwd = tmpDir();
-		await expect(
-			resolveSkillsPlan(
-				planOptions(cwd, {
-					agents: [],
-					skills: ["neon"],
-					yes: false,
-					interactive: false,
-				}),
-			),
-		).rejects.toThrow(/Pass -y to use project folders/);
+		const plan = await resolveSkillsPlan(
+			planOptions(cwd, {
+				agents: [],
+				skills: ["neon"],
+				yes: false,
+				interactive: false,
+				detectAgent: () => "opencode",
+			}),
+		);
+		expect(plan.agents).toEqual(["opencode"]);
 	});
 
 	test("-y --global uses installed apps over host", async () => {

@@ -2,6 +2,28 @@ import { describe, expect, test } from "vitest";
 import { authFailureMessage } from "./auth_context.js";
 
 describe("authFailureMessage", () => {
+	test("a rejected NEON_API_KEY says it overrides a saved sign-in", () => {
+		const message = authFailureMessage({
+			source: "api-key",
+			apiKeyFrom: "env",
+			configDir: "/c",
+		});
+		expect(message).toBe(
+			"Authentication failed: the Neon API rejected NEON_API_KEY. It takes precedence over a saved sign-in, so unset it to use that session, or set a valid key.",
+		);
+	});
+
+	test("a rejected profile key offers saving a valid key before minting one in a browser", () => {
+		const message = authFailureMessage({
+			source: "profile-api-key",
+			configDir: "/c",
+			profile: "work",
+		});
+		expect(message).toContain(
+			'Save a valid key with `echo "$KEY" | neon profile create work --api-key -`, or sign in with a browser on this machine to mint one with `neon profile create work --mint`.',
+		);
+	});
+
 	test("a profile key names the profile, the file, and how to replace it", () => {
 		const message = authFailureMessage({
 			source: "profile-api-key",

@@ -33,7 +33,32 @@ export type ProfileEntry = {
 	label?: string;
 	/** Neon user id, captured at login. Display only. */
 	userId?: string;
+} & ProfileHosts;
+
+/**
+ * The Neon environment a named profile's credential was issued by. A staging credential sent
+ * to production is rejected, so the profile has to carry its hosts rather than each command.
+ * DEFAULT never has them: it follows `--api-host` / `NEON_API_HOST` as it always has.
+ */
+export type ProfileHosts = {
+	/** Neon API base URL, as `--api-host` takes it. */
+	apiHost?: string;
+	/** Neon OAuth server, as `--oauth-host` takes it. */
+	oauthHost?: string;
 };
+
+const HOST_FIELDS = ["apiHost", "oauthHost"] as const;
+
+export const isHttpUrl = (value: string): boolean => {
+	if (!URL.canParse(value)) return false;
+	const { protocol } = new URL(value);
+	return protocol === "https:" || protocol === "http:";
+};
+
+export const hostsOf = (entry: ProfileHosts): ProfileHosts => ({
+	...(entry.apiHost !== undefined ? { apiHost: entry.apiHost } : {}),
+	...(entry.oauthHost !== undefined ? { oauthHost: entry.oauthHost } : {}),
+});
 
 export type ProfilesFile = {
 	version: 1;
@@ -49,7 +74,7 @@ export type ResolvedFileProfile = {
 	userId?: string;
 	/** True when the profile comes from `profiles.json` rather than the implicit default. */
 	declared: boolean;
-};
+} & ProfileHosts;
 
 export type ResolvedKeyringProfile = {
 	name: string;
@@ -57,7 +82,7 @@ export type ResolvedKeyringProfile = {
 	label?: string;
 	userId?: string;
 	declared: boolean;
-};
+} & ProfileHosts;
 
 export type ResolvedProfile = ResolvedFileProfile | ResolvedKeyringProfile;
 
@@ -153,6 +178,20 @@ export const inspectProfiles = (dir: string): ProfilesRead => {
 		) {
 			return broken(`profile "${name}" has no \`credentials\` pointer`);
 		}
+		for (const field of HOST_FIELDS) {
+			const value: unknown = entry[field];
+			if (value === undefined) continue;
+			if (name === DEFAULT_PROFILE) {
+				return broken(
+					`profile "${DEFAULT_PROFILE}" sets \`${field}\`, which only a named profile can. DEFAULT follows --api-host / --oauth-host and NEON_API_HOST / NEON_OAUTH_HOST`,
+				);
+			}
+			if (typeof value !== "string" || !isHttpUrl(value)) {
+				return broken(
+					`profile "${name}" has an invalid \`${field}\`: expected an http or https URL`,
+				);
+			}
+		}
 	}
 	return { kind: "ok", file: { version: 1, profiles } };
 };
@@ -218,6 +257,7 @@ export const resolveProfile = (dir: string, name: string): ResolvedProfile => {
 				storage: CRED_STORAGE_KEYRING,
 				...(entry.label ? { label: entry.label } : {}),
 				...(entry.userId ? { userId: entry.userId } : {}),
+				...hostsOf(entry),
 				declared: true,
 			};
 		}
@@ -227,6 +267,7 @@ export const resolveProfile = (dir: string, name: string): ResolvedProfile => {
 			credentialsPath: resolveEntryPath(dir, entry.credentials),
 			...(entry.label ? { label: entry.label } : {}),
 			...(entry.userId ? { userId: entry.userId } : {}),
+			...hostsOf(entry),
 			declared: true,
 		};
 	}
@@ -266,9 +307,29 @@ export const newProfileCredentialsPath = (dir: string, name: string): string =>
 export const upsertProfile = (
 	dir: string,
 	name: string,
-	entry: { credentials: string; label?: string; userId?: string },
+	entry: {
+		credentials: string;
+		label?: string;
+		userId?: string;
+	} & HostUpdate,
 ): void => {
 	assertValidProfileName(name);
+	if (
+		name === DEFAULT_PROFILE &&
+		HOST_FIELDS.some((field) => typeof entry[field] === "string")
+	) {
+		throw new Error(
+			`Profile "${DEFAULT_PROFILE}" cannot record an API or OAuth host. Create a named profile for another Neon environment.`,
+		);
+	}
+	for (const field of HOST_FIELDS) {
+		const value = entry[field];
+		if (typeof value === "string" && !isHttpUrl(value)) {
+			throw new Error(
+				`Cannot record "${value}" as profile "${name}"'s ${field}: expected an http or https URL.`,
+			);
+		}
+	}
 	const path = profilesFilePath(dir);
 	const read = inspectProfiles(dir);
 	// Refusing is the point. Treating a broken file as absent here rebuilt it from a single
@@ -295,13 +356,31 @@ export const upsertProfile = (
 					},
 				};
 
+	const previous = file.profiles[name];
+	const host = (field: (typeof HOST_FIELDS)[number]) => {
+		const value =
+			entry[field] === undefined ? previous?.[field] : entry[field];
+		return typeof value === "string" ? { [field]: value } : {};
+	};
 	file.profiles[name] = {
 		credentials: storedPointer(path, entry.credentials),
 		...(entry.label ? { label: entry.label } : {}),
 		...(entry.userId ? { userId: entry.userId } : {}),
+		...host("apiHost"),
+		...host("oauthHost"),
 	};
 
 	writeProfiles(path, file);
+};
+
+/**
+ * How {@link upsertProfile} treats a profile's hosts: a string sets one, `null` removes it, and
+ * leaving it out keeps what the entry already had, so signing in again stays in the same
+ * environment.
+ */
+export type HostUpdate = {
+	apiHost?: string | null;
+	oauthHost?: string | null;
 };
 
 /** Remove an entry. Returns false when it wasn't there. */

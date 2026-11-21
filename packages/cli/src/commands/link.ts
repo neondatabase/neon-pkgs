@@ -204,7 +204,13 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.strict();
 
-export const runLink = async (props: LinkProps) => {
+/** A verified link. `created` is true when the link created the project it pinned. */
+export type LinkResult = { created: boolean };
+
+/** Resolves to `undefined` when nothing was verified: `--clear`, `--no-checks`, or a declined re-link. */
+export const runLink = async (
+	props: LinkProps,
+): Promise<LinkResult | undefined> => {
 	if (props.clear) {
 		clearContext(props.contextFile);
 		return;
@@ -224,14 +230,12 @@ export const runLink = async (props: LinkProps) => {
 	}
 
 	if (canResolveNonInteractively(inputs, existing)) {
-		await runNonInteractive(props, inputs, existing);
-		return;
+		return runNonInteractive(props, inputs, existing);
 	}
 
 	if (props.yes) {
 		const resolved = await resolveYesInputs(props, inputs);
-		await runNonInteractive(props, resolved, existing);
-		return;
+		return runNonInteractive(props, resolved, existing);
 	}
 
 	if (!canPromptInteractively()) {
@@ -249,7 +253,7 @@ export const runLink = async (props: LinkProps) => {
 		);
 	}
 
-	await runInteractive(props, inputs);
+	return runInteractive(props, inputs);
 };
 
 export const handler = runLink;
@@ -764,7 +768,7 @@ const runNonInteractive = async (
 	props: LinkProps,
 	inputs: Inputs,
 	existing: Context,
-) => {
+): Promise<LinkResult> => {
 	// Create a new project and link it.
 	if (inputs.projectName) {
 		const orgId = mustString(inputs.orgId, "orgId");
@@ -792,7 +796,7 @@ const runNonInteractive = async (
 			projectName: created.project.name,
 			regionId: created.project.region_id,
 		});
-		return;
+		return { created: true };
 	}
 
 	// Link an explicitly named existing project.
@@ -824,7 +828,7 @@ const runNonInteractive = async (
 			branchRef: resolved.ref,
 			created: false,
 		});
-		return;
+		return { created: false };
 	}
 
 	// Pin a branch in the already-linked project.
@@ -857,7 +861,7 @@ const runNonInteractive = async (
 			branchRef: resolved.ref,
 			created: false,
 		});
-		return;
+		return { created: false };
 	}
 
 	throw orgNeedsProjectError(props, inputs);
@@ -867,7 +871,10 @@ const runNonInteractive = async (
 // Interactive mode (TTY)
 // ----------------------------------------------------------------------------
 
-const runInteractive = async (props: LinkProps, inputs: Inputs) => {
+const runInteractive = async (
+	props: LinkProps,
+	inputs: Inputs,
+): Promise<LinkResult | undefined> => {
 	if (!props.yes) {
 		const proceed = await confirmRelinkIfNeeded(props);
 		if (!proceed) {
@@ -923,7 +930,7 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 			projectName: created.project.name,
 			regionId: created.project.region_id,
 		});
-		return;
+		return { created: true };
 	}
 
 	// Need to ask: existing project or create a new one?
@@ -956,7 +963,7 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 			projectName: action.name,
 			regionId: action.regionId,
 		});
-		return;
+		return { created: false };
 	}
 
 	if (inputs.branch) {
@@ -991,6 +998,7 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 		projectName: created.project.name,
 		regionId: created.project.region_id,
 	});
+	return { created: true };
 };
 
 const confirmRelinkIfNeeded = async (props: LinkProps): Promise<boolean> => {

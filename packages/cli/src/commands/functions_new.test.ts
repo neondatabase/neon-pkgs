@@ -76,6 +76,8 @@ describe("functions new", () => {
 		const router = read("functions/notes/index.ts");
 		expect(router).toContain('import op0 from "./list";');
 		expect(router).toContain('"/health": op1,');
+		// eslint-config-next warns on `export default { ... }` (import/no-anonymous-default-export).
+		expect(router).not.toMatch(/^export default \{/m);
 		expect(read("neon.ts")).toContain(
 			'notes: { name: "Notes API", source: "./functions/notes/index.ts" }',
 		);

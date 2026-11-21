@@ -10,10 +10,12 @@ import { fileURLToPath } from "node:url";
 import open from "open";
 import * as client from "openid-client";
 import { sendError } from "./analytics.js";
+import { hasTerminal, isAgentContext } from "./env.js";
 import { matchErrorCode } from "./errors.js";
 import { log } from "./log.js";
 import type { ExtendedTokenSet } from "./types.js";
 import { extendTokenSet } from "./utils/auth.js";
+import { getCliName } from "./utils/cli_name.js";
 
 // oauth server timeouts
 const SERVER_TIMEOUT = 10_000;
@@ -35,7 +37,8 @@ export const NEONCTL_SCOPES = [
 	"urn:neoncloud:orgs:permission",
 ] as const;
 
-const AUTH_TIMEOUT_SECONDS = 60;
+// Long enough for a person to finish a sign-in that a coding agent relayed to them.
+export const AUTH_TIMEOUT_MINUTES = 10;
 
 export const defaultClientID = "neonctl";
 
@@ -280,10 +283,10 @@ export const auth = async ({
 		const timer = setTimeout(() => {
 			reject(
 				new Error(
-					`Authentication timed out after ${AUTH_TIMEOUT_SECONDS} seconds`,
+					`Authentication timed out after ${AUTH_TIMEOUT_MINUTES} minutes`,
 				),
 			);
-		}, AUTH_TIMEOUT_SECONDS * 1000);
+		}, AUTH_TIMEOUT_MINUTES * 60_000);
 
 		const onRequest = async (
 			request: IncomingMessage,
@@ -355,8 +358,15 @@ export const auth = async ({
 			redirect_uri: REDIRECT_URI(listen_port),
 		});
 
-		log.info("Awaiting authentication in web browser.");
+		log.info(
+			`Awaiting authentication in web browser (up to ${AUTH_TIMEOUT_MINUTES} minutes).`,
+		);
 		log.info(`Auth Url: ${authUrl}`);
+		if (isAgentContext(process.env, hasTerminal())) {
+			log.info(
+				`Sign-in finishes only in a browser on this machine. If that isn't possible, stop this command and run \`${getCliName()} me\` for other ways to authenticate.`,
+			);
+		}
 
 		open(authUrl.href).catch((err: unknown) => {
 			const msg = `Failed to open web browser. Please copy & paste auth url to authenticate in browser.`;

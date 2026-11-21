@@ -34,7 +34,8 @@ export interface NeonConfig<Throw extends boolean = false> {
 	/** Tuning for the readiness poller (interval / timeout). Not a per-call abort. */
 	wait?: WaitBudget;
 	/**
-	 * Number of automatic retries on always-safe statuses (423/429/503). Default 2.
+	 * Number of automatic retries on always-safe statuses (423/429/503), and on a
+	 * `GET` whose connection dropped before a response. Default 2.
 	 * `0` disables retries. Non-integer, negative, `NaN`, or `Infinity` throws a
 	 * `"client"`-kind error at construction.
 	 */

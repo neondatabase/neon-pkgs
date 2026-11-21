@@ -8,6 +8,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { apiRequest } from "@neon/e2e-harness";
+import { enableNeonAuth } from "@neon/e2e-harness/auth";
 import { afterEach, describe, expect, it } from "vitest";
 import { npmEnvForIsolatedHome } from "../src/test_utils/npm_env.js";
 import {
@@ -248,6 +250,71 @@ describe("e2e — neon init", () => {
 					parentConfig,
 				);
 				expect(existsSync(join(dirs.home, "node_modules"))).toBe(false);
+			} finally {
+				await deleteProject(projectId);
+			}
+		},
+	);
+
+	e2eTest(
+		"-y on an existing project writes neon.ts from the branch's services",
+		async ({ track }) => {
+			const dirs = scratch();
+			const projectId = await createProject({
+				name: uniqueProjectName("cli-init-seed"),
+			});
+			track(projectId);
+			try {
+				const { branches } = await apiRequest<{
+					branches: Array<{ id: string; default: boolean }>;
+				}>(`/projects/${projectId}/branches`);
+				const branch = branches.find((candidate) => candidate.default);
+				if (!branch)
+					throw new Error(`${projectId} has no default branch`);
+				await enableNeonAuth(projectId, branch.id);
+
+				const result = await runCli(
+					[
+						"init",
+						"-y",
+						"--no-agent-setup",
+						"--package-manager",
+						"npm",
+						"--project-id",
+						projectId,
+						...orgArgs(),
+					],
+					{
+						configDir: dirs.configDir,
+						contextFile: dirs.contextFile,
+						cwd: dirs.cwd,
+						json: false,
+						env: isolatedAgentEnv(dirs.home),
+					},
+				);
+				const output = `${result.stderr}\n${result.stdout}`;
+				expect(result.code, output).toBe(0);
+
+				expect(readFileSync(join(dirs.cwd, "neon.ts"), "utf8")).toMatch(
+					/^\s*auth: true,$/m,
+				);
+				const manifest = JSON.parse(
+					readFileSync(join(dirs.cwd, "package.json"), "utf8"),
+				);
+				expect(Object.keys(manifest.dependencies)).toEqual(
+					expect.arrayContaining(["@neon/config", "@neon/env"]),
+				);
+				const envLocal = readFileSync(
+					join(dirs.cwd, ".env.local"),
+					"utf8",
+				);
+				for (const key of [
+					"DATABASE_URL",
+					"NEON_AUTH_BASE_URL",
+					"NEON_AUTH_JWKS_URL",
+				]) {
+					expect(envLocal).toMatch(new RegExp(`^${key}=`, "m"));
+				}
 			} finally {
 				await deleteProject(projectId);
 			}

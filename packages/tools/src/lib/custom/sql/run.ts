@@ -162,7 +162,7 @@ export const runSqlTool = (options: ToolClientOptions) =>
 			id: publishedId("sql.run"),
 			title: "Run SQL",
 			description:
-				"Runs one SQL statement on a branch's database and returns its rows. After a prepare step, pass its temporary branch_id. NEVER run destructive SQL autonomously; always ask the user first.",
+				"Runs one SQL statement on a branch's database and returns its rows. For several statements, send one per call or use {{sql.runTransaction}}. After a prepare step, pass its temporary branch_id. NEVER run destructive SQL autonomously: run it only when the user's own message asks for it and unambiguously identifies its target; otherwise ask first.",
 			inputSchema: runSqlInputSchema,
 			outputSchema: sqlResultOutputSchema,
 			annotations: sqlWriteAnnotations,
@@ -190,7 +190,7 @@ export const runSqlTransactionTool = (options: ToolClientOptions) =>
 			id: publishedId("sql.runTransaction"),
 			title: "Run SQL Transaction",
 			description:
-				"Runs several SQL statements in one transaction and returns each one's rows. After a prepare step, pass its temporary branch_id. NEVER run destructive SQL autonomously; always ask the user first.",
+				"Runs several SQL statements in one transaction and returns each one's rows. After a prepare step, pass its temporary branch_id. NEVER run destructive SQL autonomously: run it only when the user's own message asks for it and unambiguously identifies its target; otherwise ask first.",
 			inputSchema: runSqlTransactionInputSchema,
 			outputSchema: z.array(sqlResultOutputSchema),
 			annotations: sqlWriteAnnotations,

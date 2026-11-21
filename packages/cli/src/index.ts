@@ -36,6 +36,7 @@ import {
 	showUsageErrorHelp,
 	UsageError,
 } from "./help.js";
+import { invocationHosts } from "./hosts.js";
 import { rewriteUnknownAgentArg } from "./init/unknown_agent_arg.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
@@ -50,7 +51,7 @@ import {
 	collapseRepeatedFlags,
 	declaredOptions,
 } from "./utils/repeated_flags.js";
-import { stagingFeaturesEnabledForArgv } from "./utils/staging.js";
+import { isStagingApiHost } from "./utils/staging.js";
 
 const NO_SUBCOMMANDS_VERBS = [
 	// `api <path>` has a handler but no subcommands (like `status`), so the
@@ -109,6 +110,9 @@ const NO_SUBCOMMANDS_VERBS = [
 	"status",
 ];
 
+// A named profile can record its own hosts, so the defaults depend on the arguments.
+const hosts = invocationHosts(hideBin(process.argv));
+
 let builder = yargs(hideBin(process.argv));
 builder = builder
 	.scriptName(pkg.name)
@@ -133,8 +137,7 @@ builder = builder
 	.option("api-host", {
 		describe: "The API host",
 		hidden: true,
-		default:
-			process.env.NEON_API_HOST ?? "https://console.neon.tech/api/v2",
+		default: hosts.apiHost,
 	})
 	// Setup config directory
 	.option("config-dir", {
@@ -160,7 +163,7 @@ builder = builder
 		"oauth-host": {
 			description: "URL to Neon OAuth host",
 			hidden: true,
-			default: process.env.NEON_OAUTH_HOST ?? "https://oauth2.neon.tech",
+			default: hosts.oauthHost,
 		},
 		"client-id": {
 			description: "OAuth client id",
@@ -246,7 +249,7 @@ builder = builder
 	// @types/yargs declares builders synchronous; yargs 17 awaits a builder's promise.
 	.command(
 		lazyCommands({
-			staging: stagingFeaturesEnabledForArgv(hideBin(process.argv)),
+			staging: isStagingApiHost(hosts.apiHost),
 		}) as any,
 	)
 	.strictCommands()
