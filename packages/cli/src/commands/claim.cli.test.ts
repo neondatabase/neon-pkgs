@@ -371,6 +371,107 @@ describe("claim status and delete after the assertion expires", () => {
 	});
 });
 
+/** Answers the token exchange; every other path gets Claimable Neon's real 404. */
+const startClaimableStub = async (): Promise<{
+	origin: string;
+	seen: string[];
+}> => {
+	const seen: string[] = [];
+	const server = createServer((req, res) => {
+		seen.push(`${req.method} ${req.url}`);
+		res.setHeader("content-type", "application/json");
+		if (req.method === "POST" && req.url === "/v1/oauth2/token") {
+			res.end(
+				JSON.stringify({
+					access_token: "claimable-access-token",
+					token_type: "Bearer",
+					expires_in: 900,
+					scope: "postgres.read",
+				}),
+			);
+			return;
+		}
+		res.statusCode = 404;
+		res.end(
+			JSON.stringify({
+				error: {
+					code: "not_found",
+					message: "No route exists at this path.",
+					retryable: false,
+				},
+			}),
+		);
+	});
+	await new Promise<void>((res) => server.listen(0, "localhost", res));
+	cleanups.push(() => server.close());
+	const { port } = server.address() as AddressInfo;
+	return { origin: `http://localhost:${port}`, seen };
+};
+
+describe("me in a Claimable Neon project directory", () => {
+	const projectId = "polished-cloud-06426355";
+	const expiresAt = "2099-01-01T00:00:00.000Z";
+	const linkClaimable =
+		(origin: string) =>
+		({
+			configDir,
+			contextFile,
+		}: {
+			configDir: string;
+			contextFile: string;
+		}) => {
+			writeClaimableCredentials(configDir, {
+				version: 1,
+				origin,
+				registrationId: "reg_test",
+				projectId,
+				branchId: "br-still-unit-12345678",
+				identityAssertion: "assertion",
+				expiresAt,
+				assertionExpires: 4_000_000_000,
+			});
+			writeFileSync(
+				contextFile,
+				JSON.stringify({ projectId, branch: "br-still-unit-12345678" }),
+			);
+		};
+
+	test("prints the claimable identity as JSON", async () => {
+		const stub = await startClaimableStub();
+		const { code, stdout, stderr } = await runCli(
+			["me", "--output", "json"],
+			{},
+			linkClaimable(stub.origin),
+		);
+
+		expect(stderr).toBe("");
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual({
+			auth_method: "claimable",
+			project_id: projectId,
+			project_expires_at: expiresAt,
+		});
+		expect(stub.seen).toEqual(["POST /v1/oauth2/token"]);
+	});
+
+	test("names the claimable project in the table", async () => {
+		const stub = await startClaimableStub();
+		const { code, stdout, stderr } = await runCli(
+			["me"],
+			{},
+			linkClaimable(stub.origin),
+		);
+
+		expect(stderr).toBe("");
+		expect(code).toBe(0);
+		expect(stdout).toMatch(new RegExp(`^Project ID\\s+${projectId}$`, "m"));
+		expect(stdout).toMatch(
+			new RegExp(`^Project Expires At\\s+${expiresAt}$`, "m"),
+		);
+		expect(stdout).toMatch(/^Authentication\s+Claimable project$/m);
+	});
+});
+
 describe("claim list table output", () => {
 	test("empty list is a message, not a box table", async () => {
 		const { code, stdout, stderr } = await runCli(["claim", "list"]);

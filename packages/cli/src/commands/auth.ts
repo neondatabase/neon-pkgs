@@ -876,6 +876,10 @@ export const ensureAuth = async (
 			source: "claimable",
 			configDir: props.configDir,
 			credentialsPath: path,
+			claimableProject: {
+				id: stored.projectId,
+				expiresAt: stored.expiresAt,
+			},
 		});
 		log.debug(
 			"Using the linked Claimable Neon project's short-lived access token",
