@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { createServer, type IncomingMessage } from "node:http";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
@@ -818,6 +819,42 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		await expect(failure).rejects.toBeInstanceOf(NeonNotFoundError);
 		await expect(failure).rejects.toThrow("(database neondb)");
 		await expect(failure).rejects.toMatchObject({ status: 404 });
+	});
+
+	it("database.inspect keeps the driver's NeonDbError when the role cannot log in", async () => {
+		const role = "e2e_nologin";
+		await run(`CREATE ROLE ${role} LOGIN PASSWORD '${randomUUID()}'`);
+		try {
+			// connection_uri knows only roles the API has picked up from Postgres.
+			await expect
+				.poll(
+					async () =>
+						(
+							await neon.postgres.roles.list({
+								projectId,
+								branchId: mainBranchId,
+							})
+						).map((listed) => listed.name),
+					{ timeout: 60_000, interval: 2_000 },
+				)
+				.toContain(role);
+			await run(`ALTER ROLE ${role} NOLOGIN`);
+			const failure = tools["database.inspect"].execute(
+				{
+					project_id: projectId,
+					check: "table-sizes",
+					database_name: "neondb",
+				},
+				{ postgresRole: role },
+			);
+			await expect(failure).rejects.toBeInstanceOf(NeonDbError);
+			await expect(failure).rejects.toMatchObject({
+				severity: "FATAL",
+				code: expect.stringMatching(/^[0-9A-Z]{5}$/),
+			});
+		} finally {
+			await run(`DROP ROLE ${role}`);
+		}
 	});
 
 	it("migrations.prepare then complete with apply_changes applies to the parent and deletes the temporary branch", async () => {
