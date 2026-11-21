@@ -1569,6 +1569,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						? deferredLinkCommands(props, linkInputs)
 						: undefined,
 					isAgentContext(process.env, hasTerminal()),
+					readContextFile(contextFile).projectId === undefined &&
+						readContextFile(contextFile).orgId === undefined,
 				),
 			);
 			const deferredMcp = mcpDeferredNext();

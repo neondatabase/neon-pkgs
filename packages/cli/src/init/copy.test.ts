@@ -37,6 +37,12 @@ describe("unattendedUnauthedNext", () => {
 		);
 	});
 
+	it("leaves out Claimable Neon where `claim create` would refuse the directory", () => {
+		expect(
+			unattendedUnauthedNext(undefined, true, false).join("\n"),
+		).not.toContain("claim create");
+	});
+
 	it("stores the key on the profile when --profile chose it", () => {
 		const text = unattendedUnauthedNext(
 			{

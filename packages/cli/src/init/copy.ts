@@ -185,6 +185,8 @@ export const unattendedUnauthedNext = (
 		storeKey?: string;
 	},
 	agent = false,
+	/** `claim create` refuses a directory that pins a project or an organization. */
+	claimable = true,
 ): string[] => {
 	const cli = getCliName();
 	if (deferred !== undefined) {
@@ -208,9 +210,13 @@ export const unattendedUnauthedNext = (
 		...(agent ? [SIGN_IN_CONDITION] : []),
 		`${cli} login`,
 		`${cli} link`,
-		"",
-		"Or create a claimable project without an account. It expires in 72 hours unless claimed.",
-		`${cli} claim create`,
+		...(claimable
+			? [
+					"",
+					"Or create a claimable project without an account. It expires in 72 hours unless claimed.",
+					`${cli} claim create`,
+				]
+			: []),
 		...(agent ? ["", existingKeyNext(`${cli} link`)] : []),
 	];
 };
