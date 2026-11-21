@@ -339,12 +339,15 @@ describe("no usable credential", () => {
 		);
 	});
 
-	it("points `login --profile` in CI at saving a key on that profile, which NEON_API_KEY can't override", async () => {
-		const result = await runCli(["login", "--profile", "work"]);
+	it.each([
+		"work",
+		"DEFAULT",
+	])("points `login --profile %s` in CI at saving a key on that profile, which NEON_API_KEY can't override", async (profile) => {
+		const result = await runCli(["login", "--profile", profile]);
 
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain(
-			'Cannot run interactive auth in CI. Save an API key to this profile: `echo "$KEY" | neon profile create work --api-key -`',
+			`Cannot run interactive auth in CI. Save an API key to this profile: \`echo "$KEY" | neon profile create ${profile} --api-key -\``,
 		);
 	});
 });

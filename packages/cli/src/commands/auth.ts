@@ -246,8 +246,8 @@ export const authFlow = async ({
 	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
 	if (!allowInteractiveAuth && isCi()) {
 		throw new Error(
-			// A named profile overrides NEON_API_KEY.
-			isNamed
+			// A selected profile overrides NEON_API_KEY.
+			profile?.trim() || process.env.NEON_PROFILE?.trim()
 				? `Cannot run interactive auth in CI. Save an API key to this profile: \`${saveKeyCommand(getCliName(), profileName)}\``
 				: "Cannot run interactive auth in CI. Set NEON_API_KEY to an API key.",
 		);
