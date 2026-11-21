@@ -104,6 +104,7 @@ describe("forceReasoning", () => {
 		"gpt-6-sol",
 		"gpt-6-luna",
 		"gpt-6-1-sol",
+		"gpt-6-1-terra",
 		"databricks-gpt-6-sol",
 	])("is set for %s, which upstream does not match", (modelId) => {
 		// The shared model's detection matches a bare `gpt-5` prefix, so gpt-6

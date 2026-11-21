@@ -2,9 +2,9 @@ import type { FetchFunction } from "@ai-sdk/provider-utils";
 
 // Keep this module until the Neon AI Gateway returns a string `content` for
 // every model on the unified Chat Completions route. gpt-oss, which it was
-// written for (#308), is compliant now, but gemini-3-7-flash, gemini-3-8-flash
-// and gemini-4-argon still return arrays there, and the AI SDK rejects them
-// without this rewrite.
+// written for (#308), is compliant now, but gemini-3-7-flash, gemini-3-8-flash,
+// gemini-4-argon, gemini-3-1-flash-image and gemini-3-pro-image still return
+// arrays there, and the AI SDK rejects them without this rewrite.
 
 /**
  * Normalize array `content` from the Neon AI Gateway's unified Chat

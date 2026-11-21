@@ -66,10 +66,12 @@ export interface NeonModelCapabilities {
  * wrong for these two in the first place.
  */
 const GEMINI_NO_PENALTIES = new Set([
+	"gemini-3-1-flash-image",
 	"gemini-3-5-flash-lite",
 	"gemini-3-6-flash",
 	"gemini-3-7-flash",
 	"gemini-3-8-flash",
+	"gemini-3-pro-image",
 	"gemini-4-argon",
 	"gemini-4-carbon",
 ]);
@@ -108,12 +110,13 @@ const GPT5_NO_SAMPLING = new Set([
  * GPT-6 ids that reject `temperature` and `top_p` on the Responses API at their
  * default reasoning effort
  * (`Unsupported parameter: 'temperature' is not supported with this model`).
- * gpt-6-sol and gpt-6-luna accept both when effort is `none`; gpt-6-astra and
- * gpt-6-1-sol reject effort `none`, so they never accept them.
+ * gpt-6-sol, gpt-6-luna and gpt-6-1-terra accept both when effort is `none`;
+ * gpt-6-astra and gpt-6-1-sol reject effort `none`, so they never accept them.
  * Exact ids: a future gpt-6-* is unmeasured.
  */
 const GPT6_NO_SAMPLING = new Set([
 	"gpt-6-1-sol",
+	"gpt-6-1-terra",
 	"gpt-6-astra",
 	"gpt-6-luna",
 	"gpt-6-sol",
