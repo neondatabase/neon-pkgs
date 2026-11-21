@@ -330,11 +330,13 @@ describe("no usable credential", () => {
 		expect(existsSync(credentialsFile())).toBe(true);
 	});
 
-	it("still sends other commands to the sign-in flow in CI", async () => {
+	it("refuses interactive sign-in in CI and points at NEON_API_KEY", async () => {
 		const result = await runCli(["projects", "list"]);
 
 		expect(result.code).toBe(1);
-		expect(result.stderr).toContain("Cannot run interactive auth in CI");
+		expect(result.stderr).toContain(
+			'Cannot run interactive auth in CI. Profile "DEFAULT" has no stored credential.\nSet NEON_API_KEY to an API key.',
+		);
 	});
 });
 

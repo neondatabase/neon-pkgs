@@ -74,7 +74,7 @@ import {
 	readContextFile,
 } from "../context.js";
 import { storeFor } from "../credential_io.js";
-import { getCliAgent, hasTerminal, isCi } from "../env.js";
+import { hasTerminal, isCi } from "../env.js";
 import { hostsForProfile, hostUpdateFor, issuingHosts } from "../hosts.js";
 import { log } from "../log.js";
 import { withExclusiveLock } from "../refresh_lock.js";
@@ -242,9 +242,7 @@ export const authFlow = async ({
 	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
 	if (!allowInteractiveAuth && isCi()) {
 		throw new Error(
-			getCliAgent(process.env) === undefined
-				? "Cannot run interactive auth in CI"
-				: "Cannot run interactive auth in CI. Set NEON_API_KEY to an API key.",
+			"Cannot run interactive auth in CI. Set NEON_API_KEY to an API key.",
 		);
 	}
 
@@ -1066,8 +1064,7 @@ export const ensureAuth = async (
 		);
 	}
 
-	// CI never has a terminal, so only a detected agent gets guidance here; CI jobs keep the refusal.
-	if (isCi() && getCliAgent(process.env) !== undefined && !forceAuth) {
+	if (isCi() && !forceAuth) {
 		throw new Error(
 			`Cannot run interactive auth in CI. Profile "${selection.profile}" ${state}.\n${signInHint}`,
 		);

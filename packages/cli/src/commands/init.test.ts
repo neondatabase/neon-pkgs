@@ -395,6 +395,32 @@ describe("init handler", () => {
 		expect(out).toMatch(/neon claim create/);
 	});
 
+	test("the saved-key step names the profile NEON_PROFILE selects", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-env-profile-"));
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		vi.stubEnv("NEON_PROFILE", "work");
+		const { handler } = await import("./init.js");
+
+		try {
+			await handler(
+				baseProps({
+					cwd,
+					operations: makeOperations(),
+					yes: true,
+					contextFile: join(cwd, ".neon"),
+					linkProject: vi.fn().mockResolvedValue(undefined),
+					hasLocalCredentials: () => false,
+				}),
+			);
+		} finally {
+			vi.unstubAllEnvs();
+		}
+
+		expect(stdoutText(stdout)).toContain(
+			'echo "$KEY" | neon profile create work --api-key -',
+		);
+	});
+
 	test("Custom -y unanswered project setup skips link when unauthenticated", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-custom-unauth-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");

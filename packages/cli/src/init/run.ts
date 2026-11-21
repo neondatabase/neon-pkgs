@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { DEFAULT_PROFILE } from "../_shared/profiles.js";
+import { selectProfileName } from "../_shared/profiles.js";
 import {
 	type CommandAgentSetup,
 	recordCommandSuccessExtras,
@@ -288,7 +288,7 @@ const deferredLinkCommands = (
 		envPull: commandLine("env pull", [...context, ...session]),
 		// `--api-key -` refuses a terminal on stdin, so the key is piped in.
 		saveKey: `echo "$KEY" | ${commandLine(
-			`profile create ${quoteFlagValue(props.profile ?? DEFAULT_PROFILE)}`,
+			`profile create ${quoteFlagValue(selectProfileName(props.profile))}`,
 			[["--api-key", "-"], session[1]],
 		)}`,
 	};
