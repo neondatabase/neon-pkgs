@@ -177,9 +177,7 @@ export class Subscription<Row>
 			);
 		}
 		const precedingState =
-			this.state.status === "error" || this.state.status === "stale"
-				? this.state
-				: undefined;
+			this.state.status === "stale" ? this.state : undefined;
 		if (precedingState) this.setLifecycle(connectingState);
 		return this.owner.renew(this, query).catch((error: unknown) => {
 			if (
