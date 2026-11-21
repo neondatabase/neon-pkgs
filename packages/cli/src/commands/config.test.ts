@@ -323,6 +323,20 @@ class FakeNeonApi implements NeonApi {
 		return fn;
 	}
 
+	async updateBranchFunction(
+		_projectId: string,
+		_branchId: string,
+		slug: string,
+		input: { name: string },
+	): Promise<NeonFunctionSnapshot> {
+		const fn = this.functions.get(slug);
+		if (!fn) {
+			throw new Error(`Function ${slug} was not found.`);
+		}
+		fn.name = input.name;
+		return fn;
+	}
+
 	async listBranchTriggers(): Promise<NeonTriggerSnapshot[]> {
 		return [];
 	}
@@ -983,6 +997,9 @@ describe("config commands", () => {
 		expect(call.projectId).toBe(PROJECT_ID);
 		expect(call.branchId).toBe(BRANCH_ID);
 		expect(call.slug).toBe("hello");
+		expect(
+			(await api.getBranchFunction(PROJECT_ID, BRANCH_ID, "hello")).name,
+		).toBe("Hello");
 
 		// The bundle must be the real ZIP produced by neonctl's bundleEntry + zipBundle
 		// (NOT config-runtime's own esbuild default bundler). A non-empty Uint8Array

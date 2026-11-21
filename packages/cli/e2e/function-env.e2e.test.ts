@@ -16,6 +16,7 @@ const POLICY = join(FIXTURE, "neon.ts");
 const READY_TIMEOUT_MS = 90_000;
 
 type FunctionInfo = {
+	name: string;
 	invocation_url: string;
 	active_deployment?: { id: string; environment?: string[] };
 };
@@ -117,6 +118,11 @@ describe.sequential("e2e — declared Function env", () => {
 		if (tmp) rmSync(tmp, { recursive: true, force: true });
 	});
 
+	it("each Function has the display name neon.ts declares", async () => {
+		expect((await getFunction("alpha")).name).toBe("function env alpha");
+		expect((await getFunction("beta")).name).toBe("function env beta");
+	});
+
 	it("each Function evaluates neon.ts without the other Function's secret", async () => {
 		expect(await invoke("alpha")).toEqual({
 			SECRET_A: "a",
@@ -173,14 +179,15 @@ describe.sequential("e2e — declared Function env", () => {
 			branch.id,
 		);
 		expect(result.code).toBe(0);
-		const names = (await getFunction("alpha", branch.id)).active_deployment
-			?.environment;
+		const alpha = await getFunction("alpha", branch.id);
+		const names = alpha.active_deployment?.environment;
 		// A branch created from main starts with main's deployed env.
 		expect([...(names ?? [])].sort()).toEqual([
 			"KEPT_A",
 			"RATE_A",
 			"SECRET_A",
 		]);
+		expect(alpha.name).toBe("function env alpha");
 	});
 
 	it("neon env pull needs none of the secrets", async () => {

@@ -342,6 +342,7 @@ export async function pushConfig(
 				warnings.push(message);
 			}),
 		deploymentIdBySlug: new Map(),
+		warnings,
 	};
 
 	for (const step of diff.plan) {
@@ -490,6 +491,7 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 					slug: step.fn.slug,
 					source: step.fn.source,
 					runtime: step.fn.runtime,
+					...renameChanges(step),
 				},
 			};
 		case "create-trigger":
@@ -531,6 +533,41 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 				},
 			};
 	}
+}
+
+type DeployFunctionStep = Extract<PlanStep, { kind: "deploy-function" }>;
+
+function renameChanges(step: DeployFunctionStep): {
+	changes?: { field: "name"; current: string; desired: string }[];
+} {
+	return step.rename ? { changes: [{ field: "name", ...step.rename }] } : {};
+}
+
+/**
+ * Sets the declared display name after every deploy, not only when the plan saw a
+ * different one: the first deployment on a branch of a function inherited from its
+ * parent creates the branch's own copy named after the slug, and the function listing
+ * does not say which functions are inherited. Returns whether the name was sent.
+ */
+async function applyFunctionName(
+	step: DeployFunctionStep,
+	ctx: ApplyContext,
+): Promise<boolean> {
+	if (!ctx.api.updateBranchFunction) {
+		if (step.rename) {
+			ctx.warnings.push(
+				`Function ${JSON.stringify(step.fn.slug)} keeps the name ${JSON.stringify(step.rename.current)}: this NeonApi adapter does not implement updateBranchFunction, so the name ${JSON.stringify(step.rename.desired)} from neon.ts was not applied.`,
+			);
+		}
+		return false;
+	}
+	await ctx.api.updateBranchFunction(
+		ctx.remoteProjectId,
+		step.branchId,
+		step.fn.slug,
+		{ name: step.fn.name },
+	);
+	return true;
 }
 
 function createApiFromOptions(options: PushConfigOptions): NeonApi {
@@ -703,6 +740,7 @@ interface ApplyContext {
 	branchByName: Map<string, NeonBranchSnapshot>;
 	bundleFunction: FunctionBundler;
 	deploymentIdBySlug: Map<string, number>;
+	warnings: string[];
 }
 
 async function applyStep(
@@ -857,6 +895,7 @@ async function applyStep(
 				},
 			);
 			ctx.deploymentIdBySlug.set(step.fn.slug, deployment.id);
+			const named = await applyFunctionName(step, ctx);
 			return {
 				kind: "service",
 				action: step.functionExists ? "update" : "create",
@@ -866,6 +905,7 @@ async function applyStep(
 					source: step.fn.source,
 					runtime: step.fn.runtime,
 					deploymentId: deployment.id,
+					...(named ? renameChanges(step) : {}),
 				},
 			};
 		}
