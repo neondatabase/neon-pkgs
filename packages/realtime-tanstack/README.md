@@ -142,11 +142,29 @@ Ensure the application's serializer or decoder restores values such as `Date`
 before hydrating. The live row type describes decoded values, not their JSON
 representation; the adapter does not deserialize HTTP or SSR payloads.
 
+## Waiting for the first server snapshot
+
+With TanStack DB persistence or SSR hydration, a collection can be ready with
+local rows while Realtime is still loading. For an operation that needs the
+first server snapshot of the current sync run, wait for it explicitly:
+
+```ts
+const snapshot = collection.utils.awaitInitialSnapshot(5_000);
+await Promise.all([collection.preload(), snapshot]);
+const rows = collection.toArray;
+```
+
+The promise resolves after the snapshot is visible in the collection, even if
+the query returned zero rows. It does not start sync by itself. A later call in
+the same sync run resolves immediately after the first snapshot, including
+during a reconnect. Use it for operations that need the initial server
+baseline while continuing to render cached rows as soon as they are ready.
+
 ## API
 
 `realtimeCollectionOptions(config)` returns ordinary TanStack DB collection
-options with a Realtime-owned `sync` implementation and an additional
-`utils.awaitTxId()` method. The package also exports the corresponding config,
+options with a Realtime-owned `sync` implementation and the
+`utils.awaitTxId()` and `utils.awaitInitialSnapshot()` methods. The package also exports the corresponding config,
 options, and utilities types for reusable collection factories.
 
 The sealed query determines the row type. Refresh callbacks and collection

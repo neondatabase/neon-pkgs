@@ -625,6 +625,103 @@ describe("Realtime TanStack DB collection", () => {
 		expect(refreshQuery).toHaveBeenCalledOnce();
 	});
 
+	describe("awaitInitialSnapshot", () => {
+		it("waits for an empty server snapshot to become visible after cached readiness", async () => {
+			const client = new TestClient<MessageRow>();
+			const options = realtimeCollectionOptions({
+				client,
+				query: query("query-1"),
+				getKey: (message) => message.id,
+			});
+			let apply!: () => void;
+			const applied = new Promise<void>((resolve) => {
+				apply = resolve;
+			});
+			const collection = createTestCollection(client);
+			const markReady = vi.fn();
+			const begin = vi.fn();
+			const firstSnapshot = vi.fn();
+			const waiting = options.utils
+				.awaitInitialSnapshot()
+				.then(firstSnapshot);
+			expect(client.subscriptions).toHaveLength(0);
+
+			const stop = options.sync.sync({
+				collection,
+				begin,
+				write: vi.fn(),
+				commit: () => applied,
+				markReady,
+				reportError: vi.fn(),
+				reportHealthy: vi.fn(),
+				fail: vi.fn(),
+				truncate: vi.fn(),
+				invalidateLoadedSubsets: vi.fn(),
+			});
+			try {
+				// A persistence wrapper can report ready while the source starts.
+				markReady();
+				client.latest().reset([]);
+				await Promise.resolve();
+				expect(begin).toHaveBeenCalledWith({ snapshot: true });
+				expect(firstSnapshot).not.toHaveBeenCalled();
+
+				apply();
+				await waiting;
+				expect(firstSnapshot).toHaveBeenCalledOnce();
+				await expect(
+					options.utils.awaitInitialSnapshot(0),
+				).resolves.toBeUndefined();
+			} finally {
+				if (typeof stop === "function") stop();
+			}
+		});
+
+		it("rejects when a run fails before its first snapshot", async () => {
+			const failure = liveError("ACCESS_DENIED");
+			const client = new TestClient<MessageRow>({
+				status: "error",
+				error: failure,
+			});
+			const collection = createTestCollection(client);
+			const waiting = collection.utils
+				.awaitInitialSnapshot()
+				.catch(identity);
+
+			await expect(collection.preload()).rejects.toBe(failure);
+			expect(await waiting).toBe(failure);
+			await expect(collection.utils.awaitInitialSnapshot()).rejects.toBe(
+				failure,
+			);
+		});
+
+		it("times out before sync starts and waits again after cleanup", async () => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+			await expect(
+				collection.utils.awaitInitialSnapshot(0),
+			).rejects.toThrow("Timed out waiting for the live-query snapshot");
+			expect(client.subscriptions).toHaveLength(0);
+
+			const preload = collection.preload().catch(identity);
+			const waiting = expect(
+				collection.utils.awaitInitialSnapshot(),
+			).rejects.toThrow("Realtime collection was cleaned up");
+			await collection.cleanup();
+			await waiting;
+			await preload;
+
+			const next = collection.utils.awaitInitialSnapshot();
+			const ready = collection.preload();
+			client
+				.latest()
+				.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+			await next;
+			await ready;
+			expect(collection.has(1)).toBe(true);
+		});
+	});
+
 	describe("awaitTxId before the collection starts syncing", () => {
 		it("waits for synchronization to start", async () => {
 			const client = new TestClient<MessageRow>();

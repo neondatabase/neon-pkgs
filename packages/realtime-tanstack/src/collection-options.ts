@@ -20,6 +20,22 @@ import type { NoInferCompat } from "./no-infer.js";
 /** Utilities attached to a Realtime-backed TanStack DB collection. */
 export interface RealtimeCollectionUtils extends UtilsRecord {
 	/**
+	 * Wait for the first server snapshot in this synchronization run to be
+	 * applied, including an empty snapshot. Local persistence can make a
+	 * collection ready before the server snapshot arrives.
+	 *
+	 * This does not start synchronization. If called before a run starts, it
+	 * waits for the next run. Once a snapshot has applied, later calls in the
+	 * same run resolve immediately, including during automatic reconnects.
+	 *
+	 * @param timeout - Optional maximum wait in milliseconds, including any
+	 * wait for synchronization to start.
+	 * @throws If the timeout is invalid or elapses, or the run terminates
+	 * or is cleaned up before its first snapshot applies.
+	 */
+	awaitInitialSnapshot(timeout?: number): Promise<void>;
+
+	/**
 	 * Wait until this query has processed a known committed PostgreSQL transaction.
 	 * Covered row changes enter TanStack DB's causal sync queue before this resolves.
 	 *
@@ -92,7 +108,7 @@ export type RealtimeCollectionOptions<
 	CollectionConfig<Row, Key, Schema, RealtimeCollectionUtils>,
 	"utils"
 > & {
-	/** Realtime-specific transaction-confirmation utility. */
+	/** Realtime-specific synchronization utilities. */
 	readonly utils: RealtimeCollectionUtils;
 };
 
@@ -127,6 +143,8 @@ export function realtimeCollectionOptions<
 type SyncStart<Row> =
 	| { readonly subscription: RawLiveQuerySubscription<Row> }
 	| { readonly error: unknown };
+
+type InitialSnapshotResult = { readonly error: unknown } | true;
 
 function monotonicNow(): number {
 	return typeof performance === "undefined" ? Date.now() : performance.now();
@@ -196,7 +214,58 @@ function createRealtimeCollectionOptions<
 			};
 			syncStartWaiters.add(waiter);
 		});
+	let initialSnapshotResult: InitialSnapshotResult | undefined;
+	const initialSnapshotWaiters = new Set<
+		(result: InitialSnapshotResult) => void
+	>();
+	const settleInitialSnapshot = (result: InitialSnapshotResult) => {
+		if (initialSnapshotResult !== undefined) return;
+		initialSnapshotResult = result;
+		for (const waiter of initialSnapshotWaiters) waiter(result);
+		initialSnapshotWaiters.clear();
+	};
+	const resetInitialSnapshot = () => {
+		if (initialSnapshotWaiters.size > 0) {
+			settleInitialSnapshot({
+				error: new Error("Realtime collection was cleaned up"),
+			});
+		}
+		initialSnapshotResult = undefined;
+	};
 	const utils: RealtimeCollectionUtils = Object.freeze({
+		awaitInitialSnapshot: async (timeout) => {
+			if (
+				timeout !== undefined &&
+				(!Number.isFinite(timeout) || timeout < 0)
+			) {
+				throw new Error(
+					"Live-query snapshot timeout must be a non-negative number",
+				);
+			}
+			if (initialSnapshotResult === true) return;
+			if (initialSnapshotResult !== undefined) {
+				throw initialSnapshotResult.error;
+			}
+			return new Promise<void>((resolve, reject) => {
+				const waiter = (result: InitialSnapshotResult) => {
+					clearTimeout(timer);
+					if (result === true) resolve();
+					else reject(result.error);
+				};
+				const timer =
+					timeout === undefined
+						? undefined
+						: setTimeout(() => {
+								initialSnapshotWaiters.delete(waiter);
+								reject(
+									new Error(
+										"Timed out waiting for the live-query snapshot",
+									),
+								);
+							}, timeout);
+				initialSnapshotWaiters.add(waiter);
+			});
+		},
 		awaitTxId: async (txid, timeout) => {
 			const normalizedTxid = validateTransactionWait(txid, timeout);
 			let subscription = activeSubscription;
@@ -264,10 +333,12 @@ function createRealtimeCollectionOptions<
 					const failure = { error };
 					inactiveSubscriptionFailure = failure;
 					settleSyncStartWaiters(failure);
+					settleInitialSnapshot(failure);
 					fail(error);
 					return () => {
 						if (inactiveSubscriptionFailure === failure) {
 							inactiveSubscriptionFailure = undefined;
+							resetInitialSnapshot();
 						}
 					};
 				}
@@ -300,6 +371,7 @@ function createRealtimeCollectionOptions<
 					if (activeSubscription === subscription) {
 						inactiveSubscriptionFailure = terminalFailure;
 					}
+					settleInitialSnapshot(terminalFailure);
 					detach();
 					rowIds.clear();
 					keys.clear();
@@ -339,6 +411,7 @@ function createRealtimeCollectionOptions<
 				const markSynchronized = () => {
 					if (!ready) {
 						ready = true;
+						settleInitialSnapshot(true);
 						markReady();
 					}
 					if (interrupted && !interrupted.reported) {
@@ -503,6 +576,7 @@ function createRealtimeCollectionOptions<
 
 				return () => {
 					cleaned = true;
+					resetInitialSnapshot();
 					if (
 						inactiveSubscriptionFailure ===
 						terminalSubscriptionFailures.get(subscription)
