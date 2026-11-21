@@ -211,6 +211,36 @@ export default defineConfig({
 		expect(source).not.toContain("credfake0000");
 	});
 
+	it("declares the branch's Realtime and its allowed origins", () => {
+		const { source, seeded } = renderNeonConfigFromView(
+			{
+				preview: {
+					realtime: { allowedOrigins: ["https://app.example.com"] },
+				},
+			},
+			"main",
+		);
+
+		expect(seeded).toBe(true);
+		expect(source).toContain(`export default defineConfig({
+  preview: {
+    realtime: {
+      allowedOrigins: ["https://app.example.com"],
+    },
+  },
+});
+`);
+		expect(
+			renderNeonConfigFromView({ preview: { realtime: true } }, "main")
+				.source,
+		).toContain(`export default defineConfig({
+  preview: {
+    realtime: true,
+  },
+});
+`);
+	});
+
 	it("falls back to the starter policy for a branch with nothing to seed", () => {
 		const { source, seeded } = renderNeonConfigFromView({}, "main");
 

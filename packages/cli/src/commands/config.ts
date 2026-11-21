@@ -1317,6 +1317,8 @@ const STATUS_FIELDS = [
 	"expires_at",
 	"auth",
 	"data_api",
+	"realtime",
+	"realtime_origins",
 	"compute",
 	"scale_to_zero",
 	"ttl",
@@ -1343,6 +1345,7 @@ const writeStatusTables = (
 ) => {
 	const compute = view.branch?.postgres?.computeSettings;
 	const suspend = compute?.suspendTimeout;
+	const realtime = view.preview?.realtime;
 	const out = writer(props);
 	out.write(
 		{
@@ -1358,6 +1361,13 @@ const writeStatusTables = (
 			// Only an enabled toggle is reported; absence is not proof a service is off.
 			auth: view.auth ? "enabled" : undefined,
 			data_api: view.dataApi ? "enabled" : undefined,
+			realtime: realtime ? "enabled" : undefined,
+			realtime_origins:
+				realtime === undefined
+					? undefined
+					: realtime === true
+						? "any"
+						: realtime.allowedOrigins.join(", "),
 			compute: formatComputeUnits(compute),
 			scale_to_zero:
 				suspend === undefined

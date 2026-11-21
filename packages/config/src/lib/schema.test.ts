@@ -275,6 +275,16 @@ describe("configInputSchema", () => {
 		expect(formatted).not.toContain("Invalid key in record");
 	});
 
+	test("rejects a blank function name, which the Functions API refuses", () => {
+		const result = configInputSchema.safeParse({
+			functions: { hello: { name: "   ", source: "./x.ts" } },
+		});
+		if (result.success) throw new Error("expected failure");
+		expect(formatZodIssues(result.error).join("\n")).toContain(
+			"functions.hello.name",
+		);
+	});
+
 	test("surfaces a bad GA function slug on the functions path", () => {
 		const result = configInputSchema.safeParse({
 			functions: {

@@ -14,6 +14,7 @@ import {
 	sqlClient,
 	sqlMetadata,
 } from "../connection.js";
+import { readWithExtension } from "../extensions.js";
 import { sqlReadAnnotations } from "../schema.js";
 import {
 	INSPECT_CHECKS,
@@ -100,23 +101,20 @@ const runInspectOnDatabase = async (
 ): Promise<Record<string, unknown>[]> => {
 	const query = INSPECT_QUERIES[check];
 	const sql = sqlClient(uri, signal);
-	if (query.requiresExtension) {
-		const extension = query.requiresExtension;
-		const installed = await runDiagnostic(check, () =>
-			sql.query("SELECT 1 FROM pg_extension WHERE extname = $1", [
-				extension,
-			]),
+	const extension = query.requiresExtension;
+	if (extension === undefined) {
+		const [rows] = await runDiagnostic(check, () =>
+			sql.transaction([sql.query(query.sql)], { readOnly: true }),
 		);
-		if (installed.length === 0) {
-			throw new NeonToolCallerError(
-				`The "${check}" check needs the "${extension}" extension, which is not installed on database "${databaseName}". Installing it writes to the user's database, so ask the user first, then run \`CREATE EXTENSION IF NOT EXISTS ${extension};\`.`,
-			);
-		}
+		return rows;
 	}
-	const [rows] = await runDiagnostic(check, () =>
-		sql.transaction([sql.query(query.sql)], { readOnly: true }),
+	return runDiagnostic(check, () =>
+		readWithExtension(
+			sql,
+			{ extension, needs: `The "${check}" check`, databaseName },
+			sql.query(query.sql),
+		),
 	);
-	return rows;
 };
 
 /**

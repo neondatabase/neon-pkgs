@@ -1019,7 +1019,7 @@ export const operationFactories = {
 	"jwks_url": zod.zCreateProjectBranchDataApiBody.shape["jwks_url"].optional(),
 	"provider_name": zod.zCreateProjectBranchDataApiBody.shape["provider_name"].optional(),
 	"jwt_audience": zod.zCreateProjectBranchDataApiBody.shape["jwt_audience"].optional(),
-	"add_default_grants": zod.zCreateProjectBranchDataApiBody.shape["add_default_grants"].optional(),
+	"add_default_grants": zod.zCreateProjectBranchDataApiBody.shape["add_default_grants"].describe("Grants the authenticated role read and write access to public-schema tables, including tables the database owner creates later. Without it, the Data API can read no table until you GRANT access. Never grants anonymous.").optional(),
 	"skip_auth_schema": zod.zCreateProjectBranchDataApiBody.shape["skip_auth_schema"].optional(),
 	"settings": zod.zCreateProjectBranchDataApiBody.shape["settings"].optional(),
 }),

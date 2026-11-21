@@ -348,6 +348,9 @@ describe("mcp-tool-names.json", () => {
 		expect(byName.get("list_branch_computes")?.description).toContain(
 			"use list_postgres_endpoints.",
 		);
+		expect(byName.get("run_sql")?.description).toContain(
+			"For several statements, send one per call or use run_sql_transaction.",
+		);
 	});
 
 	test("the MCP tools only reference other MCP tools", () => {
@@ -380,7 +383,7 @@ describe("README", () => {
 				"postgres.connectionString":
 					"Get a connection string. Call it after {{projects.create}}.",
 				delete_projects:
-					"Delete a Neon project and all its data. NEVER run autonomously; always ask the user first.",
+					"Delete a Neon project and all its data. NEVER run autonomously: run it only when the user's own message asks for it and unambiguously identifies its target; otherwise ask first.",
 			},
 		});
 		expect(tools["projects.create"].description).toBe(

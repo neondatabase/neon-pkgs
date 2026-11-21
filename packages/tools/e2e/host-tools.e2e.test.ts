@@ -39,6 +39,8 @@ const sqlToolIds = [
 
 const READ_ONLY_ROLE = "e2e_reader";
 
+const DATABASE_ROW = /^:file_folder: (.+) \(DATABASE\)$/u;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -548,6 +550,60 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		expect(data).not.toHaveProperty("database_structure_error");
 	});
 
+	it("branches.describe lists exactly the databases the SQL tools accept", async () => {
+		await neon.postgres.databases.create(
+			{
+				projectId,
+				branchId: mainBranchId,
+				name: "reports",
+				owner_name: "neondb_owner",
+			},
+			{ waitForReadiness: true },
+		);
+		// A second database would change what later tests inspect, so it is dropped here.
+		try {
+			const { data } = await tools["branches.describe"].execute({
+				project_id: projectId,
+				branch_id: mainBranchId,
+			});
+			const listed = (data.database_structure?.[1] ?? []).flatMap(
+				(row) => {
+					const tree = row.tree_structure;
+					const name =
+						typeof tree === "string"
+							? DATABASE_ROW.exec(tree)?.[1]
+							: undefined;
+					return name === undefined ? [] : [name];
+				},
+			);
+			const registered = await neon.postgres.databases.list({
+				projectId,
+				branchId: mainBranchId,
+			});
+			expect(listed.sort()).toEqual(
+				registered.map((database) => database.name).sort(),
+			);
+			for (const databaseName of listed) {
+				const { data: result } = await tools["sql.run"].execute({
+					project_id: projectId,
+					branch_id: mainBranchId,
+					database_name: databaseName,
+					sql: "SELECT current_database() AS name",
+				});
+				expect(result.rows).toEqual([{ name: databaseName }]);
+			}
+		} finally {
+			await neon.postgres.databases.delete(
+				{
+					projectId,
+					branchId: mainBranchId,
+					databaseName: "reports",
+				},
+				{ waitForReadiness: true },
+			);
+		}
+	});
+
 	it("branches.describe only reads: it works read-only and as a role without CREATE, and leaves show_db_tree alone", async () => {
 		await run(
 			"CREATE FUNCTION public.show_db_tree() RETURNS text LANGUAGE sql AS $$ SELECT 'mine' $$",
@@ -582,20 +638,79 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		);
 	});
 
-	it("queries.listSlow needs pg_stat_statements, then lists statements", async () => {
-		const { data: extension } = await run(
-			"SELECT count(*)::int AS n FROM pg_extension WHERE extname = 'pg_stat_statements'",
+	it("queries.listSlow and database.inspect give the same guidance for a missing extension", async () => {
+		const { data: installed } = await run(
+			"SELECT extname FROM pg_extension WHERE extname IN ('pg_stat_statements', 'neon')",
 		);
-		if (extension.rows[0]?.n === 0) {
-			const missing = tools["queries.listSlow"].execute({
-				project_id: projectId,
-			});
-			await expect(missing).rejects.toBeInstanceOf(NeonClientError);
-			await expect(missing).rejects.toThrow(
-				"pg_stat_statements extension is not installed on the database.",
+		expect(installed.rows).toEqual([]);
+		const expectMissing = async (
+			call: Promise<unknown>,
+			needs: string,
+			extension: string,
+		) => {
+			await expect(call).rejects.toBeInstanceOf(NeonClientError);
+			await expect(call).rejects.toThrow(
+				`${needs} needs the "${extension}" extension, which is not installed on database "neondb". Installing it writes to the user's database, so ask the user first, then run \`CREATE EXTENSION IF NOT EXISTS ${extension};\`.`,
 			);
-			await run("CREATE EXTENSION pg_stat_statements");
+		};
+		await expectMissing(
+			tools["queries.listSlow"].execute({ project_id: projectId }),
+			"Listing slow queries",
+			"pg_stat_statements",
+		);
+		await expectMissing(
+			tools["database.inspect"].execute({
+				project_id: projectId,
+				database_name: "neondb",
+				check: "outliers",
+			}),
+			'The "outliers" check',
+			"pg_stat_statements",
+		);
+		await expectMissing(
+			tools["database.inspect"].execute({
+				project_id: projectId,
+				database_name: "neondb",
+				check: "lfc-hit-rate",
+			}),
+			'The "lfc-hit-rate" check',
+			"neon",
+		);
+	});
+
+	it("queries.listSlow and database.inspect read extensions installed in a schema off the search_path", async () => {
+		await run('CREATE SCHEMA "Extensions"');
+		try {
+			await run(
+				'CREATE EXTENSION pg_stat_statements SCHEMA "Extensions"',
+			);
+			await run('CREATE EXTENSION neon SCHEMA "Extensions"');
+			await run("SELECT count(*) FROM items");
+			const { data: slow } = await tools["queries.listSlow"].execute({
+				project_id: projectId,
+				limit: 5,
+			});
+			expect(slow.slow_queries.length).toBeGreaterThan(0);
+			for (const check of [
+				"outliers",
+				"calls",
+				"lfc-hit-rate",
+				"working-set",
+			] as const) {
+				const { data } = await tools["database.inspect"].execute({
+					project_id: projectId,
+					database_name: "neondb",
+					check,
+				});
+				expect(data.rows.length, check).toBeGreaterThan(0);
+			}
+		} finally {
+			await run('DROP SCHEMA IF EXISTS "Extensions" CASCADE');
 		}
+	});
+
+	it("queries.listSlow lists statements from pg_stat_statements", async () => {
+		await run("CREATE EXTENSION pg_stat_statements");
 		await run("SELECT count(*) FROM items");
 		const { data } = await tools["queries.listSlow"].execute({
 			project_id: projectId,
@@ -611,6 +726,66 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 				wal: expect.any(Object),
 			}),
 		);
+	});
+
+	it("outliers, calls, and queries.listSlow leave out Neon's own statements and their own SQL", async () => {
+		const sessionReset = [
+			"CLOSE ALL",
+			"SET SESSION AUTHORIZATION DEFAULT",
+			"RESET ALL",
+			"DEALLOCATE ALL",
+			"UNLISTEN *",
+			"SELECT pg_advisory_unlock_all()",
+			"DISCARD TEMP",
+			"DISCARD SEQUENCES",
+		];
+		// Result rows carry no role, and the user's role also runs some of the
+		// same statements (`COMMIT`), so compare only what `cloud_admin` alone ran.
+		const { data: platform } = await run(
+			`SELECT s.query FROM pg_stat_statements s
+			 JOIN pg_roles r ON r.oid = s.userid
+			 WHERE r.rolname = 'cloud_admin'
+			   AND NOT EXISTS (
+			     SELECT 1 FROM pg_stat_statements o
+			     WHERE o.queryid = s.queryid AND o.userid <> s.userid
+			   )`,
+			{ max_rows: 1000 },
+		);
+		const platformQueries = platform.rows.map((row) => String(row.query));
+		const { data: counts } = await run(
+			`SELECT
+			   count(*) FILTER (
+			     WHERE query IN (${sessionReset.map((query) => `'${query}'`).join(", ")})
+			   )::int AS resets,
+			   count(*) FILTER (WHERE query LIKE '%/* neon inspect */%')::int AS tagged
+			 FROM pg_stat_statements`,
+		);
+		// Without each kind of statement in the stats, the checks below pass on
+		// unfiltered output too. `tagged` counts the earlier listSlow run's SQL.
+		expect(platformQueries.length).toBeGreaterThan(0);
+		expect(counts.rows[0]?.resets).toBeGreaterThan(0);
+		expect(counts.rows[0]?.tagged).toBeGreaterThan(0);
+
+		const notWorkload = (query: string) =>
+			platformQueries.includes(query) ||
+			sessionReset.includes(query) ||
+			query.includes("/* neon inspect */");
+		for (const check of ["outliers", "calls"] as const) {
+			const { data } = await tools["database.inspect"].execute({
+				project_id: projectId,
+				check,
+			});
+			const queries = data.rows.map((row) => String(row.query));
+			expect(queries.length, check).toBeGreaterThan(0);
+			expect(queries.filter(notWorkload), check).toEqual([]);
+		}
+		const { data } = await tools["queries.listSlow"].execute({
+			project_id: projectId,
+			limit: 1000,
+		});
+		const queries = data.slow_queries.map((row) => String(row.query));
+		expect(queries.filter(notWorkload)).toEqual([]);
+		expect(queries).toContain("SELECT count(*) FROM items");
 	});
 
 	it("database.inspect runs table-sizes across every database", async () => {
@@ -850,6 +1025,32 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 			await server.close();
 		}
 	});
+
+	it("branches.delete returns the deleted branch, then null for the same id", async () => {
+		const branchTools = holdingOutputContract(
+			createNeonTools({
+				apiKey: requireApiKey(),
+				baseUrl: configuredBaseUrl(),
+				tools: ["branches.delete"],
+			}),
+		);
+		const branch = await neon.branches.create({
+			projectId,
+			name: "e2e-delete-branch",
+			noCompute: true,
+		});
+		const remove = () =>
+			branchTools["branches.delete"].execute({
+				project_id: projectId,
+				branch_id: branch.id,
+			});
+
+		expect((await remove()).data).toMatchObject({
+			id: branch.id,
+			name: "e2e-delete-branch",
+		});
+		expect((await remove()).data).toBeNull();
+	});
 });
 
 describe("e2e — @neon/tools docs and feedback tools", () => {
@@ -895,6 +1096,18 @@ describe("e2e — @neon/tools docs and feedback tools", () => {
 		await expect(
 			tools["docs.get"].execute({ slug: "../etc/passwd" }),
 		).rejects.toThrow('path traversal ("..") is not allowed');
+	});
+
+	it("docs.get drops neon.com's agent skills note and feedback footer", async () => {
+		const { data } = await tools["docs.get"].execute({
+			slug: "docs/connect/connection-pooling",
+		});
+		expect(data.markdown).toContain(
+			"> Full Neon documentation index: https://neon.com/docs/llms.txt\n",
+		);
+		expect(data.markdown).toContain("# Connection pooling");
+		expect(data.markdown).not.toContain("Agent skills:");
+		expect(data.markdown).not.toContain("Note for AI assistants");
 	});
 
 	it("feedback.send posts { feedback, source } and needs no API key", async () => {

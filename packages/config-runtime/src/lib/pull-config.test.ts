@@ -150,6 +150,57 @@ describe("pullConfig", () => {
 		expect(pulled.config.preview?.realtime).toBe(true);
 	});
 
+	test("carries the branch's allowed origins in config.preview.realtime", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-realtime-origins";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "realtime-origins",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+		api.seedRealtime(projectId, "br-main", {
+			enabled: true,
+			pending: false,
+			invocationUrl: "wss://realtime.example.test/v1",
+			allowedOrigins: [
+				"https://app.example.com",
+				"http://localhost:3000",
+			],
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(pulled.config.preview?.realtime).toEqual({
+			allowedOrigins: [
+				"https://app.example.com",
+				"http://localhost:3000",
+			],
+		});
+		expect(
+			resolveConfig(pulled.config, {
+				name: "main",
+				id: "br-main",
+				exists: true,
+				isDefault: true,
+			}).realtime,
+		).toEqual({
+			allowedOrigins: [
+				"https://app.example.com",
+				"http://localhost:3000",
+			],
+		});
+	});
+
 	test("does not read Realtime with realtime: false", async () => {
 		class FailingRealtimeApi extends FakeNeonApi {
 			override async getProjectBranchRealtime(): Promise<never> {

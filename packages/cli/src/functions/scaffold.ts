@@ -97,7 +97,7 @@ const routes: Record<
 ${entries}
 };
 
-export default {
+const handler = {
 \tfetch(request: Request): Response | Promise<Response> {
 \t\tconst { pathname } = new URL(request.url);
 \t\tconst route = routes[pathname];
@@ -110,6 +110,8 @@ export default {
 \t\treturn route.fetch(request);
 \t},
 };
+
+export default handler;
 `;
 };
 

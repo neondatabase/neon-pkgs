@@ -91,6 +91,8 @@ export class FakeNeonApi implements NeonApi {
 	>();
 	/** Monotonic per-function deployment counter, keyed by `${projectId}:${branchId}:${slug}`. */
 	private readonly functionDeployments = new Map<string, number>();
+	/** Functions a branch lists only through its parent, keyed by `${projectId}:${branchId}:${slug}`. */
+	private readonly inheritedFunctions = new Set<string>();
 	/** Issued credentials (incl. secrets), keyed by `${projectId}:${branchId}`. */
 	private readonly credentials = new Map<
 		string,
@@ -921,6 +923,11 @@ export class FakeNeonApi implements NeonApi {
 			this.functions.set(key, list);
 		}
 		const deployKey = `${projectId}:${branchId}:${slug}`;
+		if (this.inheritedFunctions.delete(deployKey)) {
+			// Neon's first deployment of an inherited function creates the branch's own
+			// copy, named after its slug.
+			fn.name = slug;
+		}
 		const id = (this.functionDeployments.get(deployKey) ?? 0) + 1;
 		this.functionDeployments.set(deployKey, id);
 		fn.activeDeploymentId = id;
@@ -949,6 +956,35 @@ export class FakeNeonApi implements NeonApi {
 				{ details: { status: 404 } },
 			);
 		}
+		return clone(fn);
+	}
+
+	async updateBranchFunction(
+		projectId: string,
+		branchId: string,
+		slug: string,
+		input: { name: string },
+	): Promise<NeonFunctionSnapshot> {
+		this.history.push({
+			method: "updateBranchFunction",
+			args: [projectId, branchId, slug, input],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const fn = (this.functions.get(`${projectId}:${branchId}`) ?? []).find(
+			(item) => item.slug === slug,
+		);
+		if (
+			!fn ||
+			this.inheritedFunctions.has(`${projectId}:${branchId}:${slug}`)
+		) {
+			throw new PlatformError(
+				ErrorCode.NotFound,
+				`Function ${JSON.stringify(slug)} was not found.`,
+				{ details: { status: 404 } },
+			);
+		}
+		fn.name = input.name.trim();
 		return clone(fn);
 	}
 
@@ -1260,16 +1296,20 @@ export class FakeNeonApi implements NeonApi {
 		this.storageDisabled.add(`${projectId}:${branchId}`);
 	}
 
-	/** Test helper: attach a function to a branch. */
+	/** Test helper: attach a function to a branch, optionally as inherited from its parent. */
 	seedFunction(
 		projectId: string,
 		branchId: string,
 		snapshot: NeonFunctionSnapshot,
+		options: { inherited?: boolean } = {},
 	): void {
 		const key = `${projectId}:${branchId}`;
 		const list = this.functions.get(key) ?? [];
 		list.push({ ...snapshot });
 		this.functions.set(key, list);
+		if (options.inherited) {
+			this.inheritedFunctions.add(`${key}:${snapshot.slug}`);
+		}
 		const lastId =
 			snapshot.currentDeployment?.id ?? snapshot.activeDeploymentId;
 		if (lastId !== undefined) {

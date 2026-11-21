@@ -120,6 +120,12 @@ export type PlanStep =
 			fn: ResolvedFunctionConfig;
 			/** Whether the function already existed remotely when the plan was computed. */
 			functionExists: boolean;
+			/**
+			 * Present when the listed display name differs from `fn.name`, and reported as
+			 * a `name` change. A deployment carries no name, so apply sets `fn.name` after
+			 * every deploy. `current` is the slug for a function the deploy will create.
+			 */
+			rename?: { current: string; desired: string };
 	  }
 	| {
 			kind: "create-trigger";
@@ -352,14 +358,21 @@ function diffPreview(args: {
 	}
 
 	for (const fn of preview.functions) {
-		const exists = state.functions.some((f) => f.slug === fn.slug);
+		const existing = state.functions.find((f) => f.slug === fn.slug);
+		const currentName = existing?.name ?? fn.slug;
+		// The API stores the name trimmed; comparing untrimmed would report a rename on every push.
+		const rename =
+			fn.name.trim() === currentName
+				? undefined
+				: { current: currentName, desired: fn.name };
 		plan.push({
 			kind: "deploy-function",
 			projectId: remote.projectId,
 			branchId: remote.branch.id,
 			branchName: remote.branch.name,
 			fn,
-			functionExists: exists,
+			functionExists: existing !== undefined,
+			...(rename ? { rename } : {}),
 		});
 		diffFunctionCustomDomains({
 			fn,

@@ -379,3 +379,110 @@ describe("listProfiles", () => {
 		).toEqual(["DEFAULT", "work"]);
 	});
 });
+
+describe("profile hosts", () => {
+	const STAGE_API = "https://console-stage.example/api/v2";
+	const STAGE_OAUTH = "https://oauth2-stage.example";
+	const profilesFile = (dir: string) =>
+		JSON.parse(readFileSync(resolve(dir, "profiles.json"), "utf8"));
+	const withEntry = (entry: Record<string, unknown>, name = "stage") =>
+		makeDir({
+			"credentials.json": creds("me"),
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					[name]: { credentials: "credentials.stage.json", ...entry },
+				},
+			}),
+		});
+
+	test("a named profile resolves with the hosts it records", () => {
+		const dir = withEntry({ apiHost: STAGE_API, oauthHost: STAGE_OAUTH });
+		expect(resolveProfile(dir, "stage")).toMatchObject({
+			apiHost: STAGE_API,
+			oauthHost: STAGE_OAUTH,
+		});
+		expect(resolveProfile(dir, DEFAULT_PROFILE)).not.toHaveProperty(
+			"apiHost",
+		);
+	});
+
+	test.each([
+		["not a URL", "console-stage.example"],
+		["not http or https", "ftp://console-stage.example"],
+		["not a string", 42],
+	])("an apiHost that is %s makes the file unusable", (_label, apiHost) => {
+		const dir = withEntry({ apiHost });
+		expect(() => resolveProfile(dir, "stage")).toThrow(
+			/profile "stage" has an invalid `apiHost`: expected an http or https URL/,
+		);
+	});
+
+	test("DEFAULT cannot record a host", () => {
+		const dir = makeDir({
+			"credentials.json": creds("me"),
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: {
+						credentials: "credentials.json",
+						oauthHost: STAGE_OAUTH,
+					},
+				},
+			}),
+		});
+		expect(() => resolveProfile(dir, DEFAULT_PROFILE)).toThrow(
+			/profile "DEFAULT" sets `oauthHost`, which only a named profile can/,
+		);
+	});
+
+	test("upsert sets hosts, keeps them when omitted, and removes them on null", () => {
+		const dir = makeDir({ "credentials.json": creds("me") });
+		upsertProfile(dir, "stage", {
+			credentials: "credentials.stage.json",
+			apiHost: STAGE_API,
+			oauthHost: STAGE_OAUTH,
+		});
+		expect(profilesFile(dir).profiles.stage).toMatchObject({
+			apiHost: STAGE_API,
+			oauthHost: STAGE_OAUTH,
+		});
+
+		upsertProfile(dir, "stage", {
+			credentials: "credentials.stage.json",
+			label: "again@example.com",
+		});
+		expect(profilesFile(dir).profiles.stage).toMatchObject({
+			apiHost: STAGE_API,
+			oauthHost: STAGE_OAUTH,
+			label: "again@example.com",
+		});
+
+		upsertProfile(dir, "stage", {
+			credentials: "credentials.stage.json",
+			apiHost: null,
+		});
+		expect(profilesFile(dir).profiles.stage).toEqual({
+			credentials: "credentials.stage.json",
+			oauthHost: STAGE_OAUTH,
+		});
+	});
+
+	test("upsert refuses a host on DEFAULT and a host that is not a URL", () => {
+		const dir = makeDir({ "credentials.json": creds("me") });
+		expect(() =>
+			upsertProfile(dir, DEFAULT_PROFILE, {
+				credentials: "credentials.json",
+				apiHost: STAGE_API,
+			}),
+		).toThrow(/Profile "DEFAULT" cannot record an API or OAuth host/);
+		expect(() =>
+			upsertProfile(dir, "stage", {
+				credentials: "credentials.stage.json",
+				apiHost: "console-stage.example",
+			}),
+		).toThrow(/expected an http or https URL/);
+		expect(readProfiles(dir)).toBeNull();
+	});
+});

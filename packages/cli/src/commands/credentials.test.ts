@@ -32,6 +32,47 @@ describe("credentials", () => {
 		]);
 	});
 
+	test("reveal json carries the issuing branch_id when it differs from --branch", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"credentials",
+				"reveal",
+				"cred-parent-123",
+				...PROJECT,
+				"--branch",
+				"br-sunny-branch-123456",
+			],
+			{ output: "json", snapshot: false },
+		);
+		expect(JSON.parse(stdout)).toMatchObject({
+			token_id: "cred-parent-123",
+			branch_id: "br-parent-branch-123456",
+			name: "Default AI gateway credential",
+			scopes: ["ai_gateway:invoke"],
+			api_token: "parent-branch-api-token",
+			s3_secret_access_key: "parent-branch-s3-secret",
+		});
+	});
+
+	test("reveal of a credential the branch does not list warns and omits branch_id", async ({
+		testCliCommand,
+	}) => {
+		const { stdout, stderr } = await testCliCommand(
+			["credentials", "reveal", "cred-other-branch", ...PROJECT],
+			{ output: "json", snapshot: false },
+		);
+		expect(JSON.parse(stdout)).toEqual({
+			token_id: "cred-other-branch",
+			api_token: "other-branch-api-token",
+			s3_secret_access_key: "other-branch-s3-secret",
+		});
+		expect(stderr).toContain(
+			"WARNING: Credential cred-other-branch is not listed on branch br-main-branch-123456, so the output has no branch_id, name, or scopes. Confirm which branch issued it before you use it on br-main-branch-123456.",
+		);
+	});
+
 	test("rotate", async ({ testCliCommand }) => {
 		await testCliCommand(
 			["credentials", "rotate", "cred-test-123", ...PROJECT],

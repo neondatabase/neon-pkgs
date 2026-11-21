@@ -426,6 +426,80 @@ describe("diffConfig", () => {
 		// The function already exists remotely, so its deploy is flagged as an update.
 		const deploy = diff.plan.find((p) => p.kind === "deploy-function");
 		expect(deploy).toMatchObject({ functionExists: true });
+		expect(deploy).not.toHaveProperty("rename");
+	});
+
+	describe("function display name", () => {
+		const planDeploy = (desiredName: string, remoteName?: string) => {
+			const diff = diffConfig(
+				{
+					authEnabled: false,
+					dataApiEnabled: false,
+					preview: {
+						functions: [
+							{
+								slug: "sum",
+								name: desiredName,
+								source: "./sum.ts",
+								env: {},
+								runtime: "nodejs24",
+								bundler: "esbuild",
+							},
+						],
+						buckets: [],
+						aiGatewayEnabled: false,
+					},
+				},
+				{
+					...remote,
+					preview: {
+						buckets: [],
+						functions:
+							remoteName === undefined
+								? []
+								: [
+										{
+											id: "fn-sum",
+											slug: "sum",
+											name: remoteName,
+											invocationUrl:
+												"https://x/functions/sum",
+										},
+									],
+						triggers: [],
+					},
+				},
+				{ updateExisting: false },
+			);
+			return diff.plan.find((p) => p.kind === "deploy-function");
+		};
+
+		test("a new function is renamed from the slug its first deploy gives it", () => {
+			expect(planDeploy("sum of two numbers")).toMatchObject({
+				rename: { current: "sum", desired: "sum of two numbers" },
+			});
+		});
+
+		test("a new function named like its slug needs no rename", () => {
+			expect(planDeploy("sum")).not.toHaveProperty("rename");
+		});
+
+		test("an existing function is renamed from its remote name", () => {
+			expect(planDeploy("Sum two numbers", "sum")).toMatchObject({
+				functionExists: true,
+				rename: { current: "sum", desired: "Sum two numbers" },
+			});
+		});
+
+		test("an existing function that already has the name is not renamed", () => {
+			expect(
+				planDeploy("sum of two numbers", "sum of two numbers"),
+			).not.toHaveProperty("rename");
+		});
+
+		test("surrounding whitespace, which the API trims, does not plan a rename", () => {
+			expect(planDeploy("  Sum  ", "Sum")).not.toHaveProperty("rename");
+		});
 	});
 
 	test("plans a schedule trigger after the function deploy", () => {

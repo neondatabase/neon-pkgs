@@ -851,6 +851,7 @@ describe("bootstrap", () => {
 								options.envLocal,
 							);
 						}
+						return { created: true };
 					},
 					...(options.realDeploy
 						? {}

@@ -4,7 +4,11 @@ import {
 	uniqueProjectName,
 } from "@neon/e2e-harness";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type NeonClient, NeonNotFoundError } from "../src/index.js";
+import {
+	NeonApiError,
+	type NeonClient,
+	NeonNotFoundError,
+} from "../src/index.js";
 import { expectOk, makeClient } from "./helpers.js";
 
 /**
@@ -216,7 +220,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		);
 		expect(none).toEqual([]);
 
-		expectOk(
+		const deleted = expectOk(
 			await neon.branches.delete(
 				{ projectId, branchId: withCompute.id },
 				{
@@ -224,12 +228,57 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 				},
 			),
 		);
+		expect(deleted?.id).toBe(withCompute.id);
+		expect(
+			expectOk(
+				await neon.branches.delete({
+					projectId,
+					branchId: withCompute.id,
+				}),
+			),
+		).toBeNull();
 		expectOk(
 			await neon.branches.delete(
 				{ projectId, branchId: bare.id },
 				{
 					waitForReadiness: true,
 				},
+			),
+		);
+	});
+
+	it("explains why a branch with an expiration date cannot be a parent", async () => {
+		const expiring = expectOk(
+			await neon.branches.create({
+				projectId,
+				name: "expiring-parent",
+				parent_id: defaultBranchId,
+				noCompute: true,
+				expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+			}),
+		);
+
+		const { data, error } = await neon.branches.create({
+			projectId,
+			name: "scratch-child",
+			parent_id: expiring.id,
+			noCompute: true,
+		});
+
+		expect(data).toBeUndefined();
+		expect(error).toBeInstanceOf(NeonApiError);
+		expect(error).toMatchObject({
+			status: 400,
+			code: "BRANCHING_IS_NOT_ALLOWED",
+		});
+		expect(error?.message).toContain(
+			`remove the expiration from ${expiring.id} (update it with expires_at: null)`,
+		);
+
+		expectOk(
+			await neon.branches.delete(
+				{ projectId, branchId: expiring.id },
+				{ waitForReadiness: true },
 			),
 		);
 	});
@@ -361,6 +410,40 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		);
 		expect(fetched.id).toBe(first.id);
 		expect(fetched.branch_id).toBe(defaultBranchId);
+	});
+
+	it("restart with waitForReadiness returns the endpoint a later get reads", async () => {
+		const [endpoint] = expectOk(
+			await neon.postgres.endpoints.listByBranch({
+				projectId,
+				branchId: defaultBranchId,
+			}),
+		);
+		if (!endpoint) throw new Error("default branch has no endpoint");
+		const params = { projectId, endpointId: endpoint.id };
+		// Restart rejects a suspended compute, and the suspend timeout may have passed.
+		expectOk(
+			await neon.postgres.endpoints.start(params, {
+				waitForReadiness: true,
+			}),
+		);
+
+		const restarted = expectOk(
+			await neon.postgres.endpoints.restart(params, {
+				waitForReadiness: true,
+			}),
+		);
+		const fetched = expectOk(await neon.postgres.endpoints.get(params));
+		expect(fetched.current_state).toBe("active");
+		expect({
+			current_state: restarted.current_state,
+			pending_state: restarted.pending_state,
+			started_at: restarted.started_at,
+		}).toEqual({
+			current_state: fetched.current_state,
+			pending_state: fetched.pending_state,
+			started_at: fetched.started_at,
+		});
 	});
 
 	it("waitFor resolves against operations the project has already run", async () => {

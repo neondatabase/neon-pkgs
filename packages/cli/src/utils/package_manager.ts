@@ -7,7 +7,9 @@
  * **`detect*` may return undefined, `resolve*` never does**, and `inferPackageManager` is the
  * composed detector for callers that can prompt rather than guess.
  *
- * - {@link detectProjectPackageManager} — lockfile walk from `cwd` up to the repo root
+ * - {@link detectProjectPackageManager} — lockfile walk from `cwd` up to the repo root; the
+ *   project's pin or pnpm layout, then PATH, breaks the tie when one directory has lockfiles
+ *   from several managers
  * - {@link detectInvokingPackageManager} — the tool that launched us (`npx`, `pnpm dlx`, …)
  * - {@link inferPackageManager} — project, then invocation, or nothing (when there is
  *   something to ask the user, an unanswerable guess is worse than a prompt)
@@ -47,7 +49,8 @@ const PACKAGE_MANAGERS: readonly PackageManager[] = [
 /**
  * Lockfiles, and the package manager each one belongs to. npm is last on
  * purpose: a repo with both a pnpm lockfile and a leftover `package-lock.json`
- * (which a failed run like the one this fixes can leave behind) is a pnpm repo.
+ * (which running npm in a pnpm repo leaves behind) is a pnpm repo, unless pnpm
+ * is not installed and nothing binds the repo to it.
  */
 const LOCKFILES: ReadonlyArray<readonly [file: string, pm: PackageManager]> = [
 	["pnpm-lock.yaml", "pnpm"],
@@ -59,11 +62,45 @@ const LOCKFILES: ReadonlyArray<readonly [file: string, pm: PackageManager]> = [
 	["npm-shrinkwrap.json", "npm"],
 ];
 
-const lockfileIn = (dir: string): PackageManager | undefined => {
-	for (const [file, pm] of LOCKFILES) {
-		if (existsSync(join(dir, file))) return pm;
+/**
+ * The package manager `dir` is already bound to: its `packageManager` pin, or pnpm for a
+ * pnpm workspace or a `node_modules` in pnpm's layout, which npm must never run against.
+ */
+const boundPackageManager = (dir: string): PackageManager | undefined => {
+	const pinned = readManifest(dir)?.packageManager;
+	if (typeof pinned === "string") {
+		const name = pinned.split("@")[0];
+		const pm = PACKAGE_MANAGERS.find((candidate) => candidate === name);
+		if (pm !== undefined) return pm;
 	}
-	return undefined;
+	return existsSync(join(dir, "pnpm-workspace.yaml")) ||
+		existsSync(join(dir, "node_modules", ".pnpm"))
+		? "pnpm"
+		: undefined;
+};
+
+/**
+ * The package manager behind `dir`'s lockfiles. Lockfiles from several managers are common
+ * in app-builder exports (`bun.lockb` beside `package-lock.json`), which are then installed
+ * with whichever one the machine has, so the first one on PATH wins unless the project is
+ * bound to one. With none of them installed, the first stays the answer and the install
+ * fails naming it.
+ */
+const lockfileIn = (dir: string): PackageManager | undefined => {
+	const candidates = [
+		...new Set(
+			LOCKFILES.filter(([file]) => existsSync(join(dir, file))).map(
+				([, pm]) => pm,
+			),
+		),
+	];
+	if (candidates.length <= 1) return candidates[0];
+	const bound = boundPackageManager(dir);
+	if (bound !== undefined && candidates.includes(bound)) return bound;
+	return (
+		candidates.find((pm) => which.sync(pm, { nothrow: true }) !== null) ??
+		candidates[0]
+	);
 };
 
 /** `.git` is a file rather than a directory in a worktree or a submodule. */

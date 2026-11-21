@@ -8,6 +8,7 @@ import {
 	toolIds,
 } from "./index.js";
 import { hiddenToolIds } from "./lib/ergonomic/ids.js";
+import { toMcpOutputSchema } from "./mcp.js";
 
 const methodPaths = (value: object, prefix = ""): string[] => {
 	const paths: string[] = [];
@@ -111,6 +112,19 @@ describe("incidents.list", () => {
 		}
 	});
 
+	test("says updated_at is when the overall status was last updated, not when the page was fetched", () => {
+		const tool = createNeonTool("incidents.list", {});
+		expect(tool.description).toContain(
+			"updated_at is when neonstatus.com last updated the overall status",
+		);
+		const schema = z.toJSONSchema(tool.outputSchema);
+		expect(schema.properties?.updated_at).toMatchObject({
+			description: expect.stringContaining(
+				"not when this call fetched it",
+			),
+		});
+	});
+
 	test("rejects unknown input before fetching", async () => {
 		let called = false;
 		const tool = createNeonTool("incidents.list", {
@@ -156,6 +170,72 @@ describe("special mappings", () => {
 		expect(await requests[0].json()).toEqual({
 			destination_org_id: "org-to",
 			project_ids: ["project-id"],
+		});
+	});
+
+	describe("postgres.dataApi.get", () => {
+		const input = {
+			project_id: "project-id",
+			branch_id: "br-main",
+			database_name: "neondb",
+		};
+		const dataApiTool = (response: () => Response) => {
+			const tool = createNeonTool("postgres.dataApi.get", {
+				apiKey: "test-key",
+				fetch: async () => response(),
+			});
+			const validateOutput = (data: unknown) =>
+				toMcpOutputSchema(tool.outputSchema)["~standard"].validate({
+					data,
+				});
+			return { tool, validateOutput };
+		};
+
+		test("returns enabled false when the database has no Data API", async () => {
+			const { tool, validateOutput } = dataApiTool(() =>
+				jsonResponse({ code: "", message: "data api not found" }, 404),
+			);
+
+			const result = await tool.execute(input);
+
+			expect(result).toEqual({ data: { enabled: false } });
+			expect(validateOutput(result.data)).not.toHaveProperty("issues");
+		});
+
+		test("adds enabled true to a configured Data API", async () => {
+			const { tool, validateOutput } = dataApiTool(() =>
+				jsonResponse({
+					url: "https://ep-host.apirest.neon.tech/neondb/rest/v1",
+					status: "ready",
+					settings: { db_schemas: ["public"] },
+				}),
+			);
+
+			const result = await tool.execute(input);
+
+			expect(result).toEqual({
+				data: {
+					url: "https://ep-host.apirest.neon.tech/neondb/rest/v1",
+					status: "ready",
+					settings: { db_schemas: ["public"] },
+					enabled: true,
+				},
+			});
+			expect(validateOutput(result.data)).not.toHaveProperty("issues");
+		});
+
+		test.each([
+			"database not found",
+			"branch not found",
+		])("still throws the 404 for %s", async (message) => {
+			const { tool } = dataApiTool(() =>
+				jsonResponse({ code: "", message }, 404),
+			);
+
+			await expect(tool.execute(input)).rejects.toMatchObject({
+				status: 404,
+				message,
+			});
 		});
 	});
 
@@ -932,7 +1012,7 @@ describe("special mappings", () => {
 		expect(reset.annotations.destructiveHint).toBe(true);
 		expect(reset.requiresApproval).toBe(true);
 		expect(reset.description).toContain(
-			"discarding the branch's own changes. NEVER run autonomously; always ask the user first.",
+			"discarding the branch's own changes. NEVER run autonomously: run it only when the user's own message asks for it and unambiguously identifies its target; otherwise ask first.",
 		);
 		const preserve = z.toJSONSchema(reset.inputSchema).properties
 			?.preserve_under_name;
@@ -1360,11 +1440,59 @@ describe("special mappings", () => {
 
 		await expect(
 			tool.execute({ project_id: "p", branch_id: "br" }),
-		).resolves.toEqual({ data: null });
+		).resolves.toEqual({ data: { id: "br" } });
 		expect(requests.map((request) => request.method)).toEqual([
 			"DELETE",
 			"GET",
 			"GET",
 		]);
+	});
+
+	test("branches.delete returns the deleted branch, or null when Neon answers 204", async () => {
+		const branch = {
+			id: "br",
+			project_id: "p",
+			name: "scratch",
+			current_state: "ready",
+			pending_state: "storage_deleted",
+			state_changed_at: "2026-01-01T00:00:00Z",
+			creation_source: "console",
+			default: false,
+			protected: false,
+			cpu_used_sec: 0,
+			compute_time_seconds: 0,
+			active_time_seconds: 0,
+			written_data_bytes: 0,
+			data_transfer_bytes: 0,
+			created_at: "2026-01-01T00:00:00Z",
+			updated_at: "2026-01-01T00:00:00Z",
+		};
+		let status = 200;
+		const tool = createNeonTool("branches.delete", {
+			apiKey: "test-key",
+			fetch: async () =>
+				status === 204
+					? new Response(null, { status })
+					: jsonResponse({ branch, operations: [] }),
+		});
+		const published = toMcpOutputSchema(tool.outputSchema);
+
+		const deleted = await tool.execute({
+			project_id: "p",
+			branch_id: "br",
+		});
+		expect(deleted).toEqual({ data: branch });
+		expect(published["~standard"].validate(deleted)).toEqual({
+			value: deleted,
+		});
+		status = 204;
+		const missing = await tool.execute({
+			project_id: "p",
+			branch_id: "br",
+		});
+		expect(missing).toEqual({ data: null });
+		expect(published["~standard"].validate(missing)).toEqual({
+			value: missing,
+		});
 	});
 });

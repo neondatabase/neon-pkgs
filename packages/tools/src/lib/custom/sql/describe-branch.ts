@@ -25,9 +25,11 @@ export const describeBranchInputSchema = z.strictObject({
 	database_name: databaseNameField,
 });
 
-// One SELECT over the system catalogs: every database, then the current
-// database's schemas and objects as an indented tree. It creates nothing, so it
-// needs no CREATE privilege and runs in a READ ONLY transaction.
+// One SELECT over the system catalogs: every database but postgres, then the
+// current database's schemas and objects as an indented tree. It creates
+// nothing, so it needs no CREATE privilege and runs in a READ ONLY transaction.
+// The Neon API hides postgres, and the other tools resolve database_name
+// through it, so they would 404 on that name.
 const DESCRIBE_DATABASE_QUERY = `
 WITH RECURSIVE
     schemas AS (
@@ -80,7 +82,7 @@ WITH RECURSIVE
 SELECT tree_structure FROM (
     SELECT 0 AS part, NULL::text AS path, ':file_folder: ' || datname || ' (DATABASE)' AS tree_structure
     FROM pg_database
-    WHERE datistemplate = false
+    WHERE datistemplate = false AND datname != 'postgres'
 
     UNION ALL
 

@@ -20,6 +20,7 @@ import {
 	assertProfilesUsable,
 	assertValidProfileName,
 	DEFAULT_PROFILE,
+	type HostUpdate,
 	isKeyringPointer,
 	KEYRING_CREDENTIALS,
 	locationForName,
@@ -35,6 +36,7 @@ import type yargs from "yargs";
 import type { NeonApiClient } from "../api.js";
 import { getApiClient, isNeonApiError } from "../api.js";
 import {
+	AUTH_TIMEOUT_MINUTES,
 	AuthRefreshError,
 	auth,
 	classifyRefreshFailure,
@@ -73,6 +75,7 @@ import {
 } from "../context.js";
 import { storeFor } from "../credential_io.js";
 import { hasTerminal, isCi } from "../env.js";
+import { hostsForProfile, hostUpdateFor, issuingHosts } from "../hosts.js";
 import { log } from "../log.js";
 import { withExclusiveLock } from "../refresh_lock.js";
 import {
@@ -98,6 +101,8 @@ type AuthProps = {
 	keyring?: boolean;
 	contextFile?: string | ((cwd?: string) => string);
 	dbUrl?: string;
+	/** What a named profile's entry records about its hosts. Omitted, it keeps what it had. */
+	hosts?: HostUpdate;
 };
 
 export const locationForAuth = (
@@ -132,6 +137,9 @@ const wrapAuthHelp = (text: string): string => wrapHelpText(text, helpWidth());
 const authHelpEpilogue = (): string => {
 	const cli = getCliName();
 	return helpEpilogue(
+		wrapAuthHelp(
+			`Browser sign-in prints its Auth Url to stderr and waits up to ${AUTH_TIMEOUT_MINUTES} minutes for it to finish. A coding agent can run ${cli} login in the background and pass the URL to the person signing in on this machine.`,
+		),
 		wrapAuthHelp("Non-interactive (CI, scripts, agents):"),
 		wrapAuthHelp("Use an existing API key or an API-key profile."),
 		`  ${cli} projects list --profile agent`,
@@ -190,7 +198,13 @@ export const builder = (yargs: yargs.Argv) =>
 		)
 		.epilogue(authHelpEpilogue());
 export const handler = async (args: AuthProps) => {
-	await authFlow(args);
+	// `--profile` here names where to write, which credential selection may not have picked.
+	const target = selectProfileName(args.profile);
+	await authFlow({
+		...args,
+		...hostsForProfile(args.configDir, target),
+		hosts: hostUpdateFor(target),
+	});
 };
 
 export const authFlow = async ({
@@ -203,6 +217,7 @@ export const authFlow = async ({
 	allowUnsafeTls,
 	profile,
 	keyring,
+	hosts,
 }: AuthProps) => {
 	// A named profile that doesn't exist yet is created here rather than erroring: `neon
 	// login --profile work` is how you make one, so it must work before there is anything
@@ -232,6 +247,10 @@ export const authFlow = async ({
 	let previousFile: string | undefined;
 	let previousWasKeyring = false;
 	let previousOutgoing: OutgoingCredential | null = null;
+	const previousHosts = issuingHosts(configDir, profileName, {
+		apiHost,
+		oauthHost,
+	});
 	try {
 		const previous = resolveProfile(configDir, profileName);
 		previousWasKeyring = previous.storage === "keyring";
@@ -274,6 +293,7 @@ export const authFlow = async ({
 					at.storage === "keyring" ? KEYRING_CREDENTIALS : at.path,
 				...(identity.email ? { label: identity.email } : {}),
 				...(identity.id ? { userId: identity.id } : {}),
+				...hosts,
 			});
 		} catch (err) {
 			if (at.storage === "keyring" && !previousWasKeyring) {
@@ -293,8 +313,7 @@ export const authFlow = async ({
 		if (at.storage === "keyring") {
 			await retirePreviousCredential(
 				{
-					apiHost,
-					oauthHost,
+					...previousHosts,
 					clientId,
 					...(allowUnsafeTls ? { allowUnsafeTls } : {}),
 				},
@@ -1024,7 +1043,7 @@ export const ensureAuth = async (
 
 	// Agents and scripts run commands with every stdio stream on a pipe or file, where nobody
 	// may be watching for a browser, so name the sign-in command instead of waiting out the
-	// 60-second timeout. One terminal stream is enough to keep `neon psql < q.sql` signing in.
+	// sign-in timeout. One terminal stream is enough to keep `neon psql < q.sql` signing in.
 	// `login` returned above and still opens the browser from there.
 	if (
 		!(props.forceAuth ?? props["force-auth"]) &&
@@ -1037,7 +1056,11 @@ export const ensureAuth = async (
 	}
 
 	// Use the resolved profile so `NEON_PROFILE` cannot overwrite `DEFAULT`.
-	const apiKey = await authFlow({ ...props, profile: selection.profile });
+	const apiKey = await authFlow({
+		...props,
+		profile: selection.profile,
+		hosts: hostUpdateFor(selection.profile),
+	});
 	props.apiKey = apiKey;
 	props.apiClient = getApiClient({
 		apiKey,

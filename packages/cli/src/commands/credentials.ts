@@ -223,20 +223,40 @@ export const create = async (props: CreateProps) => {
 	);
 };
 
+/**
+ * The reveal endpoint returns only the secrets, and it reveals any credential in the
+ * project whatever branch the path names. The branch listing supplies `branch_id`,
+ * `name`, and `scopes`, so scripts can check which branch the secret belongs to.
+ */
 export const reveal = async (props: TokenProps) => {
 	const branchId = await branchIdFromProps(props);
-	const { data } = await withCredentialNotFound(props.tokenId, branchId, () =>
-		props.apiClient.revealCredential(
-			props.projectId,
-			branchId,
-			props.tokenId,
-		),
+	const { data: secret } = await withCredentialNotFound(
+		props.tokenId,
+		branchId,
+		() =>
+			props.apiClient.revealCredential(
+				props.projectId,
+				branchId,
+				props.tokenId,
+			),
+	);
+	const { data: listing } = await props.apiClient.listCredentials(
+		props.projectId,
+		branchId,
+	);
+	const meta = listing.credentials.find(
+		(c) => c.token_id === secret.token_id,
 	);
 	reportSecrets(
 		props,
-		data,
+		meta ? { ...meta, ...secret } : secret,
 		"These are live secrets. Treat them like a password.",
 	);
+	if (!meta) {
+		log.warning(
+			`Credential ${secret.token_id} is not listed on branch ${branchId}, so the output has no branch_id, name, or scopes. Confirm which branch issued it before you use it on ${branchId}.`,
+		);
+	}
 };
 
 export const rotate = async (props: TokenProps) => {

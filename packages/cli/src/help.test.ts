@@ -265,6 +265,9 @@ const assertAuthHelpTeachesCredentials = (
 	expect(stderr).toBe("");
 	expect(stdout).toContain(trailer);
 	expect(flat).toContain("Sign in with a browser");
+	expect(flat).toContain("waits up to 10 minutes");
+	expect(flat).toContain("neon login in the background");
+	expect(flat).toContain("signing in on this machine");
 	expect(flat).toContain("login --profile work");
 	expect(flat).toContain('projects list --api-key "$KEY"');
 	expect(flat).toContain('NEON_API_KEY="$KEY"');

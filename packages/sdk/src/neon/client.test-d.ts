@@ -101,7 +101,7 @@ it("branches + workflows carry the envelope and narrow under throwOnError", () =
 	).resolves.toEqualTypeOf<BranchConnection>();
 	expectTypeOf(
 		throwing.branches.delete({ projectId: "p", branchId: "br" }),
-	).resolves.toEqualTypeOf<void>();
+	).resolves.toEqualTypeOf<Branch | null>();
 	expectTypeOf(
 		neon.branches.resetFromParent({ projectId: "p", branchId: "br" }),
 	).resolves.toEqualTypeOf<NeonResult<Branch>>();

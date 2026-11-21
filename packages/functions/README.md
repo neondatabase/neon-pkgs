@@ -31,13 +31,15 @@ The API mirrors [`@vercel/functions`](https://vercel.com/docs/functions/function
 ```ts
 import { waitUntil } from "@neon/functions";
 
-export default {
+const handler = {
 	async fetch(req: Request): Promise<Response> {
 		// Fire-and-forget background work that should outlive the response.
 		waitUntil(logRequest(req));
 		return new Response("ok");
 	},
 };
+
+export default handler;
 ```
 
 `waitUntil(promise)` forwards the promise to the Neon Functions runtime, which keeps
@@ -56,7 +58,7 @@ Turn an incoming WebSocket handshake into a live connection from inside your nor
 ```ts
 import { upgradeWebSocket } from "@neon/functions";
 
-export default {
+const handler = {
 	async fetch(req: Request): Promise<Response> {
 		if (req.headers.get("upgrade")?.toLowerCase() !== "websocket") {
 			return new Response("expected a websocket upgrade", { status: 426 });
@@ -67,6 +69,8 @@ export default {
 		return response;
 	},
 };
+
+export default handler;
 ```
 
 `socket` is a standard [`WebSocket`](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket),
@@ -342,7 +346,7 @@ both `if (invocation.type === "schedule")` and
 ```ts
 import { parseTriggerDelivery } from "@neon/functions/triggers";
 
-export default {
+const handler = {
 	async fetch(request: Request): Promise<Response> {
 		const parsed = await parseTriggerDelivery(request);
 		if (!parsed.ok) {
@@ -363,6 +367,8 @@ export default {
 		});
 	},
 };
+
+export default handler;
 ```
 
 `parseTriggerDelivery(request)` and `parseTriggerInvocation(request)` check the

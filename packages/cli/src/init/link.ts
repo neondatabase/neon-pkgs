@@ -2,7 +2,7 @@ import { isNeonApiError } from "../api.js";
 import { defaultClientID } from "../auth.js";
 import { recoverFrom401 } from "../auth_recovery.js";
 import { ensureAuth } from "../commands/auth.js";
-import { type LinkProps, runLink } from "../commands/link.js";
+import { type LinkProps, type LinkResult, runLink } from "../commands/link.js";
 import { defaultDir } from "../config.js";
 
 export type InitLinkProps = LinkProps & {
@@ -19,7 +19,7 @@ export type InitLinkInputs = Pick<
 	"orgId" | "projectId" | "projectName" | "regionId" | "branch"
 >;
 
-export type RunLink = (props: InitLinkProps) => Promise<void>;
+export type RunLink = (props: InitLinkProps) => Promise<LinkResult | undefined>;
 
 const isUnauthorized = (error: unknown): boolean =>
 	isNeonApiError(error) && error.status === 401;
@@ -41,8 +41,7 @@ export const runAuthenticatedLink: RunLink = async (props) => {
 	await ensureAuth(authenticated);
 
 	try {
-		await runLink(authenticated);
-		return;
+		return await runLink(authenticated);
 	} catch (error) {
 		if (!isUnauthorized(error)) {
 			throw error;
@@ -54,7 +53,7 @@ export const runAuthenticatedLink: RunLink = async (props) => {
 
 	await ensureAuth(authenticated);
 	try {
-		await runLink(authenticated);
+		return await runLink(authenticated);
 	} catch (error) {
 		if (!isUnauthorized(error)) {
 			throw error;

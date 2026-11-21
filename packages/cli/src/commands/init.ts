@@ -30,7 +30,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Skip prompts. Alone: Recommended (detected agents, link when authenticated, default neon.ts). With --skill, MCP flags, --no-agent-setup, or --claimable: Custom using those flags",
+				"Skip prompts. Alone: Recommended (detected agents, link when authenticated, neon.ts). With --skill, MCP flags, --no-agent-setup, or --claimable: Custom using those flags",
 		})
 		.option("agent-setup", {
 			type: "boolean",
@@ -59,7 +59,7 @@ export const builder = (yargs: yargs.Argv) =>
 		.option("config", {
 			type: "boolean",
 			describe:
-				"Create neon.ts after linking. Use --no-config to skip. Omitted in Custom: you will be asked",
+				"Create neon.ts after linking: from the branch's services when init links an existing project, otherwise the starter policy. Use --no-config to skip. Omitted in Custom: you will be asked",
 		})
 		.option(
 			"services",
@@ -120,7 +120,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "string",
 			choices: ["oauth", "api-key"] as const,
 			describe:
-				"MCP authentication. Selects skills and MCP setup. oauth is neon mcp --oauth",
+				"MCP authentication. Selects skills and MCP setup. oauth is neon mcp --oauth. api-key mints a key, which needs neon login or a personal API key: with an organization or project-scoped key and no Neon MCP key already configured, init skips MCP and exits 1. Omit it to fall back to oauth when no key can be minted",
 		})
 		.option("mcp-project-scoped", {
 			type: "boolean",
@@ -154,7 +154,7 @@ export const builder = (yargs: yargs.Argv) =>
 		)
 		.epilogue(
 			helpEpilogue(
-				"Recommended setup installs tooling for detected coding agents, links a Neon project when the CLI is authenticated or the session is interactive, and writes a default neon.ts.",
+				"Recommended setup installs tooling for detected coding agents, links a Neon project when the CLI is authenticated or the session is interactive, and writes neon.ts: from the branch's current services when it links an existing project, otherwise the starter policy.",
 				"init sets up the current directory in place. It does not scaffold starter files.",
 				"-y alone is Recommended. -y with --skill, MCP flags, --no-agent-setup, or --claimable is Custom: those flags, Recommended defaults for unanswered questions. -y never opens a browser.",
 				"--skill selects skills (not the plugin). MCP flags select skills and MCP. --no-agent-setup skips agent setup. --agent without those flags installs the plugin (and skills/MCP for agents the plugin cannot cover).",

@@ -30,7 +30,8 @@ export type InitFunnelLink =
 	| "claimable"
 	| "already_linked";
 
-export type InitFunnelConfig = "created" | "existing" | "skipped";
+/** `seeded`: written from the linked existing project's branch, so `services` is null. */
+export type InitFunnelConfig = "created" | "seeded" | "existing" | "skipped";
 
 export type InitFunnelOutcome = "success" | "pending" | "error" | "aborted";
 

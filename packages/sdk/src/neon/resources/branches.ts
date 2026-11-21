@@ -14,6 +14,7 @@ import type {
 	BranchCreateRequest,
 	BranchSchemaCompareResponse,
 	BranchUpdateRequest,
+	DeleteProjectBranchResponse,
 	Endpoint,
 	ListProjectBranchesData,
 } from "../../client/types.gen.js";
@@ -21,7 +22,9 @@ import { withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import {
 	NeonAbortError,
+	NeonApiError,
 	NeonClientError,
+	type NeonErrorUnion,
 	NeonNotFoundError,
 	NeonOperationError,
 } from "../errors.js";
@@ -67,12 +70,49 @@ export interface BranchConnection {
 
 const NO_COMPUTE_WITH_COMPUTE = "Pass compute settings or noCompute, not both.";
 
+/**
+ * `BRANCHING_IS_NOT_ALLOWED` covers more than one rule, so the message decides
+ * whether the parent's expiration date is the cause.
+ */
+const EXPIRING_PARENT_MESSAGE = /expiration date cannot have child branches/i;
+
+function explainExpiringParent(
+	error: NeonErrorUnion,
+	parentId: string | undefined,
+): NeonErrorUnion {
+	if (
+		parentId === undefined ||
+		error.kind !== "api" ||
+		error.code !== "BRANCHING_IS_NOT_ALLOWED" ||
+		!EXPIRING_PARENT_MESSAGE.test(error.message)
+	)
+		return error;
+	return new NeonApiError(
+		`Cannot branch from ${parentId} because it has an expiration date. Create the branch from a parent without one, or remove the expiration from ${parentId} (update it with expires_at: null) and retry. Removing it keeps ${parentId} until someone deletes it, so get the user's agreement first. (API error: "${error.message}")`,
+		{
+			status: error.status,
+			code: error.code,
+			requestId: error.requestId,
+			response: error.response,
+			body: error.body,
+		},
+	);
+}
+
 const readWriteEndpoint = (compute?: ComputeSettings) => ({
 	type: "read_write" as const,
 	autoscaling_limit_min_cu: compute?.minCu,
 	autoscaling_limit_max_cu: compute?.maxCu,
 	suspend_timeout_seconds: compute?.suspendTimeoutSeconds,
 });
+
+/**
+ * Neon answers 204 with no body and no Content-Type, which the generated client hands
+ * over as `null` (or `{}` when a JSON Content-Type is set).
+ */
+const deletedBranch = (
+	data: DeleteProjectBranchResponse | null | undefined,
+): Branch | null => (data && "branch" in data ? data.branch : null);
 
 export interface ResetFromParentInput {
 	/** Required when the branch has children so they can move to the preserved branch. */
@@ -238,7 +278,7 @@ export class Branches<DThrow extends boolean> {
 		if (parsed.error) {
 			return finalize(err<Branch>(parsed.error), shouldThrow);
 		}
-		return this.#ctx.run(
+		const result = await this.#ctx.execute(
 			{
 				...opts,
 				waitForReadiness: this.#ctx.resolveWait(opts, true),
@@ -261,6 +301,17 @@ export class Branches<DThrow extends boolean> {
 					signal,
 				}),
 			(data) => data.branch,
+		);
+		return finalize(
+			result.error
+				? err<Branch>(
+						explainExpiringParent(
+							result.error,
+							parsed.branch.parent_id,
+						),
+					)
+				: result,
+			shouldThrow,
 		);
 	}
 
@@ -299,6 +350,10 @@ export class Branches<DThrow extends boolean> {
 	}
 
 	/**
+	 * Resolves to the deleted branch as Neon returned it when accepting the delete, or
+	 * `null` when Neon answers 204 because no branch has that id (never existed or
+	 * already deleted).
+	 *
 	 * Neon removes the branch when it accepts the delete, and the returned operations
 	 * clean up afterwards. With readiness polling on, a failed operation is checked
 	 * against a read-back: the call resolves if the branch reads 404, while other cleanup
@@ -307,30 +362,40 @@ export class Branches<DThrow extends boolean> {
 	 * @apiCall DELETE /projects/{project_id}/branches/{branch_id}
 	 * @apiCall GET /projects/{project_id}/branches/{branch_id}
 	 */
-	delete(params: BranchDeleteParams): Promise<Outcome<void, DThrow>>;
+	delete(params: BranchDeleteParams): Promise<Outcome<Branch | null, DThrow>>;
 	delete<Throw extends boolean = DThrow>(
 		params: BranchDeleteParams,
 		opts: CallOptions<Throw>,
-	): Promise<Outcome<void, Throw>>;
+	): Promise<Outcome<Branch | null, Throw>>;
 	async delete(
 		params: BranchDeleteParams,
 		opts?: CallOptions,
-	): Promise<void | NeonResult<void>> {
+	): Promise<Branch | null | NeonResult<Branch | null>> {
 		const shouldThrow = this.#ctx.shouldThrow(opts);
 		const error = validateParams(params, "branches.delete", {
 			projectId: "string",
 			branchId: "string",
 		});
-		if (error) return invalidParamsResult<void>(error, shouldThrow);
+		if (error)
+			return invalidParamsResult<Branch | null>(error, shouldThrow);
 		const { projectId, branchId } = params;
 		const path = { project_id: projectId, branch_id: branchId };
-		const deleted = await this.#ctx.executeVoid(opts, (client, signal) =>
-			deleteProjectBranch({
-				client,
-				path,
-				throwOnError: false,
-				signal,
-			}),
+		// `execute` drops the body when readiness polling fails, and the read-back
+		// below still has to return the branch Neon accepted for deletion.
+		let accepted: Branch | null = null;
+		const deleted = await this.#ctx.execute(
+			opts,
+			async (client, signal) => {
+				const result = await deleteProjectBranch({
+					client,
+					path,
+					throwOnError: false,
+					signal,
+				});
+				accepted = deletedBranch(result.data);
+				return result;
+			},
+			deletedBranch,
 		);
 		if (!(deleted.error instanceof NeonOperationError)) {
 			return finalize(deleted, shouldThrow);
@@ -341,10 +406,10 @@ export class Branches<DThrow extends boolean> {
 				getProjectBranch({ client, path, throwOnError: false, signal }),
 		);
 		if (readBack.error instanceof NeonNotFoundError) {
-			return finalize(ok(undefined), shouldThrow);
+			return finalize(ok(accepted), shouldThrow);
 		}
 		if (readBack.error instanceof NeonAbortError) {
-			return finalize(readBack, shouldThrow);
+			return finalize(err<Branch | null>(readBack.error), shouldThrow);
 		}
 		return finalize(deleted, shouldThrow);
 	}
@@ -389,6 +454,14 @@ export class Branches<DThrow extends boolean> {
 				}),
 			(data) => data,
 		);
+		if (result.error) {
+			return finalize(
+				err<BranchConnection>(
+					explainExpiringParent(result.error, parentId),
+				),
+				shouldThrow,
+			);
+		}
 		const out = withConnectionString(
 			result,
 			(data) => data.connection_uris,

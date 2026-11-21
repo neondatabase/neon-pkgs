@@ -1,4 +1,8 @@
-import { listNeonIncidents, NEON_STATUS_API_URL } from "@neon/sdk";
+import {
+	listNeonIncidents,
+	NEON_STATUS_API_URL,
+	NeonNotFoundError,
+} from "@neon/sdk";
 import * as z from "zod";
 import * as output from "../../generated/output.gen.js";
 import { decodeBase64 } from "../binary.js";
@@ -69,7 +73,11 @@ const listIncidentsOutputSchema = z.looseObject({
 	status: z
 		.string()
 		.describe("Overall status: operational, degraded, or outage."),
-	updated_at: z.string(),
+	updated_at: z
+		.string()
+		.describe(
+			"When neonstatus.com last updated the overall status, not when this call fetched it.",
+		),
 	status_page_url: z.string(),
 	incidents: z
 		.array(
@@ -119,7 +127,7 @@ const listIncidentsTool = (options: ToolClientOptions) =>
 		id: publishedId("incidents.list"),
 		title: "List Neon incidents",
 		description:
-			"Lists open Neon incidents and maintenance from neonstatus.com and the affected components and regions. Needs no credentials. Call it when Neon requests fail unexpectedly or the user asks whether Neon is down.",
+			"Lists open Neon incidents and maintenance from neonstatus.com and the affected components and regions. Needs no credentials. Fetches the page on every call; updated_at is when neonstatus.com last updated the overall status, not when this call fetched it. Call it when Neon requests fail unexpectedly or the user asks whether Neon is down.",
 		inputSchema: listIncidentsInputSchema,
 		outputSchema: listIncidentsOutputSchema,
 		annotations: {
@@ -413,7 +421,7 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "branches.delete",
 			generated: "deleteProjectBranch",
-			output: z.null(),
+			output: output.Branch.nullable(),
 			run: (neon, input, signal) =>
 				neon.branches.delete(
 					{ projectId: input.project_id, branchId: input.branch_id },
@@ -744,16 +752,32 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "postgres.dataApi.get",
 			generated: "getProjectBranchDataAPI",
-			output: output.DataAPIReponse,
-			run: (neon, input, signal) =>
-				neon.postgres.dataApi.get(
-					{
-						projectId: input.project_id,
-						branchId: input.branch_id,
-						databaseName: input.database_name,
-					},
-					{ signal },
-				),
+			output: z.union([
+				output.DataAPIReponse.extend({ enabled: z.literal(true) }),
+				z.looseObject({ enabled: z.literal(false) }),
+			]),
+			run: async (neon, input, signal) => {
+				try {
+					const dataApi = await neon.postgres.dataApi.get(
+						{
+							projectId: input.project_id,
+							branchId: input.branch_id,
+							databaseName: input.database_name,
+						},
+						{ signal },
+					);
+					return { ...dataApi, enabled: true as const };
+				} catch (error) {
+					// A missing branch or database is also a 404 with an empty code; only the message tells them apart.
+					if (
+						error instanceof NeonNotFoundError &&
+						/^data api not found$/i.test(error.message)
+					) {
+						return { enabled: false as const };
+					}
+					throw error;
+				}
+			},
 		}),
 	"postgres.dataApi.create": (options) =>
 		fromGenerated(options, {

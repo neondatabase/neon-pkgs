@@ -58,7 +58,9 @@ export type InspectQuery = {
 	sqlLimit?: number;
 	/**
 	 * Postgres extension the query needs (e.g. `pg_stat_statements`). When set,
-	 * the handler verifies the extension is installed before running the query.
+	 * the handler verifies the extension is installed, then runs the query with
+	 * `search_path` set to only the extension's schema, so anything outside
+	 * `pg_catalog` and the extension must be schema-qualified.
 	 */
 	requiresExtension?: string;
 	/**
@@ -67,6 +69,31 @@ export type InspectQuery = {
 	 */
 	scope: InspectQueryScope;
 };
+
+/**
+ * Drops `pg_stat_statements` rows (alias `s`) that the user's workload did not
+ * run: Neon's compute manager runs its setup as `cloud_admin`; Neon's proxy
+ * resets each pooled session it serves HTTP queries on with the listed
+ * statements, as the user's role; and every diagnostic here, including
+ * `queries.listSlow`, carries the `neon inspect` comment. The comment has to
+ * follow the statement's first keyword: Postgres drops a leading comment from
+ * the text it stores.
+ *
+ * The role is matched by name because `neon inspect db --db-url` runs the same
+ * SQL against any Postgres, where an app may well log in as a superuser.
+ * `query` is NULL when Postgres cannot read its stored text, hence `COALESCE`.
+ */
+export const WORKLOAD_STATEMENTS_FILTER = /* sql */ `
+        NOT EXISTS (
+          SELECT 1 FROM pg_roles r
+          WHERE r.oid = s.userid AND r.rolname = 'cloud_admin'
+        )
+        AND COALESCE(s.query, '') NOT IN (
+          'CLOSE ALL', 'SET SESSION AUTHORIZATION DEFAULT', 'RESET ALL',
+          'DEALLOCATE ALL', 'UNLISTEN *', 'SELECT pg_advisory_unlock_all()',
+          'DISCARD TEMP', 'DISCARD SEQUENCES'
+        )
+        AND COALESCE(s.query, '') NOT LIKE '%/* neon inspect */%'`;
 
 /**
  * Typed as an exact `Record` so adding a check to `INSPECT_CHECKS` without
@@ -80,7 +107,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		fields: ["schema", "name", "size"],
 		emptyMessage: "No user tables found.",
 		sql: /* sql */ `
-      SELECT
+      SELECT /* neon inspect */
         n.nspname AS schema,
         c.relname AS name,
         pg_size_pretty(pg_table_size(c.oid)) AS size
@@ -98,7 +125,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		fields: ["schema", "name", "size"],
 		emptyMessage: "No indexes found.",
 		sql: /* sql */ `
-      SELECT
+      SELECT /* neon inspect */
         n.nspname AS schema,
         c.relname AS name,
         pg_size_pretty(pg_relation_size(c.oid)) AS size
@@ -117,7 +144,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		fields: ["table", "index", "index_size", "index_scans"],
 		emptyMessage: "No unused indexes detected.",
 		sql: /* sql */ `
-      SELECT
+      SELECT /* neon inspect */
         s.schemaname || '.' || s.relname AS "table",
         s.indexrelname AS index,
         pg_size_pretty(pg_relation_size(s.indexrelid)) AS index_size,
@@ -137,7 +164,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		fields: ["schema", "name", "count"],
 		emptyMessage: "No user tables found.",
 		sql: /* sql */ `
-      SELECT
+      SELECT /* neon inspect */
         schemaname AS schema,
         relname AS name,
         seq_scan AS count
@@ -155,7 +182,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		// `datname` filter this reports queries the caller did not ask about and
 		// cannot act on.
 		sql: /* sql */ `
-      SELECT
+      SELECT /* neon inspect */
         pid,
         (now() - query_start)::text AS duration,
         state,
@@ -193,7 +220,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		emptyMessage:
 			"No active queries running longer than 30 seconds on this compute.",
 		sql: /* sql */ `
-      WITH activity AS MATERIALIZED (
+      WITH /* neon inspect */ activity AS MATERIALIZED (
         SELECT *
         FROM pg_stat_activity
         WHERE state = 'active'
@@ -259,7 +286,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		// instead would drop `transactionid` and `virtualxid` locks, which carry
 		// no database.
 		sql: /* sql */ `
-      SELECT
+      SELECT /* neon inspect */
         a.pid,
         c.relname,
         l.mode,
@@ -278,14 +305,14 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 	},
 	outliers: {
 		describe:
-			"The 25 queries with the highest cumulative execution time since statistics were last reset (needs pg_stat_statements)",
+			"The 25 queries with the highest cumulative execution time since statistics were last reset, leaving out Neon's own setup and session-reset statements and these diagnostics (needs pg_stat_statements)",
 		scope: "database",
 		fields: ["total_exec_time", "prop_exec_time", "ncalls", "query"],
 		emptyMessage: "No statements recorded yet.",
 		sqlLimit: 25,
 		requiresExtension: "pg_stat_statements",
 		sql: /* sql */ `
-      SELECT
+      SELECT /* neon inspect */
         (interval '1 millisecond' * total_exec_time)::text AS total_exec_time,
         to_char(
           (total_exec_time / nullif(sum(total_exec_time) OVER (), 0)) * 100,
@@ -296,20 +323,21 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
       FROM pg_stat_statements s
       JOIN pg_database d ON d.oid = s.dbid
       WHERE d.datname = current_database()
+        AND ${WORKLOAD_STATEMENTS_FILTER}
       ORDER BY s.total_exec_time DESC
       LIMIT 25;
     `,
 	},
 	calls: {
 		describe:
-			"The 25 most frequently executed queries since statistics were last reset (needs pg_stat_statements)",
+			"The 25 most frequently executed queries since statistics were last reset, leaving out Neon's own setup and session-reset statements and these diagnostics (needs pg_stat_statements)",
 		scope: "database",
 		fields: ["ncalls", "total_exec_time", "prop_exec_time", "query"],
 		emptyMessage: "No statements recorded yet.",
 		sqlLimit: 25,
 		requiresExtension: "pg_stat_statements",
 		sql: /* sql */ `
-      SELECT
+      SELECT /* neon inspect */
         calls AS ncalls,
         (interval '1 millisecond' * total_exec_time)::text AS total_exec_time,
         to_char(
@@ -320,6 +348,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
       FROM pg_stat_statements s
       JOIN pg_database d ON d.oid = s.dbid
       WHERE d.datname = current_database()
+        AND ${WORKLOAD_STATEMENTS_FILTER}
       ORDER BY calls DESC
       LIMIT 25;
     `,
@@ -336,7 +365,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		// cloud_admin and are not always readable by end-user roles, whereas the
 		// function is EXECUTE-able by the default role.
 		sql: /* sql */ `
-      WITH lfc AS (
+      WITH /* neon inspect */ lfc AS (
         SELECT lfc_key AS k, lfc_value AS v
         FROM neon_get_lfc_stats() t(lfc_key text, lfc_value bigint)
       )
@@ -359,7 +388,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		emptyMessage: "No working-set estimate available.",
 		requiresExtension: "neon",
 		sql: /* sql */ `
-      SELECT
+      SELECT /* neon inspect */
         w.window,
         pg_size_pretty(w.working_set_bytes) AS working_set,
         pg_size_pretty(pg_size_bytes(current_setting('neon.file_cache_size_limit'))) AS lfc_size,
@@ -394,7 +423,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		],
 		emptyMessage: "No user tables found.",
 		sql: /* sql */ `
-      SELECT
+      SELECT /* neon inspect */
         n.nspname AS schema,
         c.relname AS "table",
         to_char(psut.last_vacuum, 'YYYY-MM-DD HH24:MI') AS last_vacuum,
@@ -423,7 +452,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		emptyMessage: "No bloat estimate available.",
 		sqlLimit: 25,
 		sql: /* sql */ `
-      WITH constants AS (
+      WITH /* neon inspect */ constants AS (
         SELECT current_setting('block_size')::numeric AS bs, 23 AS hdr, 8 AS ma
       ),
       bloat_info AS (
@@ -489,7 +518,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		],
 		emptyMessage: "No replication slots found.",
 		sql: /* sql */ `
-      SELECT
+      SELECT /* neon inspect */
         s.slot_name,
         s.slot_type,
         CASE
@@ -528,7 +557,7 @@ export const INSPECT_QUERIES: Record<InspectCheck, InspectQuery> = {
 		emptyMessage: "No subscriptions found on this database.",
 		emptyMessageAll: "No subscriptions found on any database.",
 		sql: /* sql */ `
-      SELECT
+      SELECT /* neon inspect */
         sub.subname AS subscription,
         sr.srrelid::regclass::text AS table_name,
         CASE sr.srsubstate

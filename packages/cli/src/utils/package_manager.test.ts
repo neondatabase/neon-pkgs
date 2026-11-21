@@ -282,11 +282,123 @@ describe("detectProjectPackageManager", () => {
 		expect(detectProjectPackageManager(nested)).toBe("yarn");
 	});
 
-	it("treats a leftover package-lock.json next to a pnpm one as pnpm", () => {
-		writeFileSync(join(project, "pnpm-lock.yaml"), "");
-		writeFileSync(join(project, "package-lock.json"), "");
+	describe("lockfiles from several package managers", () => {
+		const originalPath = process.env.PATH;
+		let bin: string;
 
-		expect(detectProjectPackageManager(project)).toBe("pnpm");
+		const install = (...names: PackageManager[]) => {
+			for (const name of names) {
+				writeFileSync(join(bin, name), "#!/bin/sh\nexit 0\n", {
+					mode: 0o755,
+				});
+			}
+		};
+
+		beforeEach(() => {
+			bin = mkdtempSync(join(tmpdir(), "neonctl-pm-detect-bin-"));
+			process.env.PATH = bin;
+		});
+
+		afterEach(() => {
+			process.env.PATH = originalPath;
+			rmSync(bin, { recursive: true, force: true });
+		});
+
+		it("treats a leftover package-lock.json next to a pnpm one as pnpm", () => {
+			install("pnpm", "npm");
+			writeFileSync(join(project, "pnpm-lock.yaml"), "");
+			writeFileSync(join(project, "package-lock.json"), "");
+
+			expect(detectProjectPackageManager(project)).toBe("pnpm");
+		});
+
+		it("picks npm for bun.lockb beside package-lock.json when bun is not installed", () => {
+			install("npm");
+			writeFileSync(join(project, "bun.lockb"), "");
+			writeFileSync(join(project, "package-lock.json"), "");
+
+			expect(detectProjectPackageManager(project)).toBe("npm");
+		});
+
+		it("picks the installed manager from the repo root of a nested package", () => {
+			install("npm");
+			writeFileSync(join(project, "pnpm-lock.yaml"), "");
+			writeFileSync(join(project, "package-lock.json"), "");
+			const nested = join(project, "packages", "app");
+			mkdirSync(nested, { recursive: true });
+
+			expect(detectProjectPackageManager(nested)).toBe("npm");
+		});
+
+		it("keeps the first lockfile's manager when it is installed", () => {
+			install("bun", "npm");
+			writeFileSync(join(project, "bun.lockb"), "");
+			writeFileSync(join(project, "package-lock.json"), "");
+
+			expect(detectProjectPackageManager(project)).toBe("bun");
+		});
+
+		it("keeps the first lockfile's manager when none is installed", () => {
+			writeFileSync(join(project, "bun.lockb"), "");
+			writeFileSync(join(project, "package-lock.json"), "");
+
+			expect(detectProjectPackageManager(project)).toBe("bun");
+		});
+
+		it("keeps the manager package.json pins even when it is not installed", () => {
+			install("npm");
+			writeFileSync(
+				join(project, "package.json"),
+				JSON.stringify({ packageManager: "pnpm@10.12.1" }),
+			);
+			writeFileSync(join(project, "pnpm-lock.yaml"), "");
+			writeFileSync(join(project, "package-lock.json"), "");
+
+			expect(detectProjectPackageManager(project)).toBe("pnpm");
+		});
+
+		it("follows the packageManager pin over an installed first lockfile", () => {
+			install("bun", "npm");
+			writeFileSync(
+				join(project, "package.json"),
+				JSON.stringify({ packageManager: "npm@10.9.2" }),
+			);
+			writeFileSync(join(project, "bun.lockb"), "");
+			writeFileSync(join(project, "package-lock.json"), "");
+
+			expect(detectProjectPackageManager(project)).toBe("npm");
+		});
+
+		it("keeps pnpm at a pnpm workspace root, whose workspace: dependencies npm cannot install", () => {
+			install("npm");
+			writeFileSync(
+				join(project, "pnpm-workspace.yaml"),
+				"packages:\n  - apps/*\n",
+			);
+			writeFileSync(join(project, "pnpm-lock.yaml"), "");
+			writeFileSync(join(project, "package-lock.json"), "");
+
+			expect(detectProjectPackageManager(project)).toBe("pnpm");
+		});
+
+		it("keeps pnpm when node_modules is pnpm's layout, which npm cannot install into", () => {
+			install("npm");
+			mkdirSync(join(project, "node_modules", ".pnpm"), {
+				recursive: true,
+			});
+			writeFileSync(join(project, "pnpm-lock.yaml"), "");
+			writeFileSync(join(project, "package-lock.json"), "");
+
+			expect(detectProjectPackageManager(project)).toBe("pnpm");
+		});
+
+		it("never switches a project with one manager's lockfiles", () => {
+			install("npm");
+			writeFileSync(join(project, "bun.lock"), "");
+			writeFileSync(join(project, "bun.lockb"), "");
+
+			expect(detectProjectPackageManager(project)).toBe("bun");
+		});
 	});
 
 	it("does not look outside the repo for a lockfile", () => {

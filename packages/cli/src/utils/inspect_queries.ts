@@ -32,6 +32,31 @@ export type InspectQuery = {
 	scope: "database" | "compute";
 };
 
+/**
+ * Drops `pg_stat_statements` rows (alias `s`) that the user's workload did not
+ * run: Neon's compute manager runs its setup as `cloud_admin`; Neon's proxy
+ * resets each pooled session it serves HTTP queries on with the listed
+ * statements, as the user's role; and every diagnostic here carries the
+ * `neon inspect` comment. The comment has to follow the statement's first
+ * keyword: Postgres drops a leading comment from the text it stores.
+ * `@neon/tools` keeps an identical copy for `database.inspect`.
+ *
+ * The role is matched by name because `--db-url` runs this against any
+ * Postgres, where an app may well log in as a superuser. `query` is NULL when
+ * Postgres cannot read its stored text, hence `COALESCE`.
+ */
+const WORKLOAD_STATEMENTS_FILTER = /* sql */ `
+				NOT EXISTS (
+					SELECT 1 FROM pg_roles r
+					WHERE r.oid = s.userid AND r.rolname = 'cloud_admin'
+				)
+				AND COALESCE(s.query, '') NOT IN (
+					'CLOSE ALL', 'SET SESSION AUTHORIZATION DEFAULT', 'RESET ALL',
+					'DEALLOCATE ALL', 'UNLISTEN *', 'SELECT pg_advisory_unlock_all()',
+					'DISCARD TEMP', 'DISCARD SEQUENCES'
+				)
+				AND COALESCE(s.query, '') NOT LIKE '%/* neon inspect */%'`;
+
 export const INSPECT_QUERIES = {
 	"table-sizes": {
 		describe:
@@ -40,7 +65,7 @@ export const INSPECT_QUERIES = {
 		fields: ["schema", "name", "size"],
 		emptyMessage: "No user tables found.",
 		sql: /* sql */ `
-			SELECT
+			SELECT /* neon inspect */
 				n.nspname AS schema,
 				c.relname AS name,
 				pg_size_pretty(pg_table_size(c.oid)) AS size
@@ -58,7 +83,7 @@ export const INSPECT_QUERIES = {
 		fields: ["schema", "name", "size"],
 		emptyMessage: "No indexes found.",
 		sql: /* sql */ `
-			SELECT
+			SELECT /* neon inspect */
 				n.nspname AS schema,
 				c.relname AS name,
 				pg_size_pretty(pg_relation_size(c.oid)) AS size
@@ -77,7 +102,7 @@ export const INSPECT_QUERIES = {
 		fields: ["table", "index", "index_size", "index_scans"],
 		emptyMessage: "No unused indexes detected.",
 		sql: /* sql */ `
-			SELECT
+			SELECT /* neon inspect */
 				s.schemaname || '.' || s.relname AS "table",
 				s.indexrelname AS index,
 				pg_size_pretty(pg_relation_size(s.indexrelid)) AS index_size,
@@ -97,7 +122,7 @@ export const INSPECT_QUERIES = {
 		fields: ["schema", "name", "count"],
 		emptyMessage: "No user tables found.",
 		sql: /* sql */ `
-			SELECT
+			SELECT /* neon inspect */
 				schemaname AS schema,
 				relname AS name,
 				seq_scan AS count
@@ -114,7 +139,7 @@ export const INSPECT_QUERIES = {
 		// `pg_stat_activity` spans the compute, so unfiltered rows may belong to
 		// another database.
 		sql: /* sql */ `
-			SELECT
+			SELECT /* neon inspect */
 				pid,
 				(now() - query_start)::text AS duration,
 				state,
@@ -141,7 +166,7 @@ export const INSPECT_QUERIES = {
 		],
 		emptyMessage: "No active queries running longer than 30 seconds.",
 		sql: /* sql */ `
-			WITH activity AS MATERIALIZED (
+			WITH /* neon inspect */ activity AS MATERIALIZED (
 				SELECT *
 				FROM pg_stat_activity
 				WHERE state = 'active'
@@ -201,7 +226,7 @@ export const INSPECT_QUERIES = {
 		// filtering on `l.database` would drop database-less `transactionid` and
 		// `virtualxid` locks.
 		sql: /* sql */ `
-			SELECT
+			SELECT /* neon inspect */
 				a.pid,
 				c.relname,
 				l.mode,
@@ -220,13 +245,13 @@ export const INSPECT_QUERIES = {
 	},
 	outliers: {
 		describe:
-			"Queries taking the most cumulative execution time (needs pg_stat_statements)",
+			"Queries taking the most cumulative execution time, leaving out Neon's own setup and session-reset statements and inspect's own queries (needs pg_stat_statements)",
 		scope: "database",
 		fields: ["total_exec_time", "prop_exec_time", "ncalls", "query"],
 		emptyMessage: "No statements recorded yet.",
 		requiresExtension: "pg_stat_statements",
 		sql: /* sql */ `
-			SELECT
+			SELECT /* neon inspect */
 				(interval '1 millisecond' * total_exec_time)::text AS total_exec_time,
 				to_char(
 					(total_exec_time / nullif(sum(total_exec_time) OVER (), 0)) * 100,
@@ -237,18 +262,20 @@ export const INSPECT_QUERIES = {
 			FROM pg_stat_statements s
 			JOIN pg_database d ON d.oid = s.dbid
 			WHERE d.datname = current_database()
+				AND ${WORKLOAD_STATEMENTS_FILTER}
 			ORDER BY total_exec_time DESC
 			LIMIT 25;
 		`,
 	},
 	calls: {
-		describe: "Most frequently called queries (needs pg_stat_statements)",
+		describe:
+			"Most frequently called queries, leaving out Neon's own setup and session-reset statements and inspect's own queries (needs pg_stat_statements)",
 		scope: "database",
 		fields: ["ncalls", "total_exec_time", "prop_exec_time", "query"],
 		emptyMessage: "No statements recorded yet.",
 		requiresExtension: "pg_stat_statements",
 		sql: /* sql */ `
-			SELECT
+			SELECT /* neon inspect */
 				calls AS ncalls,
 				(interval '1 millisecond' * total_exec_time)::text AS total_exec_time,
 				to_char(
@@ -259,6 +286,7 @@ export const INSPECT_QUERIES = {
 			FROM pg_stat_statements s
 			JOIN pg_database d ON d.oid = s.dbid
 			WHERE d.datname = current_database()
+				AND ${WORKLOAD_STATEMENTS_FILTER}
 			ORDER BY calls DESC
 			LIMIT 25;
 		`,
@@ -275,7 +303,7 @@ export const INSPECT_QUERIES = {
 		// cloud_admin and are not always readable by end-user roles, whereas the
 		// function is EXECUTE-able by the default role.
 		sql: /* sql */ `
-			WITH lfc AS (
+			WITH /* neon inspect */ lfc AS (
 				SELECT lfc_key AS k, lfc_value AS v
 				FROM neon_get_lfc_stats() t(lfc_key text, lfc_value bigint)
 			)
@@ -298,7 +326,7 @@ export const INSPECT_QUERIES = {
 		emptyMessage: "No working-set estimate available.",
 		requiresExtension: "neon",
 		sql: /* sql */ `
-			SELECT
+			SELECT /* neon inspect */
 				w.window,
 				pg_size_pretty(w.working_set_bytes) AS working_set,
 				pg_size_pretty(pg_size_bytes(current_setting('neon.file_cache_size_limit'))) AS lfc_size,
@@ -333,7 +361,7 @@ export const INSPECT_QUERIES = {
 		],
 		emptyMessage: "No user tables found.",
 		sql: /* sql */ `
-			SELECT
+			SELECT /* neon inspect */
 				n.nspname AS schema,
 				c.relname AS "table",
 				to_char(psut.last_vacuum, 'YYYY-MM-DD HH24:MI') AS last_vacuum,
@@ -361,7 +389,7 @@ export const INSPECT_QUERIES = {
 		fields: ["type", "schema", "object_name", "bloat", "waste"],
 		emptyMessage: "No bloat estimate available.",
 		sql: /* sql */ `
-			WITH constants AS (
+			WITH /* neon inspect */ constants AS (
 				SELECT current_setting('block_size')::numeric AS bs, 23 AS hdr, 8 AS ma
 			),
 			bloat_info AS (
@@ -427,7 +455,7 @@ export const INSPECT_QUERIES = {
 		],
 		emptyMessage: "No replication slots found.",
 		sql: /* sql */ `
-			SELECT
+			SELECT /* neon inspect */
 				s.slot_name,
 				s.slot_type,
 				CASE
@@ -466,7 +494,7 @@ export const INSPECT_QUERIES = {
 		emptyMessage: "No subscriptions found on this database.",
 		emptyMessageAll: "No subscriptions found on any database.",
 		sql: /* sql */ `
-			SELECT
+			SELECT /* neon inspect */
 				sub.subname AS subscription,
 				sr.srrelid::regclass::text AS table_name,
 				CASE sr.srsubstate

@@ -120,6 +120,35 @@ describe("config init", () => {
 		expect(calls[0].args[0]).toBe("add");
 	});
 
+	test("installs with npm in a project with bun.lockb and package-lock.json on a machine without bun", async () => {
+		writeFileSync(join(workspace, "bun.lockb"), "");
+		writeFileSync(join(workspace, "package-lock.json"), "");
+		const bin = mkdtempSync(join(tmpdir(), "neonctl-config-init-bin-"));
+		writeFileSync(join(bin, "npm"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+		const originalPath = process.env.PATH;
+		process.env.PATH = bin;
+		const calls: { cmd: string; args: string[] }[] = [];
+
+		try {
+			await initCmd({
+				cwd: workspace,
+				install: true,
+				requireInstall: true,
+				run: (cmd, args) => {
+					calls.push({ cmd, args });
+					return Promise.resolve({ ok: true });
+				},
+			});
+		} finally {
+			process.env.PATH = originalPath;
+			rmSync(bin, { recursive: true, force: true });
+		}
+
+		expect(calls).toEqual([
+			{ cmd: "npm", args: ["install", "@neon/config", "@neon/env"] },
+		]);
+	});
+
 	test("adds to the root of a pnpm workspace with -w, and prints the same command", async () => {
 		writeFileSync(
 			join(workspace, "pnpm-workspace.yaml"),
