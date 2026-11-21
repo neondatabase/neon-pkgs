@@ -49,6 +49,7 @@ export const NEON_MODELS_DEV_IDS = [
 	"gpt-5-mini",
 	"gpt-5-nano",
 	"gpt-6-1-sol",
+	"gpt-6-1-terra",
 	"gpt-6-astra",
 	"gpt-6-luna",
 	"gpt-6-sol",
@@ -56,6 +57,7 @@ export const NEON_MODELS_DEV_IDS = [
 	"gpt-oss-120b",
 	"gpt-oss-20b",
 	// Google (unified MLflow endpoint)
+	"gemini-3-1-flash-image",
 	"gemini-3-1-flash-lite",
 	"gemini-3-1-pro",
 	"gemini-3-5-flash",
@@ -64,6 +66,7 @@ export const NEON_MODELS_DEV_IDS = [
 	"gemini-3-7-flash",
 	"gemini-3-8-flash",
 	"gemini-3-flash",
+	"gemini-3-pro-image",
 	"gemini-4-argon",
 	"gemini-4-carbon",
 	"gemma-3-12b",

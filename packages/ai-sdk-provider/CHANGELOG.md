@@ -1,5 +1,11 @@
 # @neon/ai-sdk-provider
 
+## 1.5.0
+
+### Minor Changes
+
+- Add `gemini-3-1-flash-image`, `gemini-3-pro-image`, and `gpt-6-1-terra` to the known model ids, with the call options the gateway rejects for each (penalties on the two Gemini image models; `temperature` and `topP` on `gpt-6-1-terra` at its default reasoning effort).
+
 ## 1.4.0
 
 ### Minor Changes

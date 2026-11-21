@@ -80,11 +80,11 @@ These rules apply on the Anthropic Messages and Chat Completions routes. The Res
 | `glm-5-2`, `glm-5-3`, `glm-5-3-flash`, `kimi-k3`, `kimi-k3-1-pro` | `frequencyPenalty`, `presencePenalty` |
 | Grok, DeepSeek | `frequencyPenalty`, `presencePenalty` |
 | Meta Llama | `frequencyPenalty`, `presencePenalty`, `seed` |
-| `gemini-3-5-flash-lite` | `frequencyPenalty`, `presencePenalty` |
+| `gemini-3-5-flash-lite`, `gemini-3-1-flash-image`, `gemini-3-pro-image` | `frequencyPenalty`, `presencePenalty` |
 | `gemini-3-6-flash` | `temperature`, `topP`, `frequencyPenalty`, `presencePenalty` |
 | `gemini-3-7-flash`, `gemini-3-8-flash`, `gemini-4-argon`, `gemini-4-carbon` | `temperature`, `topP`, `frequencyPenalty`, `presencePenalty` |
 | Every other Gemini | nothing |
-| `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-5`, `gpt-5-5-pro`, `gpt-5-6-luna`, `gpt-5-6-sol`, `gpt-5-6-terra`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-6-1-sol` (reported only; Responses strips these upstream) | `temperature`, `topP` |
+| `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-5`, `gpt-5-5-pro`, `gpt-5-6-luna`, `gpt-5-6-sol`, `gpt-5-6-terra`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-6-1-sol`, `gpt-6-1-terra` (reported only; Responses strips these upstream) | `temperature`, `topP` |
 
 On the Responses API, the gateway accepts `temperature` and `topP` only when reasoning effort is `none`, so the `gpt-*` rows describe each model's default effort. `gpt-6-astra`, `gpt-6-1-sol`, `gpt-5`, and `gpt-5-5-pro` don't accept effort `none`, so they never accept either parameter. The upstream OpenAI model drops both for every `gpt-5*` and `gpt-6*` id, even when reasoning effort is `none`.
 

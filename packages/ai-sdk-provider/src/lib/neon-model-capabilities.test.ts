@@ -12,12 +12,15 @@ describe("getNeonModelRoute", () => {
 		expect(getNeonModelRoute("gpt-5")).toBe("openai");
 		expect(getNeonModelRoute("gpt-5-mini")).toBe("openai");
 		expect(getNeonModelRoute("gpt-5-3-codex")).toBe("openai");
+		expect(getNeonModelRoute("gpt-6-1-terra")).toBe("openai");
 	});
 
 	it("falls back to the unified MLflow endpoint for everything else", () => {
 		// Gemini is routed to MLflow because its native endpoint cannot stream.
 		expect(getNeonModelRoute("gemini-3-flash")).toBe("mlflow");
 		expect(getNeonModelRoute("gemini-4-carbon")).toBe("mlflow");
+		expect(getNeonModelRoute("gemini-3-1-flash-image")).toBe("mlflow");
+		expect(getNeonModelRoute("gemini-3-pro-image")).toBe("mlflow");
 		expect(getNeonModelRoute("llama-4-maverick")).toBe("mlflow");
 		expect(getNeonModelRoute("qwen35-122b-a10b")).toBe("mlflow");
 		// gpt-oss is open-weight and served on the unified endpoint, not Responses.
@@ -71,6 +74,7 @@ describe("getNeonModelCapabilities", () => {
 			"gpt-6-sol",
 			"gpt-6-luna",
 			"gpt-6-1-sol",
+			"gpt-6-1-terra",
 		]) {
 			const caps = getNeonModelCapabilities(id);
 			expect(caps.family).toBe("openai");
@@ -219,11 +223,13 @@ describe("getNeonModelCapabilities", () => {
 		// gemini-3-5-flash-lite does not, so neither the version nor the -lite
 		// suffix predicts this.
 		for (const id of [
+			"gemini-3-1-flash-image",
 			"gemini-3-5-flash-lite",
 			"gemini-3-6-flash",
 			"databricks-gemini-3-6-flash",
 			"gemini-3-7-flash",
 			"gemini-3-8-flash",
+			"gemini-3-pro-image",
 			"gemini-4-argon",
 			"gemini-4-carbon",
 		]) {
@@ -311,11 +317,18 @@ describe("getNeonModelCapabilities", () => {
 			}).toEqual({ id, temperature: false, topP: false });
 		}
 
-		const lenient = getNeonModelCapabilities("gemini-3-5-flash-lite");
-		expect({
-			temperature: lenient.supportsTemperature,
-			topP: lenient.supportsTopP,
-		}).toEqual({ temperature: true, topP: true });
+		for (const id of [
+			"gemini-3-5-flash-lite",
+			"gemini-3-1-flash-image",
+			"gemini-3-pro-image",
+		]) {
+			const lenient = getNeonModelCapabilities(id);
+			expect({
+				id,
+				temperature: lenient.supportsTemperature,
+				topP: lenient.supportsTopP,
+			}).toEqual({ id, temperature: true, topP: true });
+		}
 	});
 
 	it("separates seed and stop support across the unified families", () => {
