@@ -25,7 +25,7 @@ are written down once.
 | `provisionNeonAuth()`, `releaseNeonAuth()` | Enable Neon Auth on a throwaway branch, headless-signup enabled, and take it back down |
 | `e2eTest` | Vitest fixture with a `track(id)` cleanup hook |
 | `installSuiteSetup()` | `beforeAll` that probes the key and sweeps |
-| `apiRequest()`, `ApiError`, `statusOf()`, `describeError()`, `sleep()` | The `fetch` layer |
+| `apiRequest()`, `ApiError`, `statusOf()`, `describeError()`, `sleep()` | The `fetch` layer. `apiRequest` resends a request Neon answers with 423 "running conflicting operations" for up to 30 s, then throws that 423; every other status throws at once |
 
 Everything is available from the package root, and the modules that touch no Vitest API
 are also exported by subpath — `@neon/e2e-harness/api`, `/auth`, `/env`, `/projects`. Import

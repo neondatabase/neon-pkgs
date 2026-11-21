@@ -32,14 +32,65 @@ export function describeError(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
 
+interface ApiRequestInit {
+	method?: string;
+	body?: unknown;
+	query?: Record<string, unknown>;
+}
+
+/**
+ * Per-call budget for waiting out a 423. Must stay well under the suites' 120 s hook
+ * timeout so a stuck lock fails with the real 423 rather than a Vitest timeout.
+ */
+const CONFLICT_RETRY_DEADLINE_MS = 30_000;
+
+/**
+ * Neon rejects a mutation with this 423, without scheduling it, while another operation
+ * on the project is running, so resending it is safe.
+ */
+function isConflictingOperations(err: unknown): boolean {
+	if (!(err instanceof ApiError) || err.status !== 423) return false;
+	const { body } = err;
+	return (
+		typeof body === "object" &&
+		body !== null &&
+		"message" in body &&
+		typeof body.message === "string" &&
+		body.message.includes("running conflicting operations")
+	);
+}
+
+/**
+ * Retries only the 423 "running conflicting operations" lock, with backoff, until
+ * {@link CONFLICT_RETRY_DEADLINE_MS}; then it throws that 423. Every other status throws on
+ * the first response.
+ */
 export async function apiRequest<T>(
 	path: string,
-	init: {
-		method?: string;
-		body?: unknown;
-		query?: Record<string, unknown>;
-	} = {},
+	init: ApiRequestInit = {},
 ): Promise<T> {
+	const deadline = Date.now() + CONFLICT_RETRY_DEADLINE_MS;
+	let delay = 500;
+	while (true) {
+		try {
+			return await sendRequest<T>(path, init);
+		} catch (err) {
+			if (
+				!isConflictingOperations(err) ||
+				Date.now() + delay > deadline
+			) {
+				throw err;
+			}
+			console.warn(
+				`[e2e api] ${init.method ?? "GET"} ${path} got 423 running conflicting operations; retrying in ${delay} ms`,
+			);
+			await sleep(delay);
+			delay = Math.min(delay * 2, 5_000);
+		}
+	}
+}
+
+async function sendRequest<T>(path: string, init: ApiRequestInit): Promise<T> {
 	const url = new URL(`${configuredBaseUrl()}${path}`);
 	for (const [key, value] of Object.entries(init.query ?? {})) {
 		if (value !== undefined) url.searchParams.set(key, String(value));
