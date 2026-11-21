@@ -74,7 +74,7 @@ import {
 	readContextFile,
 } from "../context.js";
 import { storeFor } from "../credential_io.js";
-import { hasTerminal, isAgentContext, isCi } from "../env.js";
+import { getCliAgent, hasTerminal, isAgentContext, isCi } from "../env.js";
 import { hostsForProfile, hostUpdateFor, issuingHosts } from "../hosts.js";
 import { log } from "../log.js";
 import { withExclusiveLock } from "../refresh_lock.js";
@@ -1027,14 +1027,21 @@ export const ensureAuth = async (
 		loaded === null
 			? "has no stored credential"
 			: "holds a session that has expired";
-	const signInHint = isAgentContext(process.env, hasTerminal())
-		? signInGuidance({
-				cli: getCliName(),
-				profile: selection.profile,
-				explicitProfile: selection.explicit,
-				offerClaimable:
-					loaded === null && localContext.projectId === undefined,
-			})
+	const agent = isAgentContext(process.env, hasTerminal());
+	const guidance = (browser: boolean) =>
+		signInGuidance({
+			cli: getCliName(),
+			profile: selection.profile,
+			explicitProfile: selection.explicit,
+			// `claim create` refuses a directory that pins a project or an organization.
+			offerClaimable:
+				loaded === null &&
+				localContext.projectId === undefined &&
+				localContext.orgId === undefined,
+			browser,
+		});
+	const signInHint = agent
+		? guidance(true)
 		: `Run \`${getCliName()} login --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.`;
 
 	// `me` is how scripts and agents check who is signed in. Signing in to answer that
@@ -1060,6 +1067,17 @@ export const ensureAuth = async (
 	) {
 		throw new Error(
 			`Not signed in: profile "${selection.profile}" ${state}, and this shell has no terminal to start a browser sign-in from. ${signInHint}`,
+		);
+	}
+
+	// CI never has a terminal, so only a detected agent gets guidance here; CI jobs keep the refusal.
+	if (
+		isCi() &&
+		getCliAgent(process.env) !== undefined &&
+		!(props.forceAuth ?? props["force-auth"])
+	) {
+		throw new Error(
+			`Cannot run interactive auth in CI. Profile "${selection.profile}" ${state}. ${guidance(false)}`,
 		);
 	}
 

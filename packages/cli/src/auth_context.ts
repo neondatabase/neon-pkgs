@@ -70,6 +70,10 @@ export const authFailureMessage = (
 				: "";
 
 	if (context?.source === "profile-api-key") {
+		// `--mint` needs a browser sign-in, which an agent may have no one to finish.
+		if (agent) {
+			return `Authentication failed: the Neon API rejected profile "${profile}"'s API key${where}. Replace it with an API key the user already has: \`neon profile create ${profile} --api-key -\`. ${NO_NEW_API_KEY}`;
+		}
 		// Not `rotate-key`: a rejected key cannot authenticate to mint its own replacement.
 		return `Authentication failed: the Neon API rejected profile "${profile}"'s API key${where}. Replace it with \`neon profile create ${profile} --mint\`, or store another with \`neon profile create ${profile} --api-key -\`.`;
 	}
@@ -107,17 +111,23 @@ export const signInGuidance = (input: {
 	/** True when --profile or NEON_PROFILE chose the profile; NEON_API_KEY can't apply then. */
 	explicitProfile: boolean;
 	offerClaimable: boolean;
+	/** False where interactive sign-in is refused (CI), so only the alternatives are named. */
+	browser: boolean;
 }): string => {
 	const { cli, profile } = input;
 	const existingKey = input.explicitProfile
 		? `store an API key the user already has with \`${cli} profile create ${profile} --api-key -\``
 		: "set an API key the user already has as NEON_API_KEY";
-	const fallback = input.offerClaimable
-		? `If no one can, ${existingKey}, or create a separate temporary project without an account with \`${cli} claim create\` (it expires in 72 hours unless claimed).`
-		: `If no one can, tell the user they need to sign in or to ${existingKey}, and stop.`;
+	const options = input.offerClaimable
+		? `${existingKey}, or create a separate temporary project without an account with \`${cli} claim create\` (it expires in 72 hours unless claimed)`
+		: `tell the user they need to sign in or to ${existingKey}, and stop`;
 	return [
-		`If someone can open the sign-in URL in a browser that reaches this machine's 127.0.0.1 callback, run \`${cli} login --profile ${profile}\`.`,
-		fallback,
+		...(input.browser
+			? [
+					`If someone can complete a browser sign-in that reaches this machine's 127.0.0.1 callback, run \`${cli} login --profile ${profile}\`.`,
+					`If no one can, ${options}.`,
+				]
+			: [`${options.charAt(0).toUpperCase()}${options.slice(1)}.`]),
 		NO_NEW_API_KEY,
 	].join(" ");
 };

@@ -171,28 +171,39 @@ export const unattendedUnauthedNext = (
 		link: string;
 	},
 	agent = false,
-): string[] =>
-	deferred === undefined
-		? [
-				"Link a project with a Neon account and an authenticated CLI.",
-				"Sign up: https://neon.com/signup",
-				`${getCliName()} login`,
-				`${getCliName()} link`,
-				"",
-				"Or create a claimable project without an account. It expires in 72 hours unless claimed.",
-				`${getCliName()} claim create`,
-				...(agent
-					? [
-							"",
-							`Or set an API key the user already has as NEON_API_KEY, then run \`${getCliName()} link\`. ${NO_NEW_API_KEY}`,
-						]
-					: []),
-			]
-		: [
-				"Link the project once the CLI is authenticated.",
-				deferred.login,
-				deferred.link,
-			];
+): string[] => {
+	const cli = getCliName();
+	const signInCondition =
+		"Sign in only if someone can complete a browser sign-in that reaches this machine's 127.0.0.1 callback:";
+	const existingKey = (link: string) =>
+		`Otherwise set an API key the user already has as NEON_API_KEY, then run \`${link}\`. ${NO_NEW_API_KEY}`;
+	if (deferred !== undefined) {
+		return agent
+			? [
+					`Link the project once the CLI is authenticated. ${signInCondition}`,
+					deferred.login,
+					deferred.link,
+					"",
+					existingKey(deferred.link),
+				]
+			: [
+					"Link the project once the CLI is authenticated.",
+					deferred.login,
+					deferred.link,
+				];
+	}
+	return [
+		"Link a project with a Neon account and an authenticated CLI.",
+		"Sign up: https://neon.com/signup",
+		...(agent ? [signInCondition] : []),
+		`${cli} login`,
+		`${cli} link`,
+		"",
+		"Or create a claimable project without an account. It expires in 72 hours unless claimed.",
+		`${cli} claim create`,
+		...(agent ? ["", existingKey(`${cli} link`)] : []),
+	];
+};
 
 export const PROJECT_PINNED_OFFLINE = "linked, not verified";
 

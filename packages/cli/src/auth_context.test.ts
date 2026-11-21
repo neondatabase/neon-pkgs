@@ -13,6 +13,16 @@ describe("authFailureMessage", () => {
 		);
 	});
 
+	test("an agent replaces a rejected profile key with one the user already has, not --mint", () => {
+		const message = authFailureMessage(
+			{ source: "profile-api-key", configDir: "/c", profile: "work" },
+			true,
+		);
+		expect(message).toContain("neon profile create work --api-key -");
+		expect(message).not.toContain("--mint");
+		expect(message).toMatch(/Do not ask the user to create an API key\.$/);
+	});
+
 	test("an agent is told not to ask for a new key", () => {
 		const message = authFailureMessage(
 			{ source: "api-key", apiKeyFrom: "env", configDir: "/c" },

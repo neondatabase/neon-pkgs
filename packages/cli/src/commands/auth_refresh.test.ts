@@ -304,7 +304,7 @@ describe("no usable credential", () => {
 
 		expect(result.code).toBe(1);
 		expect(result.stderr).toBe(
-			'Not signed in: profile "DEFAULT" has no stored credential. If someone can open the sign-in URL in a browser that reaches this machine\'s 127.0.0.1 callback, run `neon login --profile DEFAULT`. If no one can, set an API key the user already has as NEON_API_KEY, or create a separate temporary project without an account with `neon claim create` (it expires in 72 hours unless claimed). Do not ask the user to create an API key.\n',
+			'Not signed in: profile "DEFAULT" has no stored credential. If someone can complete a browser sign-in that reaches this machine\'s 127.0.0.1 callback, run `neon login --profile DEFAULT`. If no one can, set an API key the user already has as NEON_API_KEY, or create a separate temporary project without an account with `neon claim create` (it expires in 72 hours unless claimed). Do not ask the user to create an API key.\n',
 		);
 		expect(result.stdout).toBe("");
 	});
@@ -369,7 +369,7 @@ describe("no usable credential and no terminal, outside CI", () => {
 		expect(result.code).toBe(1);
 		expect(result.stderr).not.toContain("Awaiting authentication");
 		expect(result.stderr).toContain(
-			'Not signed in: profile "DEFAULT" has no stored credential, and this shell has no terminal to start a browser sign-in from. If someone can open the sign-in URL in a browser that reaches this machine\'s 127.0.0.1 callback, run `neon login --profile DEFAULT`. If no one can, set an API key the user already has as NEON_API_KEY, or create a separate temporary project without an account with `neon claim create` (it expires in 72 hours unless claimed). Do not ask the user to create an API key.',
+			'Not signed in: profile "DEFAULT" has no stored credential, and this shell has no terminal to start a browser sign-in from. If someone can complete a browser sign-in that reaches this machine\'s 127.0.0.1 callback, run `neon login --profile DEFAULT`. If no one can, set an API key the user already has as NEON_API_KEY, or create a separate temporary project without an account with `neon claim create` (it expires in 72 hours unless claimed). Do not ask the user to create an API key.',
 		);
 		const message = result.stderr.slice(
 			result.stderr.indexOf("Not signed in:"),

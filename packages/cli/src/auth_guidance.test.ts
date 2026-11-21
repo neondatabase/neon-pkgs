@@ -24,9 +24,10 @@ describe("signInGuidance", () => {
 				profile: "DEFAULT",
 				explicitProfile: false,
 				offerClaimable: true,
+				browser: true,
 			}),
 		).toBe(
-			"If someone can open the sign-in URL in a browser that reaches this machine's 127.0.0.1 callback, run `neon login --profile DEFAULT`. If no one can, set an API key the user already has as NEON_API_KEY, or create a separate temporary project without an account with `neon claim create` (it expires in 72 hours unless claimed). Do not ask the user to create an API key.",
+			"If someone can complete a browser sign-in that reaches this machine's 127.0.0.1 callback, run `neon login --profile DEFAULT`. If no one can, set an API key the user already has as NEON_API_KEY, or create a separate temporary project without an account with `neon claim create` (it expires in 72 hours unless claimed). Do not ask the user to create an API key.",
 		);
 	});
 
@@ -36,6 +37,7 @@ describe("signInGuidance", () => {
 			profile: "DEFAULT",
 			explicitProfile: false,
 			offerClaimable: false,
+			browser: true,
 		});
 		expect(text).not.toContain("claim create");
 		expect(text).toContain(
@@ -49,11 +51,26 @@ describe("signInGuidance", () => {
 			profile: "work",
 			explicitProfile: true,
 			offerClaimable: true,
+			browser: true,
 		});
 		expect(text).toContain("run `neon login --profile work`");
 		expect(text).toContain(
 			"store an API key the user already has with `neon profile create work --api-key -`",
 		);
 		expect(text).not.toContain("NEON_API_KEY");
+	});
+
+	it("names only the alternatives where interactive sign-in is refused", () => {
+		expect(
+			signInGuidance({
+				cli: "neon",
+				profile: "DEFAULT",
+				explicitProfile: false,
+				offerClaimable: true,
+				browser: false,
+			}),
+		).toBe(
+			"Set an API key the user already has as NEON_API_KEY, or create a separate temporary project without an account with `neon claim create` (it expires in 72 hours unless claimed). Do not ask the user to create an API key.",
+		);
 	});
 });
