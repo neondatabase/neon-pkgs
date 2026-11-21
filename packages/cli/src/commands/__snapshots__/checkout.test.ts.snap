@@ -27,3 +27,5 @@ exports[`checkout > resolves a branch by id and writes the branch name to a fres
 exports[`checkout > resolves a branch by name and writes the branch name to a fresh .neon 1`] = `""`;
 
 exports[`checkout > resolves projectId from the .neon file when no flag is passed 1`] = `""`;
+
+exports[`checkout > surfaces why a project-scoped key cannot auto-detect the project 1`] = `""`;

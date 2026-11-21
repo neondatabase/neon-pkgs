@@ -1,12 +1,14 @@
 import type { Branch, Database } from "@neon/sdk";
-import { isNeonApiError, messageFromBody } from "../api.js";
+import { codeFromBody, isNeonApiError, messageFromBody } from "../api.js";
 import {
 	isConfigAdd,
 	isConfigInit,
 	isCurrentBranchProbe,
 	isFunctionsTemplateCommand,
 } from "../context.js";
+import { ProjectNotLinkedError } from "../errors.js";
 import type { BranchScopeProps, CommonProps, OrgScopeProps } from "../types.js";
+import { getCliName } from "./cli_name.js";
 import { looksLikeBranchId } from "./formats.js";
 
 const BRANCHES_LIST_LIMIT = 100;
@@ -359,6 +361,20 @@ export const fillSingleProject = async (
 		) {
 			throw new Error(
 				"Multiple projects found, please provide one with the --project-id option",
+			);
+		}
+		// Without a typed --org-id the org is the caller's only membership, so a code-less 404
+		// here means the key reaches one project and cannot list. A typed --org-id the user is
+		// not a member of also 404s, which is why that case is excluded. Coded errors (SSO)
+		// must reach the global handler.
+		if (
+			!props.orgId &&
+			isNeonApiError(error) &&
+			error.status === 404 &&
+			!codeFromBody(error.data)
+		) {
+			throw new ProjectNotLinkedError(
+				`No Neon project is linked here, and a project-scoped API key cannot list projects to pick one (${error.message}). Run the command from the directory you linked with \`${getCliName()} link\`, or pass --project-id (and --branch for a branch other than the default).`,
 			);
 		}
 		throw error;

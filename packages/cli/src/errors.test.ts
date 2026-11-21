@@ -30,6 +30,11 @@ describe("matchErrorCode", () => {
 		expect(matchErrorCode("Setup did not finish.")).toBe(
 			"NEON_INIT_FAILED",
 		);
+		expect(
+			matchErrorCode(
+				"No Neon project is linked here, and a project-scoped API key cannot list projects to pick one (not allowed).",
+			),
+		).toBe("PROJECT_NOT_LINKED");
 	});
 
 	it("classifies neon init and agent-setup failures by their message", () => {

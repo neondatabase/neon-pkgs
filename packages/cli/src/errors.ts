@@ -8,6 +8,9 @@ export class DetailedError extends Error {
 	}
 }
 
+/** No project was given or linked, and the API key cannot list projects to pick one. */
+export class ProjectNotLinkedError extends Error {}
+
 export type ErrorCode =
 	| "REQUEST_TIMEOUT"
 	| "NETWORK_ERROR"
@@ -29,6 +32,7 @@ export type ErrorCode =
 	| "PLUGINS_CLI_FAILED"
 	| "DEPENDENCY_INSTALL_FAILED"
 	| "LEGACY_FUNCTION_ENV_KEY"
+	| "PROJECT_NOT_LINKED"
 	| "UNKNOWN_ERROR";
 
 // First match wins: a skills CLI failure caused by a missing git is GIT_NOT_FOUND.
@@ -62,6 +66,7 @@ const ERROR_MATCHERS = [
 		/ (is|are) no longer pulled\. Pull NEON_BRANCH_ID /,
 		"LEGACY_FUNCTION_ENV_KEY",
 	],
+	[/^No Neon project is linked here/, "PROJECT_NOT_LINKED"],
 ] as const;
 
 export const matchErrorCode = (message?: string): ErrorCode => {

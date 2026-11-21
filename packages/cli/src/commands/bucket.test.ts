@@ -109,6 +109,45 @@ describe("bucket", () => {
 		});
 	});
 
+	test("object list outside a linked directory names the missing link for a project-scoped key", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["bucket", "object", "list", "assets"], {
+			mockDir: "project-key",
+			cwd: TEST_TMP,
+			code: 1,
+			snapshot: false,
+			stderr: 'ERROR: No Neon project is linked here, and a project-scoped API key cannot list projects to pick one (not allowed to perform actions outside the project this key is scoped to; subject_project_id:"test-project-123456"). Run the command from the directory you linked with `neon link`, or pass --project-id (and --branch for a branch other than the default).',
+		});
+	});
+
+	test("object list with a typed --org-id keeps the API's 404 message", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["bucket", "object", "list", "assets", "--org-id", "test-org-123"],
+			{
+				mockDir: "project-key",
+				cwd: TEST_TMP,
+				code: 1,
+				snapshot: false,
+				stderr: 'ERROR: not allowed to perform actions outside the project this key is scoped to; subject_project_id:"test-project-123456"',
+			},
+		);
+	});
+
+	test("object list outside a linked directory keeps a coded SSO error's own message", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["bucket", "object", "list", "assets"], {
+			mockDir: "project-key-sso",
+			cwd: TEST_TMP,
+			code: 1,
+			snapshot: false,
+			stderr: "ERROR: This organization only accepts organization API keys.",
+		});
+	});
+
 	test("object list", async ({ testCliCommand }) => {
 		await testCliCommand(
 			["bucket", "object", "list", "my-bucket", ...SCOPE],
