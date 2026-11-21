@@ -363,9 +363,10 @@ export const fillSingleProject = async (
 				"Multiple projects found, please provide one with the --project-id option",
 			);
 		}
-		// The org came from the key itself, so a 404 here means the key reaches one project
-		// and cannot list. A typed --org-id the user is not a member of also 404s, which is
-		// why that case is excluded. Coded errors (SSO) must reach the global handler.
+		// Without a typed --org-id the org is the caller's only membership, so a code-less 404
+		// here means the key reaches one project and cannot list. A typed --org-id the user is
+		// not a member of also 404s, which is why that case is excluded. Coded errors (SSO)
+		// must reach the global handler.
 		if (
 			!props.orgId &&
 			isNeonApiError(error) &&
