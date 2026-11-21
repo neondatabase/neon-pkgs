@@ -1,5 +1,12 @@
 # neon
 
+## 9.9.3
+
+### Patch Changes
+
+- d1fad22: `neon me` in a directory linked by `neon claim create` now prints the Claimable project it authenticates as (`-o json`: `{"auth_method": "claimable", "project_id": …, "project_expires_at": …}`). It used to exit 1 with `No route exists at this path.`
+- 25f3611: Project commands run outside a linked directory with a project-scoped API key now say that no project is linked and suggest running from the linked directory or passing `--project-id`. They previously printed only the API's "not allowed to perform actions outside the project this key is scoped to" error.
+
 ## 9.9.2
 
 ### Patch Changes
