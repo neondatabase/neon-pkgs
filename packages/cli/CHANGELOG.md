@@ -1,5 +1,19 @@
 # neon
 
+## 9.9.1
+
+### Patch Changes
+
+- 6568f37: Deploying a Function from `neon.ts` now sets the display name declared in `functions.<slug>.name`, and resets a name changed elsewhere back to it. Before, the deployed Function kept its slug as its name. A name made only of whitespace is now rejected when `neon.ts` loads, since the Functions API refuses it.
+- 9b9a539: `database.inspect` `outliers` and `calls`, `queries.listSlow`, and `neon inspect db outliers` and `calls` leave out the statements Neon runs on its own (compute setup as `cloud_admin`, and the session reset after each HTTP query) and the diagnostics' own SQL, so the rankings and the `prop_exec_time` shares cover your workload.
+- Updated dependencies [3471479]
+- Updated dependencies [8aa3363]
+- Updated dependencies [bf0da21]
+- Updated dependencies [6568f37]
+  - @neon/sdk@7.15.0
+  - @neon/config@1.14.6
+  - @neon/config-runtime@1.12.9
+
 ## 9.9.0
 
 ### Minor Changes

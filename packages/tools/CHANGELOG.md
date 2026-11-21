@@ -1,5 +1,23 @@
 # @neon/tools
 
+## 2.19.0
+
+### Minor Changes
+
+- 3471479: `branches.delete` now resolves to the deleted `Branch`, or `null` when the project has no branch with that id, instead of `void`. The `branches.delete` tool (`delete_branch` on the Neon MCP server) returns the same value instead of `null` for every call.
+
+### Patch Changes
+
+- 2b8be49: Destructive tool descriptions now tell agents to run the tool when the user's own message asks for it and unambiguously identifies its target, and to ask first otherwise. Before, they said to always ask the user first, so agents stopped to ask before deleting a branch the user had just asked them to delete.
+- 8aa3363: With `waitForReadiness`, `postgres.endpoints.create`, `update`, `start`, `suspend`, and `restart` now return the endpoint read after their operations finish, so `current_state`, `pending_state`, and `started_at` match a later `get`. The `create_postgres_endpoint`, `update_postgres_endpoint`, `start_postgres_endpoint`, `suspend_postgres_endpoint`, and `restart_postgres_endpoint` tools return that endpoint too.
+- d4a1414: `queries.listSlow` and the `database.inspect` checks that need `pg_stat_statements` or `neon` now work when the extension is installed in a schema that is not on the role's `search_path`, instead of failing because Postgres cannot find the extension's view or functions. When the extension is missing, `queries.listSlow` now returns the same guidance as `database.inspect`: ask the user before running `CREATE EXTENSION IF NOT EXISTS <extension>;`.
+- 9b9a539: `database.inspect` `outliers` and `calls`, `queries.listSlow`, and `neon inspect db outliers` and `calls` leave out the statements Neon runs on its own (compute setup as `cloud_admin`, and the session reset after each HTTP query) and the diagnostics' own SQL, so the rankings and the `prop_exec_time` shares cover your workload.
+- Updated dependencies [3471479]
+- Updated dependencies [8aa3363]
+- Updated dependencies [bf0da21]
+  - @neon/sdk@7.15.0
+  - @neon/effect@0.5.7
+
 ## 2.18.0
 
 ### Minor Changes

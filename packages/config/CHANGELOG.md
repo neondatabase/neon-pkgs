@@ -1,5 +1,15 @@
 # @neondatabase/config
 
+## 1.14.6
+
+### Patch Changes
+
+- 6568f37: Deploying a Function from `neon.ts` now sets the display name declared in `functions.<slug>.name`, and resets a name changed elsewhere back to it. Before, the deployed Function kept its slug as its name. A name made only of whitespace is now rejected when `neon.ts` loads, since the Functions API refuses it.
+- Updated dependencies [3471479]
+- Updated dependencies [8aa3363]
+- Updated dependencies [bf0da21]
+  - @neon/sdk@7.15.0
+
 ## 1.14.5
 
 ### Patch Changes
