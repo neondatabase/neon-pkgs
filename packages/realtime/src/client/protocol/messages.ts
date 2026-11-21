@@ -1,6 +1,15 @@
 import type { Column, ServerMessage } from "./wire-types.gen.js";
 
-export const REALTIME_SUBPROTOCOL = "neon.realtime.v2";
+/** Protocol v3: v2 plus holes, segment rounds and segment tags. */
+export const REALTIME_SUBPROTOCOL_V3 = "neon.realtime.v3";
+/** Protocol v2, which proxies that predate v3 select. */
+export const REALTIME_SUBPROTOCOL_V2 = "neon.realtime.v2";
+/** The subprotocols this SDK offers, highest first. The server selects one. */
+export const REALTIME_SUBPROTOCOLS = [
+	REALTIME_SUBPROTOCOL_V3,
+	REALTIME_SUBPROTOCOL_V2,
+] as const;
+export type RealtimeSubprotocol = (typeof REALTIME_SUBPROTOCOLS)[number];
 
 type ServerVariant<Type extends ServerMessage["type"]> = Extract<
 	ServerMessage,

@@ -31,6 +31,8 @@ class FakeWebSocket implements WebSocketLike {
 	readyState = 0;
 	readonly sent: Record<string, unknown>[] = [];
 	readonly protocols: string | string[];
+	/** The subprotocol this fake server selects; v2 unless a test changes it. */
+	protocol: string | undefined = "neon.realtime.v2";
 	private readonly listeners = new Map<string, Set<FakeWebSocketListener>>();
 
 	constructor(_url: string, protocols: string | string[]) {
@@ -228,10 +230,10 @@ describe("RealtimeClient", () => {
 		client.subscribe(query("custom socket"));
 
 		expect(webSocketFactory).toHaveBeenCalledOnce();
-		expect(webSocketFactory).toHaveBeenCalledWith(
-			"ws://live.test/v1",
+		expect(webSocketFactory).toHaveBeenCalledWith("ws://live.test/v1", [
+			"neon.realtime.v3",
 			"neon.realtime.v2",
-		);
+		]);
 		client.close();
 	});
 
@@ -397,7 +399,7 @@ describe("RealtimeClient", () => {
 			type: "subscribed",
 			request_id: request.request_id,
 			live_id: "41",
-			epoch: "1",
+			epoch: "2",
 			first_sequence: "1",
 			columns: [
 				{
@@ -411,10 +413,11 @@ describe("RealtimeClient", () => {
 		socket.receive({
 			type: "baseline_sync_start",
 			live_id: "41",
-			epoch: "1",
+			epoch: "2",
 			baseline_sync_attempt: "2",
 			mvcc: { xmin: "1", xmax: "2", xip: [] },
 		});
+		// Frames from an old epoch are ignored without logging a new attempt.
 		socket.receive({
 			type: "baseline_sync_start",
 			live_id: "41",
@@ -432,7 +435,7 @@ describe("RealtimeClient", () => {
 		socket.receive({
 			type: "baseline_sync_batch",
 			live_id: "41",
-			epoch: "1",
+			epoch: "2",
 			baseline_sync_attempt: "2",
 			index: 0,
 			rows: [{ row_key: ROW_KEY, values: ["private-value"] }],
@@ -440,7 +443,7 @@ describe("RealtimeClient", () => {
 		socket.receive({
 			type: "baseline_sync_end",
 			live_id: "41",
-			epoch: "1",
+			epoch: "2",
 			baseline_sync_attempt: "2",
 			batch_count: 1,
 		});
@@ -731,13 +734,17 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "connecting",
 			error: undefined,
+			updating: false,
 			data: undefined,
 		});
 
 		const socket = connectAndAdmit();
 		baselineSync(socket, "before");
 
-		expect(socket.protocols).toBe("neon.realtime.v2");
+		expect(socket.protocols).toEqual([
+			"neon.realtime.v3",
+			"neon.realtime.v2",
+		]);
 		expect(socket.sent).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({ type: "subscribe" }),
@@ -746,6 +753,7 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [{ id: 1, title: "before" }],
 		});
 		client.close();
@@ -775,6 +783,7 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [
 				{ id: 3, title: "third" },
 				{ id: 1, title: "first" },
@@ -786,6 +795,7 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [
 				{ id: 3, title: "third" },
 				{ id: 1, title: "first" },
@@ -809,6 +819,7 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [
 				{ id: 2, title: "second replacement" },
 				{ id: 3, title: "third replacement" },
@@ -1362,6 +1373,7 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "stale",
 			error: undefined,
+			updating: false,
 			data: [{ id: 1, title: "before" }],
 		});
 
@@ -1389,6 +1401,7 @@ describe("RealtimeClient", () => {
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [{ id: 1, title: "after" }],
 		});
 		expect(resets).toEqual([
@@ -1540,6 +1553,7 @@ describe("RealtimeClient", () => {
 		expect(surviving.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
+			updating: false,
 			data: [{ value: "private-value" }],
 		});
 		expect(socket.sent).toContainEqual({

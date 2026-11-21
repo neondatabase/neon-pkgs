@@ -29,6 +29,8 @@ class FakeWebSocket implements WebSocketLike {
 		);
 	}
 	readonly protocols: string | string[];
+	/** The subprotocol this fake server selects; v2 unless a test changes it. */
+	protocol: string | undefined = "neon.realtime.v2";
 	onSend?: (message: Record<string, unknown>) => void;
 	onClose?: () => void;
 	emitCloseOnClose = true;
@@ -264,12 +266,76 @@ describe("ConnectionCoordinator", () => {
 		expect(entries.map((entry) => entry.event)).toEqual(["query_expired"]);
 	});
 
-	it("negotiates v2 and identifies the client before subscribing", () => {
+	it.each([
+		["neon.realtime.v3", true],
+		["neon.realtime.v2", false],
+	])("decodes holes only when the server selects %s", (protocol, accepted) => {
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		defined(FakeWebSocket.instances[0]).protocol = protocol;
+		const socket = admit();
+		socket.receive({ type: "open", publication_id: "p" });
+		socket.receive({
+			type: "segments_pending",
+			publication_id: "p",
+			index: 0,
+			txids: ["9"],
+			targets: [{ live_id: "41", epoch: "1", sequence: "1" }],
+		});
+		socket.receive({
+			type: "commit",
+			publication_id: "p",
+			body_count: 1,
+			frontier: { lsn: "0/10" },
+		});
+		if (accepted) {
+			expect(callbacks.failed).not.toHaveBeenCalled();
+			expect(
+				callbacks.reconciliation.updatingChanged,
+			).toHaveBeenCalledWith(true);
+		} else {
+			expect(callbacks.failed).toHaveBeenCalledWith(
+				expect.objectContaining({
+					code: "protocol_error",
+					message:
+						"Invalid Realtime protocol message: segments_pending requires protocol v3",
+				}),
+			);
+		}
+	});
+
+	it.each([
+		[undefined, "the WebSocket transport does not report its subprotocol"],
+		[
+			"neon.realtime.v1",
+			"the server selected a subprotocol this client did not offer",
+		],
+	])("fails a connection whose subprotocol is %s", (protocol, message) => {
 		const callbacks = target();
 		const coordinator = createCoordinator();
 		coordinator.subscribe({ capability: "token" }, callbacks);
 		const socket = defined(FakeWebSocket.instances[0]);
-		expect(socket.protocols).toBe("neon.realtime.v2");
+		socket.protocol = protocol;
+		socket.open();
+		socket.receive({ type: "ready" });
+		expect(callbacks.failed).toHaveBeenCalledWith(
+			expect.objectContaining({
+				code: "protocol_error",
+				message: `Invalid Realtime protocol message: ${message}`,
+			}),
+		);
+	});
+
+	it("offers v3 and v2 and identifies the client before subscribing", () => {
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		expect(socket.protocols).toEqual([
+			"neon.realtime.v3",
+			"neon.realtime.v2",
+		]);
 		socket.open();
 		expect(socket.sent).toEqual([]);
 		socket.receive({ type: "ready" });
@@ -1500,6 +1566,8 @@ function target(): ConnectionCallbacks & {
 		prepare: vi.fn(() => () => {}),
 		publishReset: vi.fn(),
 		publishBatch: vi.fn(),
+		publishRound: vi.fn(),
+		updatingChanged: vi.fn(),
 		applyProgress: vi.fn(),
 		caughtUp: vi.fn(),
 		baselineSyncCompleted: vi.fn(),

@@ -9,7 +9,9 @@ import {
 	decodeServerFrame,
 	encodeClientMessage,
 	ProtocolError,
-	REALTIME_SUBPROTOCOL,
+	REALTIME_SUBPROTOCOL_V3,
+	REALTIME_SUBPROTOCOLS,
+	type RealtimeSubprotocol,
 } from "../protocol/index.js";
 import type { ServerMessage, WireColumn } from "../protocol/messages.js";
 import {
@@ -149,6 +151,8 @@ export class ConnectionCoordinator {
 	private readonly reportedClientWarnings = new Set<string>();
 	private requestId = 0n;
 	private ready = false;
+	/** The subprotocol the server selected for the current socket. */
+	private subprotocol?: RealtimeSubprotocol;
 	private disposed = false;
 	private terminalConnection?: ConnectionCoordinatorError;
 	private pendingConnectionError?: ConnectionCoordinatorError;
@@ -333,23 +337,23 @@ export class ConnectionCoordinator {
 		this.events.connection.attemptStarted();
 		let socket: WebSocketLike;
 		try {
-			socket = this.webSocketFactory(
-				this.options.url,
-				REALTIME_SUBPROTOCOL,
-			);
+			socket = this.webSocketFactory(this.options.url, [
+				...REALTIME_SUBPROTOCOLS,
+			]);
 		} catch (error) {
 			this.noteConnectionLost(error);
 			this.scheduleReconnect();
 			return;
 		}
 		this.socket = socket;
+		this.subprotocol = undefined;
 		socket.addEventListener("message", (event) => {
 			if (this.socket !== socket) return;
 			if (typeof event.data !== "string") {
 				this.protocolFailure("server sent a non-text frame");
 				return;
 			}
-			this.receive(event.data);
+			this.receive(socket, event.data);
 		});
 		socket.addEventListener("close", () => {
 			if (this.socket !== socket) return;
@@ -364,9 +368,12 @@ export class ConnectionCoordinator {
 		});
 	}
 
-	private receive(text: string): void {
+	private receive(socket: WebSocketLike, text: string): void {
 		try {
-			const frame = decodeServerFrame(text);
+			// The handshake has completed by the first frame, so the transport
+			// reports the subprotocol the server selected from the offer.
+			this.subprotocol ??= negotiatedSubprotocol(socket);
+			const frame = decodeServerFrame(text, this.subprotocol);
 			this.heartbeat?.received();
 			this.route(frame.message, frame.mvcc);
 		} catch (error) {
@@ -439,6 +446,7 @@ export class ConnectionCoordinator {
 			case "baseline_sync_end":
 			case "open":
 			case "keyed_results":
+			case "segments_pending":
 			case "reset_required":
 			case "commit":
 			case "progress":
@@ -481,6 +489,7 @@ export class ConnectionCoordinator {
 				firstSequence: message.first_sequence,
 				columnCount: message.columns.length,
 				target: subscription.callbacks.reconciliation,
+				segmentRounds: this.subprotocol === REALTIME_SUBPROTOCOL_V3,
 			});
 			this.reconciler.deactivate(message.live_id);
 			this.detachingLiveIds.add(message.live_id);
@@ -507,6 +516,7 @@ export class ConnectionCoordinator {
 			columnCount: message.columns.length,
 			target: subscription.callbacks.reconciliation,
 			lifecycle: subscription.recovery,
+			segmentRounds: this.subprotocol === REALTIME_SUBPROTOCOL_V3,
 		});
 		if (acceptedCapability === subscription.query.capability) {
 			this.resolveRenewals(subscription);
@@ -1049,6 +1059,21 @@ function reportClientWarning(message: string): void {
 	} catch {
 		// Console implementations must never interrupt live-query delivery.
 	}
+}
+
+/** The offered subprotocol the server selected, as the transport reports it. */
+function negotiatedSubprotocol(socket: WebSocketLike): RealtimeSubprotocol {
+	const selected = REALTIME_SUBPROTOCOLS.find(
+		(offered) => offered === socket.protocol,
+	);
+	if (selected === undefined) {
+		throw new ProtocolError(
+			socket.protocol === undefined
+				? "the WebSocket transport does not report its subprotocol"
+				: "the server selected a subprotocol this client did not offer",
+		);
+	}
+	return selected;
 }
 
 function defaultWebSocketFactory(

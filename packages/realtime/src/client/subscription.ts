@@ -66,6 +66,8 @@ export class Subscription<Row>
 	private snapshot: LiveQuerySnapshot<Row>;
 	private rows?: Map<string, Row>;
 	private initialized: boolean;
+	/** Whether a hole is unresolved, so some rows await a round. */
+	private updating = false;
 	private columns?: readonly WireColumn[];
 	private stagedReset?: {
 		readonly rows: readonly RawLiveQueryRow<Row>[];
@@ -325,6 +327,27 @@ export class Subscription<Row>
 		for (const txid of batch.txids) this.transactions.seen(txid);
 	}
 
+	publishRound(
+		batch: ReconciledBatch,
+		mvcc: MvccSnapshot,
+		updating: boolean,
+	): void {
+		if (this.closed) return;
+		// The rows, the updating flag and the snapshot change together, as one
+		// update, before the round's snapshot resolves any waiting transaction.
+		this.updating = updating;
+		this.snapshot = this.makeSnapshot();
+		this.publishBatch(batch);
+		this.transactions.applySnapshot(mvcc);
+	}
+
+	updatingChanged(updating: boolean): void {
+		if (this.closed || this.updating === updating) return;
+		this.updating = updating;
+		this.snapshot = this.makeSnapshot();
+		if (this.materialized) this.notify(this.changeListeners, this.snapshot);
+	}
+
 	applyProgress(mvcc: ParsedMvccSnapshot): void {
 		this.transactions.applyProgress(mvcc);
 	}
@@ -422,6 +445,8 @@ export class Subscription<Row>
 		this.columns = undefined;
 		this.appliedBatches.clear();
 		this.stagedReset = undefined;
+		// A disconnect discards every hole; the next result is a new baseline.
+		this.updatingChanged(false);
 	}
 
 	private setLifecycle(
@@ -456,7 +481,7 @@ export class Subscription<Row>
 	}
 
 	private makeSnapshot(data = this.snapshot?.data): LiveQuerySnapshot<Row> {
-		return Object.freeze({ ...this.state, data });
+		return Object.freeze({ ...this.state, data, updating: this.updating });
 	}
 }
 

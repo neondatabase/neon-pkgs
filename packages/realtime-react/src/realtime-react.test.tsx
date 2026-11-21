@@ -487,6 +487,7 @@ function wireClient() {
 	>();
 	class FakeWebSocket {
 		readyState = 1;
+		protocol = "neon.realtime.v2";
 		addEventListener(
 			type: string,
 			listener: (event: { readonly data: unknown }) => void,

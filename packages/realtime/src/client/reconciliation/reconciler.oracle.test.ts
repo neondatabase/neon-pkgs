@@ -176,6 +176,12 @@ function driveReconciler(messages: readonly Message[]): readonly Observation[] {
 				rows: normalizeRows(reset),
 			}),
 		publishBatch: (batch) => observations.push(batchObservation(batch)),
+		publishRound: () => {
+			throw new Error("these scenarios commit no holes");
+		},
+		updatingChanged: () => {
+			throw new Error("these scenarios commit no holes");
+		},
 		applyProgress: () => {},
 		caughtUp: () =>
 			observations.push({
