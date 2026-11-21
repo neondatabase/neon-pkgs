@@ -253,7 +253,7 @@ export const completeMigrationTool = (options: ToolClientOptions) =>
 			id: publishedId("migrations.complete"),
 			title: "Complete Database Migration",
 			description:
-				"Applies or discards a prepared migration and deletes the temporary branch. NEVER run autonomously: run it only when the user's own message asks for it, otherwise ask first. Pass the complete object from {{migrations.prepare}}; apply_changes false discards.",
+				"Applies or discards a prepared migration and deletes the temporary branch. NEVER run autonomously: run it only when the user's own message asks for it and unambiguously identifies its target; otherwise ask first. Pass the complete object from {{migrations.prepare}}; apply_changes false discards.",
 			inputSchema: completeMigrationInputSchema,
 			outputSchema: completeMigrationOutputSchema,
 			annotations: sqlWriteAnnotations,

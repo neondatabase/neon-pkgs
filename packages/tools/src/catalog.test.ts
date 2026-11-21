@@ -1012,7 +1012,7 @@ describe("special mappings", () => {
 		expect(reset.annotations.destructiveHint).toBe(true);
 		expect(reset.requiresApproval).toBe(true);
 		expect(reset.description).toContain(
-			"discarding the branch's own changes. NEVER run autonomously: run it only when the user's own message asks for it, otherwise ask first.",
+			"discarding the branch's own changes. NEVER run autonomously: run it only when the user's own message asks for it and unambiguously identifies its target; otherwise ask first.",
 		);
 		const preserve = z.toJSONSchema(reset.inputSchema).properties
 			?.preserve_under_name;
