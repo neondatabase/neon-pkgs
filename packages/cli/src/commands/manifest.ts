@@ -55,7 +55,7 @@ export const commandManifest: CommandEntry[] = [
 	},
 	{
 		command: "me",
-		describe: "Show the current user or organization",
+		describe: "Show the current user, organization, or Claimable project",
 		load: () => import("./user.js"),
 	},
 	{

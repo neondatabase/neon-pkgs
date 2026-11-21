@@ -7,7 +7,8 @@ import type { CommonProps } from "../types.js";
 import { writer } from "../writer.js";
 
 export const command = "me";
-export const describe = "Show the current user or organization";
+export const describe =
+	"Show the current user, organization, or Claimable project";
 export const builder = (yargs: yargs.Argv) =>
 	yargs.option("context-file", {
 		hidden: true,
@@ -19,13 +20,33 @@ export const handler = async (args: CommonProps) => {
 const me = async (props: CommonProps) => {
 	// No client means `ensureAuth` found no credential and already reported it.
 	if (!props.apiClient) return;
+	const auth = getAuthContext();
+	// Claimable Neon has no user or organization to return, and serves no `/users/me` or `/auth`.
+	if (auth?.source === "claimable" && auth.claimableProject) {
+		const identity = {
+			auth_method: "claimable",
+			project_id: auth.claimableProject.id,
+			project_expires_at: auth.claimableProject.expiresAt,
+		};
+		if (props.output === "json" || props.output === "yaml") {
+			writer(props).end(identity, {
+				fields: ["auth_method", "project_id", "project_expires_at"],
+			});
+			return;
+		}
+		writer(props).end(
+			{ ...identity, authentication: authenticationLabel(auth) },
+			{ fields: ["project_id", "project_expires_at", "authentication"] },
+		);
+		return;
+	}
 	const data = await currentUserOrOrgKey(props.apiClient);
 	if ("auth_method" in data) {
 		if (props.output === "json" || props.output === "yaml") {
 			writer(props).end(data, { fields: ["account_id", "auth_method"] });
 			return;
 		}
-		writer(props).end(orgKeyDetails(data, getAuthContext()), {
+		writer(props).end(orgKeyDetails(data, auth), {
 			fields: ["organization", "authentication"],
 		});
 		return;
@@ -36,7 +57,7 @@ const me = async (props: CommonProps) => {
 		});
 		return;
 	}
-	writer(props).end(userDetails(data, getAuthContext()), {
+	writer(props).end(userDetails(data, auth), {
 		fields: ["login", "email", "name", "projects_limit", "authentication"],
 	});
 };

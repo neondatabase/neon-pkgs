@@ -23,6 +23,8 @@ export type AuthContext = {
 	refreshed?: boolean;
 	oauthHost?: string;
 	clientId?: string;
+	/** The linked project a `claimable` source authenticates as. */
+	claimableProject?: { id: string; expiresAt: string };
 };
 
 export const locationFromContext = (
