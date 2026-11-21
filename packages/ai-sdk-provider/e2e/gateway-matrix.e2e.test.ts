@@ -337,7 +337,9 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 	// either way. Asserted live because the claim was about the gateway.
 	describe("reasoningEffort on Gemini", () => {
 		it("changes how much the model reasons", async () => {
-			const reason = async (effort: "minimal" | "high") => {
+			// gemini-3-6-flash answers `minimal` with a 400 ("Thinking level is
+			// unsupported: THINKING_LEVEL_MINIMAL"), so the low end is `low`.
+			const reason = async (effort: "low" | "high") => {
 				const result = await withRateLimitRetry(() =>
 					generateText({
 						model: neon("gemini-3-6-flash"),
@@ -359,10 +361,12 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 				};
 			};
 
-			const minimal = await reason("minimal");
+			const low = await reason("low");
 			const high = await reason("high");
-			expect(minimal.tokens, `minimal: ${minimal.trace}`).toBe(0);
-			expect(high.tokens, `high: ${high.trace}`).toBeGreaterThan(0);
+			expect(
+				high.tokens,
+				`low: ${low.tokens} (${low.trace}); high: ${high.trace}`,
+			).toBeGreaterThan(low.tokens);
 		}, 240_000);
 	});
 
