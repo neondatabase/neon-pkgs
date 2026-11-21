@@ -68,6 +68,19 @@ describe("pluginsChildEnv", () => {
 		expect(env).not.toHaveProperty("NEON_API_KEY");
 		expect(env).not.toHaveProperty("NeOn_ApI_KeY");
 	});
+
+	test("drops the package and command a parent npm exec exported, keeps other npm config", () => {
+		const env = pluginsChildEnv({
+			npm_config_package: "neon@latest",
+			NPM_CONFIG_CALL: "neon init",
+			npm_config_registry: "https://registry.example.test/",
+			npm_config_userconfig: "/tmp/home/.npmrc",
+		});
+		expect(env).toEqual({
+			npm_config_registry: "https://registry.example.test/",
+			npm_config_userconfig: "/tmp/home/.npmrc",
+		});
+	});
 });
 
 describe("pluginsCliFailureMessage", () => {
