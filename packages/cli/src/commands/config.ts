@@ -5,6 +5,7 @@ import {
 	type DeployEvent,
 	defineConfig,
 	type HookBranch,
+	type LoadedConfig,
 	packagesToStage,
 	previewGaWarningForConfig,
 	resolveConfig,
@@ -288,11 +289,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
 
 /**
- * The {@link REQUIRED_PACKAGES} not already declared in the project's package.json
- * (any dependency field). A missing or malformed package.json means none are
- * declared, so all are reported missing.
+ * Every package the project's package.json declares, in any dependency field. A missing or
+ * malformed package.json declares none.
  */
-export const missingDependencies = (cwd: string): string[] => {
+const declaredDependencies = (cwd: string): Set<string> => {
 	const declared = new Set<string>();
 	const pkgPath = join(cwd, "package.json");
 	if (existsSync(pkgPath)) {
@@ -311,7 +311,53 @@ export const missingDependencies = (cwd: string): string[] => {
 			}
 		}
 	}
+	return declared;
+};
+
+/** The {@link REQUIRED_PACKAGES} not already declared in the project's package.json. */
+export const missingDependencies = (cwd: string): string[] => {
+	const declared = declaredDependencies(cwd);
 	return REQUIRED_PACKAGES.filter((pkg) => !declared.has(pkg));
+};
+
+/**
+ * `@neon/neon-js` re-exports `@neon/auth`; the `@neondatabase/*` names are their predecessors.
+ * `@neon/oauth` apps mount `app/api/auth/[...oauth]`, and adding a `[...path]` route beside it
+ * fails the Next.js build.
+ */
+const NEON_AUTH_SDK_PACKAGES = [
+	"@neon/auth",
+	"@neon/neon-js",
+	"@neon/oauth",
+	"@neondatabase/auth",
+	"@neondatabase/neon-js",
+];
+
+/**
+ * The steps that wire Neon Auth into the Next.js app in `dir`, or undefined when `dir` is not a
+ * Next.js app or already depends on a Neon Auth SDK. Provisioning Auth and pulling
+ * NEON_AUTH_BASE_URL leaves `/api/auth/*` unmounted until the app does this.
+ */
+const authWiringSteps = (dir: string): string[] | undefined => {
+	const declared = declaredDependencies(dir);
+	if (
+		!declared.has("next") ||
+		NEON_AUTH_SDK_PACKAGES.some((pkg) => declared.has(pkg))
+	) {
+		return undefined;
+	}
+	const srcDir = existsSync(join(dir, "src", "app")) ? "src/" : "";
+	const install = installCommandFrom(dir, resolvePackageManager(dir), [
+		"@neon/auth",
+	]);
+	return [
+		`1. Install the SDK (needs Next.js 16 or later): ${install}`,
+		"2. Add NEON_AUTH_COOKIE_SECRET, at least 32 random characters (openssl rand -base64 32), to the env file next to NEON_AUTH_BASE_URL.",
+		`3. ${srcDir}lib/auth/server.ts: import { createNeonAuth } from "@neon/auth/next/server"; export const auth = createNeonAuth({ baseUrl: process.env.NEON_AUTH_BASE_URL!, cookies: { secret: process.env.NEON_AUTH_COOKIE_SECRET! } });`,
+		`4. ${srcDir}app/api/auth/[...path]/route.ts: import { auth } from "@/lib/auth/server"; export const { GET, POST, PUT, PATCH, DELETE } = auth.handler();`,
+		"5. Run the app and request GET /api/auth/get-session. It must return JSON, not a 404 page.",
+		"Guide: https://neon.com/docs/auth/quick-start/nextjs-api-only.md",
+	];
 };
 
 export type ConfigInitProps = {
@@ -1245,13 +1291,12 @@ const loadEnvFileIfGiven = (env?: string): void => {
 	);
 };
 
-const loadConfig = async (props: ConfigProps): Promise<Config> => {
+const loadConfig = async (props: ConfigProps): Promise<LoadedConfig> => {
 	loadEnvFileIfGiven(props.env);
-	const { config } = await loadProjectConfig({
+	return await loadProjectConfig({
 		contextFile: props.contextFile,
 		...(props.config ? { path: props.config } : {}),
 	});
-	return config;
 };
 
 export const status = async (props: ConfigProps): Promise<void> => {
@@ -1413,7 +1458,7 @@ const writeStatusTables = (
 };
 
 export const planCmd = async (props: ConfigProps): Promise<void> => {
-	const config = await loadConfig(props);
+	const { config } = await loadConfig(props);
 	const branch = await resolveBranchRef(props);
 	announceTargetBranch(props, branch, "Planning against branch");
 	const branchId = branch.branchId;
@@ -1542,7 +1587,7 @@ const warnDeprecatedPreviewOnCreate = async (
 };
 
 export const applyCmd = async (props: ConfigProps): Promise<void> => {
-	const config = await loadConfig(props);
+	const { config, resolvedPath } = await loadConfig(props);
 	const branch = await resolveBranchRef(props);
 	announceTargetBranch(props, branch, "Applying to branch");
 	warnDeprecatedPreview(config, warningTargetFromResolved(branch));
@@ -1650,6 +1695,16 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 				cwd,
 			});
 		}
+	}
+
+	const authSteps = declaredNeonServices(config).includes("auth")
+		? authWiringSteps(dirname(resolvedPath))
+		: undefined;
+	if (authSteps) {
+		log.warning(
+			"Neon Auth is enabled on the branch, but this Next.js app does not depend on @neon/auth, so /api/auth/get-session returns 404 until these steps are done:",
+		);
+		for (const step of authSteps) log.info(`  ${step}`);
 	}
 };
 
