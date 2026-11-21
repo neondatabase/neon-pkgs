@@ -260,7 +260,7 @@ const commandLine = (command: string, pairs: FlagPairs): string =>
 const deferredLinkCommands = (
 	props: InitProps,
 	inputs: InitLinkInputs,
-): { login: string; link: string; envPull: string } => {
+): { login: string; link: string; envPull: string; storeKey?: string } => {
 	const session: FlagPairs = [
 		["--profile", props.profile],
 		[
@@ -286,6 +286,15 @@ const deferredLinkCommands = (
 			...session,
 		]),
 		envPull: commandLine("env pull", [...context, ...session]),
+		// --profile overrides NEON_API_KEY, so a key the user already has goes on the profile.
+		...(props.profile !== undefined
+			? {
+					storeKey: commandLine(
+						`profile create ${quoteFlagValue(props.profile)}`,
+						[["--api-key", "-"], session[1]],
+					),
+				}
+			: {}),
 	};
 };
 
@@ -1540,12 +1549,18 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		if (pinnedOffline) {
 			const commands = deferredLinkCommands(props, linkInputs);
 			next.push(
-				...offlinePinNext({
-					login: commands.login,
-					...(extraServices || existingConfig
-						? {}
-						: { envPull: commands.envPull }),
-				}),
+				...offlinePinNext(
+					{
+						login: commands.login,
+						...(extraServices || existingConfig
+							? {}
+							: { envPull: commands.envPull }),
+						...(commands.storeKey !== undefined
+							? { storeKey: commands.storeKey }
+							: {}),
+					},
+					isAgentContext(process.env, hasTerminal()),
+				),
 			);
 		} else if (pendingUnauthed) {
 			next.push(

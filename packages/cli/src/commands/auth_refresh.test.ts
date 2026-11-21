@@ -304,7 +304,7 @@ describe("no usable credential", () => {
 
 		expect(result.code).toBe(1);
 		expect(result.stderr).toBe(
-			'Not signed in: profile "DEFAULT" has no stored credential. If someone can complete a browser sign-in that reaches this machine\'s 127.0.0.1 callback, run `neon login --profile DEFAULT`. If no one can, set an API key the user already has as NEON_API_KEY, or create a separate temporary project without an account with `neon claim create` (it expires in 72 hours unless claimed). Do not ask the user to create an API key.\n',
+			'Not signed in: profile "DEFAULT" has no stored credential. Set an API key the user already has as NEON_API_KEY, or create a separate temporary project without an account with `neon claim create` (it expires in 72 hours unless claimed). Do not ask the user to create an API key.\n',
 		);
 		expect(result.stdout).toBe("");
 	});

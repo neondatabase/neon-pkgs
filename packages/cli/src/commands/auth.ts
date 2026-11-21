@@ -43,7 +43,11 @@ import {
 	defaultClientID,
 	refreshToken,
 } from "../auth.js";
-import { setAuthContext, signInGuidance } from "../auth_context.js";
+import {
+	NO_NEW_API_KEY,
+	setAuthContext,
+	signInGuidance,
+} from "../auth_context.js";
 import { ClaimableClient, ClaimableServiceError } from "../claimable/api.js";
 import {
 	assertionHasExpired,
@@ -241,7 +245,11 @@ export const authFlow = async ({
 
 	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
 	if (!allowInteractiveAuth && isCi()) {
-		throw new Error("Cannot run interactive auth in CI");
+		throw new Error(
+			getCliAgent(process.env) === undefined
+				? "Cannot run interactive auth in CI"
+				: `Cannot run interactive auth in CI. Set an API key the user already has as NEON_API_KEY. ${NO_NEW_API_KEY}`,
+		);
 	}
 
 	let previousFile: string | undefined;
@@ -1040,8 +1048,9 @@ export const ensureAuth = async (
 				localContext.orgId === undefined,
 			browser,
 		});
+	const forceAuth = props.forceAuth ?? props["force-auth"];
 	const signInHint = agent
-		? guidance(true)
+		? guidance(!(isCi() && !forceAuth))
 		: `Run \`${getCliName()} login --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.`;
 
 	// `me` is how scripts and agents check who is signed in. Signing in to answer that
@@ -1060,22 +1069,14 @@ export const ensureAuth = async (
 	// may be watching for a browser, so name the sign-in command instead of waiting out the
 	// sign-in timeout. One terminal stream is enough to keep `neon psql < q.sql` signing in.
 	// `login` returned above and still opens the browser from there.
-	if (
-		!(props.forceAuth ?? props["force-auth"]) &&
-		!isCi() &&
-		!hasTerminal()
-	) {
+	if (!forceAuth && !isCi() && !hasTerminal()) {
 		throw new Error(
 			`Not signed in: profile "${selection.profile}" ${state}, and this shell has no terminal to start a browser sign-in from. ${signInHint}`,
 		);
 	}
 
 	// CI never has a terminal, so only a detected agent gets guidance here; CI jobs keep the refusal.
-	if (
-		isCi() &&
-		getCliAgent(process.env) !== undefined &&
-		!(props.forceAuth ?? props["force-auth"])
-	) {
+	if (isCi() && getCliAgent(process.env) !== undefined && !forceAuth) {
 		throw new Error(
 			`Cannot run interactive auth in CI. Profile "${selection.profile}" ${state}. ${guidance(false)}`,
 		);
