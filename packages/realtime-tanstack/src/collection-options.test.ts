@@ -321,6 +321,9 @@ describe("Realtime TanStack DB collection", () => {
 			.latest()
 			.reset([{ rowId: "a", row: { id: 1, title: "authoritative" } }]);
 		client.latest().state({ status: "connecting", error: undefined });
+		await expect(
+			collection.utils.awaitInitialSnapshot(0),
+		).resolves.toBeUndefined();
 
 		finishPersistence();
 		await Promise.all([mutation.when("settled"), reload]);
@@ -547,12 +550,16 @@ describe("Realtime TanStack DB collection", () => {
 		expect(browserCollection.get(1)).toMatchObject({ title: "server" });
 		expect(client.subscriptions).toHaveLength(0);
 
+		const snapshot = browserCollection.utils.awaitInitialSnapshot(100);
 		const preload = browserCollection.preload();
 		client.latest().reset([
 			{ rowId: "a", row: { id: 1, title: "authoritative" } },
 			{ rowId: "b", row: { id: 2, title: "new" } },
 		]);
-		await preload;
+		await Promise.all([preload, snapshot]);
+		await expect(
+			serverCollection.utils.awaitInitialSnapshot(0),
+		).rejects.toThrow("Timed out waiting for the live-query snapshot");
 
 		expect(browserCollection.get(1)).toMatchObject({
 			title: "authoritative",
@@ -626,6 +633,20 @@ describe("Realtime TanStack DB collection", () => {
 	});
 
 	describe("awaitInitialSnapshot", () => {
+		it("rejects a second direct collection from the same concrete options", () => {
+			const options = realtimeCollectionOptions({
+				client: new TestClient<MessageRow>(),
+				query: query("query-1"),
+				getKey: (message) => message.id,
+			});
+			const collection = createCollection(options);
+			cleanups.push(() => collection.cleanup());
+
+			expect(() => createCollection(options)).toThrow(
+				"Realtime options can create only one collection",
+			);
+		});
+
 		it("waits for an empty server snapshot to become visible after cached readiness", async () => {
 			const client = new TestClient<MessageRow>();
 			const options = realtimeCollectionOptions({
@@ -637,7 +658,8 @@ describe("Realtime TanStack DB collection", () => {
 			const applied = new Promise<void>((resolve) => {
 				apply = resolve;
 			});
-			const collection = createTestCollection(client);
+			const collection = createCollection(options);
+			cleanups.push(() => collection.cleanup());
 			const markReady = vi.fn();
 			const begin = vi.fn();
 			const firstSnapshot = vi.fn();

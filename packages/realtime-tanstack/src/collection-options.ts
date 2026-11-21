@@ -27,6 +27,10 @@ export interface RealtimeCollectionUtils extends UtilsRecord {
 	 * This does not start synchronization. If called before a run starts, it
 	 * waits for the next run. Once a snapshot has applied, later calls in the
 	 * same run resolve immediately, including during automatic reconnects.
+	 * Reloading retires the previous run and cancels its pending waits.
+	 *
+	 * Wait before starting an operation that needs the server baseline.
+	 * Public collection reads may still include optimistic changes.
 	 *
 	 * @param timeout - Optional wait of 0 to 2,147,483,647 milliseconds,
 	 * including any wait for synchronization to start.
@@ -117,6 +121,8 @@ export type RealtimeCollectionOptions<
  * Complete-row replacements and committed change batches are applied atomically.
  * This is an unordered keyed collection: move operations do not change membership
  * or values and are ignored. Use core materialized subscriptions for server order.
+ * Create fresh options for each concrete collection, including when wrapping
+ * the options with a persistence adapter.
  *
  * @typeParam Row - Object row synchronized into the collection.
  * @typeParam Key - Stable key returned by `getKey`.
@@ -135,8 +141,24 @@ export function realtimeCollectionOptions<
 		readonly query: SealedLiveQuery<Row>;
 	},
 ): RealtimeCollectionOptions<Row, Key, Schema> {
-	const createOptions = () => createRealtimeCollectionOptions(config);
-	return withCollectionConfigFactory(createOptions(), createOptions);
+	const createOptions = (): RealtimeCollectionOptions<Row, Key, Schema> => {
+		let claimed = false;
+		return withCollectionConfigFactory(
+			createRealtimeCollectionOptions(config),
+			createOptions,
+			() => {
+				if (claimed)
+					throw new Error(
+						"Realtime options can create only one collection",
+					);
+				claimed = true;
+				return () => {
+					claimed = false;
+				};
+			},
+		);
+	};
+	return createOptions();
 }
 
 /** How a sync run started: subscribed, or failed while subscribing. */
@@ -183,6 +205,7 @@ function createRealtimeCollectionOptions<
 	// reloaded sync run subscribes with it rather than with the initial query,
 	// which has often expired by then.
 	let latestQuery = initialQuery;
+	let collectionOwner: object | undefined;
 	let activeSubscription: RawLiveQuerySubscription<Row> | undefined;
 	let inactiveSubscriptionFailure: { readonly error: unknown } | undefined;
 	const terminalSubscriptionFailures = new WeakMap<
@@ -311,6 +334,7 @@ function createRealtimeCollectionOptions<
 		sync: {
 			rowUpdateMode: "full",
 			sync: ({
+				collection,
 				begin,
 				write,
 				commit,
@@ -319,6 +343,14 @@ function createRealtimeCollectionOptions<
 				reportHealthy,
 				fail,
 			}) => {
+				// A wrapper can supply its own construction claim. Keep a
+				// concrete Realtime source tied to its first Collection.
+				if (collectionOwner && collectionOwner !== collection) {
+					throw new Error(
+						"Realtime options can create only one collection",
+					);
+				}
+				collectionOwner = collection;
 				let cleaned = false;
 				let stopped = false;
 				let ready = false;

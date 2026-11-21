@@ -157,8 +157,27 @@ const rows = collection.toArray;
 The promise resolves after the snapshot is visible in the collection, even if
 the query returned zero rows. It does not start sync by itself. A later call in
 the same sync run resolves immediately after the first snapshot, including
-during a reconnect. Use it for operations that need the initial server
-baseline while continuing to render cached rows as soon as they are ready.
+during a reconnect. A reload retires the previous sync run and rejects its
+pending waits. Call the utility after starting the reload to wait for the new
+run.
+
+Wait for the snapshot before starting an operation that needs the server
+baseline. Public collection reads still include any optimistic changes.
+Use `awaitTxId()` in handlers that need to confirm a committed transaction.
+
+Create fresh Realtime options for every concrete collection. When sharing a
+descriptor that wraps Realtime with SQLite persistence across `DbClient`
+instances, create both sets of options inside the descriptor factory:
+
+```ts
+const todos = collectionOptions("todos", () =>
+  persistedCollectionOptions({
+    ...realtimeCollectionOptions({ client, query, getKey: (todo) => todo.id }),
+    persistence,
+    schemaVersion: 1,
+  }),
+);
+```
 
 ## API
 
