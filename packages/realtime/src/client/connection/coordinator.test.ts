@@ -701,6 +701,66 @@ describe("ConnectionCoordinator", () => {
 		expect(events).toEqual(["connection_failed"]);
 	});
 
+	it("reconnects if an open socket stays silent before ready", async () => {
+		vi.useFakeTimers({
+			toFake: ["setTimeout", "clearTimeout", "performance"],
+		});
+		const coordinator = createCoordinator();
+		const callbacks = target();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const first = defined(FakeWebSocket.instances[0]);
+		first.open();
+		await vi.advanceTimersByTimeAsync(29_999);
+		expect(first.readyState).toBe(FakeWebSocket.OPEN);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(first.readyState).toBe(FakeWebSocket.CLOSED);
+		await vi.advanceTimersByTimeAsync(1);
+
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		admit();
+		expect(callbacks.admitted).toHaveBeenCalledOnce();
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		coordinator.close();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("times out unanswered admission without interrupting the healthy peer", async () => {
+		vi.useFakeTimers({
+			toFake: ["setTimeout", "clearTimeout", "performance"],
+		});
+		const coordinator = createCoordinator();
+		const healthy = target();
+		const stalled = target();
+		coordinator.subscribe({ capability: "healthy" }, healthy);
+		const socket = admit();
+		coordinator.subscribe({ capability: "stalled" }, stalled);
+		const request = defined(socket.sent.at(-1));
+		await vi.advanceTimersByTimeAsync(29_999);
+		socket.receive({ type: "ping", token: "activity" });
+		expect(stalled.failed).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(stalled.failed).toHaveBeenCalledWith(
+			expect.objectContaining({ code: "subscription_admission_timeout" }),
+		);
+
+		socket.receive({
+			type: "subscribed",
+			request_id: request.request_id,
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+		expect(socket.sent.at(-1)).toEqual({
+			type: "unsubscribe",
+			live_id: "42",
+		});
+		expect(healthy.failed).not.toHaveBeenCalled();
+		expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+		coordinator.close();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
 	it("fails a subscription created after a terminal connection failure", () => {
 		const coordinator = createCoordinator();
 		const first = target();
