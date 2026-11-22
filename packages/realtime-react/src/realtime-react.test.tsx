@@ -292,6 +292,61 @@ describe("Realtime React integration", () => {
 		expect(screen.getByText("connecting:none")).toBeTruthy();
 	});
 
+	it.each([
+		false,
+		true,
+	])("does not notify snapshot listeners for a renewal alone (refresh error: %s)", async (failRefresh) => {
+		vi.useFakeTimers();
+		const wire = wireClient();
+		const initial = query("initial", 1);
+		const replacement = query("replacement");
+		const invalid = { ...replacement, queryFingerprint: "22".repeat(32) };
+		let observed: UseLiveQueryResult<MessageRow> | undefined;
+		const view = render(
+			<RealtimeProvider client={wire.client}>
+				<Messages
+					query={initial}
+					initialData={[{ id: 1, title: "server" }]}
+					refreshQuery={failRefresh ? async () => invalid : undefined}
+					observe={(result) => {
+						observed = result;
+					}}
+				/>
+			</RealtimeProvider>,
+		);
+		try {
+			act(() => wire.baseline());
+			if (!observed) throw new Error("Expected the query to render");
+			const { utils } = observed;
+			const snapshot = utils.getSnapshot();
+			const notified = vi.fn();
+			utils.onChange(notified);
+			if (failRefresh) {
+				await act(async () => vi.advanceTimersByTimeAsync(1));
+				expect(observed).toMatchObject({
+					status: "error",
+					error: { code: "QUERY_REFRESH_FAILED" },
+				});
+			}
+
+			await act(async () => {
+				const pending = utils.renew(replacement);
+				wire.receive({ type: "renewed", live_id: "1" });
+				await pending;
+			});
+			expect(observed).toMatchObject({
+				status: "live",
+				error: undefined,
+			});
+			expect(utils.getSnapshot()).toBe(snapshot);
+			expect(notified).not.toHaveBeenCalled();
+		} finally {
+			view.unmount();
+			wire.client.close();
+			vi.useRealTimers();
+		}
+	});
+
 	it("uses the subscription diagnostic context for query refreshes", async () => {
 		vi.stubGlobal("WebSocket", SilentWebSocket);
 		const entries: RealtimeLogEntry[] = [];

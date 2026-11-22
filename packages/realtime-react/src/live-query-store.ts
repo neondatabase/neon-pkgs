@@ -50,13 +50,11 @@ export class ReactLiveQueryStore<Row> {
 				this.subscription?.renew(replacement) ?? Promise.resolve(),
 			onSubscriptionRenewed: () => {
 				this.refreshError = undefined;
-				const subscription = this.subscription;
-				if (subscription) this.update(subscription.getSnapshot());
+				this.updateHookSnapshot();
 			},
 			onRefreshExhausted: (error) => {
 				this.refreshError = new QueryRefreshError(error);
-				const subscription = this.subscription;
-				if (subscription) this.update(subscription.getSnapshot());
+				this.updateHookSnapshot();
 			},
 		});
 		this.utils = Object.freeze({
@@ -170,12 +168,16 @@ export class ReactLiveQueryStore<Row> {
 
 	private update(snapshot: LiveQuerySnapshot<Row>): void {
 		this.snapshot = snapshot;
-		const nextHookSnapshot = this.withRefreshError(snapshot);
+		this.updateHookSnapshot();
+		notify(this.snapshotListeners, snapshot);
+	}
+
+	private updateHookSnapshot(): void {
+		const nextHookSnapshot = this.withRefreshError(this.snapshot);
 		if (nextHookSnapshot !== this.hookSnapshot) {
 			this.hookSnapshot = nextHookSnapshot;
 			notify(this.reactListeners);
 		}
-		notify(this.snapshotListeners, snapshot);
 	}
 
 	private withRefreshError(
