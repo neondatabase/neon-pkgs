@@ -47,7 +47,8 @@ export class ReactLiveQueryStore<Row> {
 		this.queryRefresh = new QueryRefreshController({
 			query,
 			renewSubscription: (replacement) =>
-				this.subscription?.renew(replacement) ?? Promise.resolve(),
+				this.subscription?.renew(replacement) ??
+				Promise.reject(new Error("Live query is not subscribed")),
 			onSubscriptionRenewed: () => {
 				this.refreshError = undefined;
 				const subscription = this.subscription;

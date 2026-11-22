@@ -248,6 +248,60 @@ describe("Realtime React integration", () => {
 		expect(screen.getByText("connecting:none")).toBeTruthy();
 	});
 
+	it("rejects a renewal through retired hook utilities after replacing the provider client", async () => {
+		const first = wireClient();
+		const currentQuery = query("initial");
+		const replacement = query("replacement");
+		const observed: UseLiveQueryResult<MessageRow>[] = [];
+		const tree = (client: RealtimeClient) => (
+			<RealtimeProvider client={client}>
+				<Messages
+					query={currentQuery}
+					observe={(result) => observed.push(result)}
+				/>
+			</RealtimeProvider>
+		);
+		const view = render(tree(first.client));
+		act(() => first.baseline());
+		const former = observed.at(-1)?.utils;
+		if (!former) throw new Error("Expected the initial hook utilities");
+
+		const second = wireClient();
+		try {
+			const interrupted = expect(
+				former.renew(replacement),
+			).rejects.toThrow("subscription is closed");
+			view.rerender(tree(second.client));
+			await interrupted;
+
+			await expect(former.renew(replacement)).rejects.toThrow(
+				"Live query is not subscribed",
+			);
+			act(() => second.baseline());
+			const current = observed.at(-1)?.utils;
+			if (!current)
+				throw new Error("Expected the replacement hook utilities");
+			expect(current).not.toBe(former);
+
+			const accepted = current.renew(replacement);
+			expect(second.send).toHaveBeenLastCalledWith(
+				JSON.stringify({
+					type: "renew",
+					live_id: "1",
+					authorization: replacement.capability,
+				}),
+			);
+			await act(async () => {
+				second.receive({ type: "renewed", live_id: "1" });
+				await accepted;
+			});
+		} finally {
+			view.unmount();
+			first.client.close();
+			second.client.close();
+		}
+	});
+
 	it("does not restart when only the refresh callback changes", () => {
 		const client = new TestClient<MessageRow>();
 		const currentQuery = query("query-1", 3_000);
@@ -481,6 +535,7 @@ function Messages({
 
 /** Fake transport only: subscriptions, decoding, and reconciliation are real. */
 function wireClient() {
+	const send = vi.fn();
 	const listeners = new Map<
 		string,
 		(event: { readonly data: unknown }) => void
@@ -493,7 +548,7 @@ function wireClient() {
 		) {
 			listeners.set(type, listener);
 		}
-		send = vi.fn();
+		send = send;
 		close() {
 			this.readyState = 3;
 		}
@@ -508,6 +563,7 @@ function wireClient() {
 	return {
 		client,
 		receive,
+		send,
 		baseline: (
 			rows = [{ row_key: "a".repeat(64), values: ["1", "before"] }],
 		) => {
