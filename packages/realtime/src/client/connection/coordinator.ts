@@ -35,6 +35,7 @@ const SOCKET_CLOSED = 3;
 const SOCKET_CLOSE_GRACE_MS = 1_000;
 const NORMAL_CLOSE = 1_000;
 const APPLICATION_CLOSE = 4_000;
+const SERVICE_UNAVAILABLE_MAX_RETRIES = 3;
 
 export interface ConnectionSealedQuery {
 	readonly capability: string;
@@ -530,6 +531,7 @@ export class ConnectionCoordinator {
 		if (
 			message.code === "backend_overloaded" ||
 			message.code === "backend_unavailable" ||
+			message.code === "service_unavailable" ||
 			message.code === "resource_exhausted"
 		) {
 			this.retrySubscription(subscription, message);
@@ -628,7 +630,17 @@ export class ConnectionCoordinator {
 			message.message,
 			{ sqlState: message.sqlstate },
 		);
-		if (!subscription.recovery.retry(error, message.retry_after_ms)) {
+		const maxRetries =
+			message.code === "service_unavailable"
+				? SERVICE_UNAVAILABLE_MAX_RETRIES
+				: undefined;
+		if (
+			!subscription.recovery.retry(
+				error,
+				message.retry_after_ms,
+				maxRetries,
+			)
+		) {
 			this.failSubscription(subscription, error);
 			return;
 		}

@@ -977,6 +977,46 @@ describe("subscription load-shedding recovery", () => {
 		});
 	}
 
+	it("honors service-unavailable hints and stops after three retries", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const unavailable = target();
+		const healthy = target();
+		coordinator.subscribe({ capability: "unavailable" }, unavailable);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		coordinator.subscribe({ capability: "healthy" }, healthy);
+		accepted(socket, "2", "42");
+		baseline(socket, "42");
+		const rejectUnavailable = (requestId: string) =>
+			socket.receive({
+				type: "subscribe_rejected",
+				request_id: requestId,
+				code: "service_unavailable",
+				message: "service unavailable",
+				retry_after_ms: 100,
+			});
+		for (const requestId of ["1", "3", "4"]) {
+			rejectUnavailable(requestId);
+			expect(unavailable.failed).not.toHaveBeenCalled();
+			const frameCount = socket.sent.length;
+			await vi.advanceTimersByTimeAsync(99);
+			expect(socket.sent).toHaveLength(frameCount);
+			await vi.advanceTimersByTimeAsync(1);
+			expect(socket.sent).toHaveLength(frameCount + 1);
+		}
+		rejectUnavailable("5");
+		expect(unavailable.failed).toHaveBeenCalledWith(
+			expect.objectContaining({ code: "service_unavailable" }),
+		);
+		expect(healthy.failed).not.toHaveBeenCalled();
+		expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(socket.sent).toHaveLength(5);
+		coordinator.close();
+	});
+
 	it("logs each subscription retry with its server code, attempt, and delay", async () => {
 		vi.useFakeTimers();
 		const logger = vi.fn();

@@ -239,6 +239,8 @@ Some subscription errors also retry automatically:
 - `subscribe_rejected` with `backend_unavailable` or `resource_exhausted` (a
   service limit on this connection or process), and `subscription_error` with
   `upstream_cancelled`.
+- `subscribe_rejected` with `service_unavailable` uses the same per-query backoff
+  and allows at most three retries within a recovery episode.
 
 After `backend_overloaded`, the service may also close a connection that has no
 other subscriptions, so the client can reconnect to another instance. The

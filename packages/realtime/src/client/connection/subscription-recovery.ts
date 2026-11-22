@@ -37,7 +37,11 @@ export class SubscriptionRecovery {
 	}
 
 	/** Returns false when recovery is disabled or its policy is exhausted. */
-	retry(error: DiagnosticError, retryAfterMs?: number): boolean {
+	retry(
+		error: DiagnosticError,
+		retryAfterMs?: number,
+		maxAttempts = Number.POSITIVE_INFINITY,
+	): boolean {
 		if (this.options === false) return false;
 		this.interrupted();
 		let episode: RecoveryEpisode;
@@ -56,7 +60,7 @@ export class SubscriptionRecovery {
 			this.cancel();
 			return false;
 		}
-		if (!attempt) {
+		if (!attempt || attempt.attempt > maxAttempts) {
 			this.cancel();
 			return false;
 		}
