@@ -134,10 +134,10 @@ export class Subscription<Row>
 
 	onUpdate = (
 		listener: (update: RawLiveQueryUpdate<Row>) => void,
-	): (() => void) => listen(this.updateListeners, listener);
+	): (() => void) => this.listen(this.updateListeners, listener);
 
 	onStateChange = (listener: (state: LiveQueryState) => void): (() => void) =>
-		listen(this.stateListeners, listener);
+		this.listen(this.stateListeners, listener);
 
 	awaitTxId = (txid: string, timeout?: number): Promise<void> =>
 		this.transactions.wait(txid, timeout);
@@ -162,7 +162,7 @@ export class Subscription<Row>
 				"Raw live-query subscriptions do not expose snapshots",
 			);
 		}
-		return listen(this.changeListeners, listener);
+		return this.listen(this.changeListeners, listener);
 	};
 
 	renew = (query: SealedLiveQuery<Row>): Promise<void> => {
@@ -379,10 +379,14 @@ export class Subscription<Row>
 	markClosed(): void {
 		if (this.closed) return;
 		this.closed = true;
+		this.resetSynchronization();
 		this.transactions.close();
 		this.setLifecycle(
 			Object.freeze({ status: "closed", error: undefined }),
 		);
+		this.updateListeners.clear();
+		this.stateListeners.clear();
+		this.changeListeners.clear();
 	}
 
 	private decodeReset(
@@ -442,6 +446,20 @@ export class Subscription<Row>
 		}
 	}
 
+	private listen<Listener>(
+		listeners: Set<Listener>,
+		listener: Listener,
+	): () => void {
+		if (this.closed) return () => undefined;
+		listeners.add(listener);
+		let active = true;
+		return () => {
+			if (!active) return;
+			active = false;
+			listeners.delete(listener);
+		};
+	}
+
 	private notify<Arguments extends readonly unknown[]>(
 		listeners: Set<(...args: Arguments) => void>,
 		...args: Arguments
@@ -472,17 +490,4 @@ const staleState: LiveQueryState = Object.freeze({
 
 function sameState(left: LiveQueryState, right: LiveQueryState): boolean {
 	return left.status === right.status && left.error === right.error;
-}
-
-function listen<Listener>(
-	listeners: Set<Listener>,
-	listener: Listener,
-): () => void {
-	listeners.add(listener);
-	let active = true;
-	return () => {
-		if (!active) return;
-		active = false;
-		listeners.delete(listener);
-	};
 }

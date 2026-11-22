@@ -91,6 +91,83 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
+	it.each([
+		"unsubscribe",
+		"client.close",
+	] as const)("releases closed subscription observers after %s", (operation) => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const sub = client.subscribe(query("initial"));
+		const onState = vi.fn();
+		const onChange = vi.fn();
+		sub.onUpdate(vi.fn());
+		sub.onStateChange(onState);
+		sub.onChange(onChange);
+
+		if (operation === "unsubscribe") sub.unsubscribe();
+		else client.close();
+
+		expect(onState).toHaveBeenCalledExactlyOnceWith({
+			status: "closed",
+			error: undefined,
+		});
+		expect(onChange).toHaveBeenCalledExactlyOnceWith(sub.getSnapshot());
+
+		const unsubscribeLate = [
+			sub.onUpdate(vi.fn()),
+			sub.onStateChange(vi.fn()),
+			sub.onChange(vi.fn()),
+		];
+		// Inspect retention directly so the regression does not depend on GC timing.
+		for (const name of [
+			"updateListeners",
+			"stateListeners",
+			"changeListeners",
+		]) {
+			expect(Reflect.get(sub, name)).toHaveProperty("size", 0);
+		}
+		for (const unsubscribe of unsubscribeLate) unsubscribe();
+		client.close();
+	});
+	it("releases unpublished replay when the initial rows observer unsubscribes", () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		try {
+			const subscription = client.subscribe(query("initial"));
+			const onChange = vi.fn();
+			const onUpdate = vi.fn(() => subscription.unsubscribe());
+			subscription.onChange(onChange);
+			subscription.onUpdate(onUpdate);
+			const socket = connectAndAdmit();
+			publication(
+				socket,
+				[{ op: "upsert", row_key: ROW_KEY, values: ["1", "replayed"] }],
+				["42"],
+			);
+			baselineSync(socket, "initial");
+
+			expect(onUpdate).toHaveBeenCalledExactlyOnceWith({
+				type: "rows",
+				rows: [{ rowId: ROW_KEY, row: { id: 1, title: "initial" } }],
+			});
+			expect(onChange).toHaveBeenCalledExactlyOnceWith({
+				status: "closed",
+				error: undefined,
+				data: [{ id: 1, title: "replayed" }],
+			});
+			expect(subscription.getSnapshot()).toBe(
+				onChange.mock.calls[0]?.[0],
+			);
+			// Check the retained batch map without relying on garbage collection timing.
+			expect(Reflect.get(subscription, "appliedBatches")).toHaveProperty(
+				"size",
+				0,
+			);
+		} finally {
+			client.close();
+		}
+	});
+
 	it("does not restore stale when an older renewal is superseded", async () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({ url: "ws://live.test/v1" });
