@@ -58,7 +58,13 @@ class FakeWebSocket implements WebSocketLike {
 		this.onSend?.(message);
 	}
 
-	close(): void {
+	close(_code?: number, reason?: string): void {
+		if (reason && new TextEncoder().encode(reason).length > 123) {
+			throw new DOMException(
+				"Close reason exceeds 123 bytes",
+				"SyntaxError",
+			);
+		}
 		if (this.readyState >= FakeWebSocket.CLOSING) return;
 		this.onClose?.();
 		this.readyState = FakeWebSocket.CLOSING;
@@ -240,6 +246,55 @@ describe("ConnectionCoordinator", () => {
 				event: "connection_reconnect_scheduled",
 			}),
 		);
+	});
+
+	it("reconnects when a recoverable error has a long UTF-8 message", async () => {
+		vi.useFakeTimers();
+		const coordinator = createCoordinator();
+		const first = target();
+		const second = target();
+		coordinator.subscribe({ capability: "one" }, first);
+		coordinator.subscribe({ capability: "two" }, second);
+		const socket = admit();
+		socket.receive({
+			type: "connection_error",
+			code: "backend_session_lost",
+			message: "é".repeat(62),
+		});
+		expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		expect(first.failed).not.toHaveBeenCalled();
+		expect(second.failed).not.toHaveBeenCalled();
+		coordinator.close();
+	});
+
+	it.each([
+		"in the disconnect callback",
+		"during backoff",
+	])("keeps the scheduled reconnect for a subscription added %s", async (when) => {
+		vi.useFakeTimers();
+		const coordinator = createCoordinator({
+			reconnect: { baseMs: 100, random: () => 0 },
+		});
+		const first = target();
+		const subscribe = () =>
+			coordinator.subscribe({ capability: "two" }, target());
+		if (when === "in the disconnect callback")
+			first.connecting.mockImplementationOnce(subscribe);
+		coordinator.subscribe({ capability: "one" }, first);
+		admit().disconnect();
+		if (when === "during backoff") subscribe();
+
+		await vi.advanceTimersByTimeAsync(49);
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		expect(admit().sent.map((message) => message.authorization)).toEqual([
+			"one",
+			"two",
+		]);
+		coordinator.close();
 	});
 
 	it("reports query expiry", async () => {

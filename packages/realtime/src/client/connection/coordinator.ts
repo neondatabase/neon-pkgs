@@ -150,6 +150,7 @@ export class ConnectionCoordinator {
 	private requestId = 0n;
 	private ready = false;
 	private disposed = false;
+	private notifyingDisconnect = false;
 	private terminalConnection?: ConnectionCoordinatorError;
 	private pendingConnectionError?: ConnectionCoordinatorError;
 
@@ -324,6 +325,8 @@ export class ConnectionCoordinator {
 		if (
 			this.disposed ||
 			this.terminalConnection ||
+			this.notifyingDisconnect ||
+			this.reconnectTimer !== undefined ||
 			this.socket?.readyState === SOCKET_CONNECTING ||
 			this.socket?.readyState === SOCKET_OPEN
 		)
@@ -657,7 +660,7 @@ export class ConnectionCoordinator {
 				true,
 				message,
 			);
-			this.closeSocket(APPLICATION_CLOSE, message);
+			this.closeSocket(APPLICATION_CLOSE, "connection error");
 		} else {
 			this.failConnection(
 				new ConnectionCoordinatorError(code, false, message),
@@ -725,8 +728,13 @@ export class ConnectionCoordinator {
 		// Reset every peer before callbacks can synchronously unsubscribe one.
 		for (const subscription of this.activeSubscriptions)
 			subscription.resetWire();
-		for (const subscription of this.activeSubscriptions) {
-			subscription.callbacks.connecting();
+		this.notifyingDisconnect = true;
+		try {
+			for (const subscription of this.activeSubscriptions) {
+				subscription.callbacks.connecting();
+			}
+		} finally {
+			this.notifyingDisconnect = false;
 		}
 		if (
 			!this.disposed &&
