@@ -350,6 +350,28 @@ describe("Realtime TanStack DB collection", () => {
 		expect(client.latest().unsubscribed).toBe(true);
 	});
 
+	it("rejects transaction confirmation when the authoritative baseline cannot be installed", async () => {
+		const wire = wireClient();
+		const collection = createTestCollection(wire.client);
+		cleanups.push(async () => wire.client.close());
+		const loaded = expect(collection.preload()).rejects.toThrow(
+			"Duplicate TanStack collection key: 1",
+		);
+		const confirmed = expect(
+			collection.utils.awaitTxId("42"),
+		).rejects.toThrow("Duplicate TanStack collection key: 1");
+
+		wire.baseline({
+			mvcc: { xmin: "43", xmax: "43", xip: [] },
+			rows: [
+				{ row_key: "a".repeat(64), values: ["1", "first"] },
+				{ row_key: "b".repeat(64), values: ["1", "second"] },
+			],
+		});
+
+		await Promise.all([loaded, confirmed]);
+	});
+
 	it("fails when Realtime is terminal before listeners are installed", async () => {
 		const failure = liveError("ACCESS_DENIED");
 		const client = new TestClient<MessageRow>({
@@ -848,7 +870,13 @@ function wireClient() {
 	return {
 		client,
 		receive,
-		baseline: () => {
+		baseline: ({
+			mvcc = { xmin: "1", xmax: "2", xip: [] },
+			rows = [{ row_key: "a".repeat(64), values: ["1", "before"] }],
+		}: {
+			mvcc?: { xmin: string; xmax: string; xip: string[] };
+			rows?: Array<{ row_key: string; values: string[] }>;
+		} = {}) => {
 			receive({ type: "ready" });
 			receive({
 				type: "subscribed",
@@ -874,13 +902,13 @@ function wireClient() {
 			receive({
 				type: "baseline_sync_start",
 				...target,
-				mvcc: { xmin: "1", xmax: "2", xip: [] },
+				mvcc,
 			});
 			receive({
 				type: "baseline_sync_batch",
 				...target,
 				index: 0,
-				rows: [{ row_key: "a".repeat(64), values: ["1", "before"] }],
+				rows,
 			});
 			receive({ type: "baseline_sync_end", ...target, batch_count: 1 });
 		},
