@@ -91,6 +91,44 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
+	it.each([
+		"unsubscribe",
+		"client.close",
+	] as const)("releases closed subscription observers after %s", (operation) => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const sub = client.subscribe(query("initial"));
+		const onState = vi.fn();
+		const onChange = vi.fn();
+		sub.onUpdate(vi.fn());
+		sub.onStateChange(onState);
+		sub.onChange(onChange);
+
+		if (operation === "unsubscribe") sub.unsubscribe();
+		else client.close();
+
+		expect(onState).toHaveBeenCalledExactlyOnceWith({
+			status: "closed",
+			error: undefined,
+		});
+		expect(onChange).toHaveBeenCalledExactlyOnceWith(sub.getSnapshot());
+
+		const unsubscribeLate = [
+			sub.onUpdate(vi.fn()),
+			sub.onStateChange(vi.fn()),
+			sub.onChange(vi.fn()),
+		];
+		// Inspect retention directly so the regression does not depend on GC timing.
+		for (const name of [
+			"updateListeners",
+			"stateListeners",
+			"changeListeners",
+		]) {
+			expect(Reflect.get(sub, name)).toHaveProperty("size", 0);
+		}
+		for (const unsubscribe of unsubscribeLate) unsubscribe();
+		client.close();
+	});
 	it("does not restore stale when an older renewal is superseded", async () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({ url: "ws://live.test/v1" });
