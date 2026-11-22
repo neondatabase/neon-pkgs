@@ -94,13 +94,14 @@ export class ReactLiveQueryStore<Row> {
 	getServerSnapshot = (): LiveQuerySnapshot<Row> => this.initialSnapshot;
 
 	private getState = (): LiveQueryState => {
-		const { status, error } = this.snapshot;
+		const { status, error } = this.getSnapshot();
 		return status === "error"
 			? Object.freeze({ status, error })
 			: Object.freeze({ status, error: undefined });
 	};
 
-	private getSnapshot = (): LiveQuerySnapshot<Row> => this.snapshot;
+	private getSnapshot = (): LiveQuerySnapshot<Row> =>
+		this.subscription?.getSnapshot() ?? this.snapshot;
 
 	private awaitRows = (
 		matches: (rows: readonly Row[]) => boolean,
