@@ -50,12 +50,15 @@ function readinessEnded(
 	}
 	if (source === "timeout") {
 		return new NeonWaitTimeoutError(
-			`Timed out after ${timeoutMs}ms waiting for ${outstanding.length} operation(s) to finish.`,
+			`Timed out after ${timeoutMs}ms waiting for ${outstanding.length} operation(s) to finish. The request was accepted, and these operations are still running: ${outstanding.map(describeOperation).join(", ")}.`,
 			{ timeoutMs, operations: outstanding },
 		);
 	}
 	return undefined;
 }
+
+const describeOperation = (op: Operation): string =>
+	`${op.id} (${op.action}, ${op.status}, project ${op.project_id})`;
 
 /**
  * Poll the given operations until each reaches a terminal `finished`/`skipped` state.
