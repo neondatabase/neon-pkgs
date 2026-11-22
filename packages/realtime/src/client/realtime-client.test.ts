@@ -1064,6 +1064,84 @@ describe("RealtimeClient", () => {
 		}
 	});
 
+	it.each([
+		{ trigger: "a normal close", stable: false },
+		{ trigger: "an internal error", stable: true },
+	] as const)("retries the first server protocol error after $trigger (stable next socket: $stable)", async ({
+		trigger,
+		stable,
+	}) => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const random = vi.spyOn(Math, "random").mockReturnValue(0);
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		try {
+			const subscription = client.subscribe(query("initial"));
+			const first = connectAndAdmit();
+			baselineSync(first, "cached");
+			const confirmation = subscription.awaitTxId("42");
+			void confirmation.catch(() => undefined);
+			if (trigger === "a normal close") first.close();
+			else {
+				first.receive({
+					type: "connection_error",
+					code: "internal_error",
+					message: "proxy restarting",
+				});
+			}
+			await vi.advanceTimersByTimeAsync(500);
+			const second = connectAndAdmit();
+			baselineSync(second, "cached");
+			expect(subscription.getState().status).toBe("live");
+
+			const protocolError = {
+				type: "connection_error",
+				code: "protocol_error",
+				message: "server protocol error",
+			};
+			second.receive(protocolError);
+			expect(subscription.getSnapshot()).toMatchObject({
+				status: "connecting",
+				data: [{ id: 1, title: "cached" }],
+			});
+			await vi.advanceTimersByTimeAsync(1_000);
+			expect(FakeWebSocket.instances).toHaveLength(3);
+			const third = connectAndAdmit();
+			baselineSync(third, "recovered");
+			third.receive({
+				type: "progress",
+				mvcc: { xmin: "43", xmax: "43", xip: [] },
+			});
+			await expect(confirmation).resolves.toBeUndefined();
+			expect(subscription.getSnapshot()).toMatchObject({
+				status: "live",
+				data: [{ id: 1, title: "recovered" }],
+			});
+
+			if (stable) {
+				await vi.advanceTimersByTimeAsync(20_000);
+				third.receive({ type: "pong", token: "c1" });
+				await vi.advanceTimersByTimeAsync(10_001);
+				third.receive(protocolError);
+				await vi.advanceTimersByTimeAsync(500);
+				expect(FakeWebSocket.instances).toHaveLength(4);
+				baselineSync(connectAndAdmit(), "live again");
+				expect(subscription.getState().status).toBe("live");
+			} else {
+				third.receive(protocolError);
+				expect(subscription.getState()).toMatchObject({
+					status: "error",
+					error: { code: "protocol_error" },
+				});
+				await vi.advanceTimersByTimeAsync(2_000);
+				expect(FakeWebSocket.instances).toHaveLength(3);
+			}
+		} finally {
+			client.close();
+			random.mockRestore();
+		}
+	});
+
 	it("reuses a live ID after the last unsubscribe while its socket is closing", () => {
 		useFakeWebSocket();
 		FakeWebSocket.deferClose = true;

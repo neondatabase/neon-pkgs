@@ -146,6 +146,7 @@ export class ConnectionCoordinator {
 	private stabilityTimer?: ReconnectTimer;
 	private reconnectGeneration = 0;
 	private reconnectEpisodeGeneration = 0;
+	private protocolRetryUsed = false;
 	private readonly reportedClientWarnings = new Set<string>();
 	private requestId = 0n;
 	private ready = false;
@@ -647,7 +648,7 @@ export class ConnectionCoordinator {
 		const retryProtocolError =
 			code === "protocol_error" &&
 			this.reconnect &&
-			!this.reconnect.active;
+			!this.protocolRetryUsed;
 		const retryable = [
 			"resource_exhausted",
 			"slow_consumer",
@@ -657,6 +658,9 @@ export class ConnectionCoordinator {
 			"internal_error",
 		].includes(code);
 		if (retryable || retryProtocolError) {
+			if (retryProtocolError && this.activeSubscriptions.size > 0) {
+				this.protocolRetryUsed = true;
+			}
 			this.pendingConnectionError = new ConnectionCoordinatorError(
 				code,
 				true,
@@ -805,6 +809,7 @@ export class ConnectionCoordinator {
 				return;
 			this.stabilityTimer = undefined;
 			this.reconnect?.reset();
+			this.protocolRetryUsed = false;
 			this.cancelReconnectDeadline();
 			this.events.connection.stable();
 		}, this.reconnect.stabilityMs);
@@ -1030,6 +1035,7 @@ export class ConnectionCoordinator {
 		this.cancelStabilityTimer();
 		this.cancelReconnectDeadline();
 		this.reconnect?.reset();
+		this.protocolRetryUsed = false;
 		this.pendingConnectionError = undefined;
 		this.events.connection.episodeEnded();
 	}
