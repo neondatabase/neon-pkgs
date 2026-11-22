@@ -306,7 +306,7 @@ export class Subscription<Row>
 		);
 	}
 
-	publishBatch(batch: ReconciledBatch): void {
+	publishBatch(batch: ReconciledBatch, publishSnapshot = true): void {
 		if (this.closed) return;
 		const changes =
 			batch.changes.length === 0
@@ -319,7 +319,11 @@ export class Subscription<Row>
 			this.updateListeners,
 			Object.freeze({ type: "changes", changes, batch: info }),
 		);
-		if (this.materialized && this.state.status === "live") {
+		if (
+			publishSnapshot &&
+			this.materialized &&
+			this.state.status === "live"
+		) {
 			this.notify(this.changeListeners, this.snapshot);
 		}
 		for (const txid of batch.txids) this.transactions.seen(txid);
