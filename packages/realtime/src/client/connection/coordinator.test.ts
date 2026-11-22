@@ -795,13 +795,37 @@ describe("ConnectionCoordinator", () => {
 		const handle = coordinator.subscribe({ capability: "initial" }, stale);
 		const socket = admit();
 		coordinator.subscribe({ capability: "healthy" }, healthy);
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+		for (const live_id of ["41", "42"]) {
+			socket.receive({
+				type: "baseline_sync_start",
+				live_id,
+				epoch: "1",
+				baseline_sync_attempt: "1",
+				mvcc: { xmin: "1", xmax: "2", xip: [] },
+			});
+			socket.receive({
+				type: "baseline_sync_end",
+				live_id,
+				epoch: "1",
+				baseline_sync_attempt: "1",
+				batch_count: 0,
+			});
+		}
 		const first = handle.renew({ capability: "renewed" });
 		socket.receive({ type: "renewed", live_id: "41" });
 		await first;
 		const unanswered = handle
 			.renew({ capability: "unanswered" })
 			.catch((error) => error);
-		await vi.advanceTimersByTimeAsync(30_000);
+		await vi.advanceTimersByTimeAsync(60_000);
 		expect(stale.failed).toHaveBeenCalledWith(
 			expect.objectContaining({ code: "subscription_renewal_timeout" }),
 		);
