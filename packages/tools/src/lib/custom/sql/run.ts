@@ -80,7 +80,6 @@ export const explainSqlInputSchema = z.strictObject({
 		),
 });
 
-/** One caller statement, in its own `READ ONLY` transaction when `readOnly` is set. */
 const DATE_TIME_OIDS: ReadonlySet<number> = new Set([
 	types.builtins.DATE,
 	types.builtins.TIMESTAMP,
@@ -112,6 +111,7 @@ const callerResults = {
 	},
 } satisfies { types: typeof types };
 
+/** One caller statement, in its own `READ ONLY` transaction when `readOnly` is set. */
 export const runStatement = async (
 	neonClient: NeonClient<true>,
 	target: ConnectionTarget,
