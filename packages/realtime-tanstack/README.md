@@ -59,7 +59,7 @@ The integration synchronizes eagerly. It applies each complete-row replacement
 or incremental change batch as one TanStack sync transaction. Realtime
 `connecting` maps to a loading collection until the first complete result and
 `live` maps to ready. Once ready, a collection retains its usable rows while a
-subscription is `connecting` or `stale` and reports the interruption through
+subscription is recovering and reports the interruption through
 `collection.health.failureReason`. A later `live` state clears that recoverable
 failure.
 
@@ -83,10 +83,11 @@ and starts it again when something observes it, and `collection.reload()`
 starts a new sync run. Each new run subscribes with the newest sealed query the
 collection has: the last one `refreshQuery` returned, or `query` if it never
 refreshed. If that query has expired, the run calls `refreshQuery` straight
-away and loads once the fresh query is accepted. Without `refreshQuery`, a run
-that starts after the query expired never receives rows: a restarted
-collection stays loading and a reload never completes. Pass `refreshQuery` to
-any collection that can outlive its query.
+away and loads once the fresh query is accepted. If the proxy requires a
+replacement capability and no `refreshQuery` is configured, synchronization
+reports a terminal error. An initial load or
+reload rejects, and an already-ready collection keeps its last rows. Pass
+`refreshQuery` to any collection that can outlive its query.
 
 ## Optimistic mutations
 
