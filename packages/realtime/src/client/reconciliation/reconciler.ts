@@ -129,7 +129,7 @@ type ReconciliationMessage = Extract<
  * decoding, materialization, and application callbacks stay outside it.
  */
 export class BaselineSyncPublicationReconciler {
-	private readonly targets = new Map<string, TargetState>();
+	private readonly targets = new Map<string, TargetState | null>();
 	private publication?: PendingPublication;
 
 	constructor(
@@ -153,24 +153,24 @@ export class BaselineSyncPublicationReconciler {
 	}
 
 	/**
-	 * Stop local delivery while retaining protocol state until unsubscribe is
+	 * Stop local delivery while retaining the live ID until unsubscribe is
 	 * acknowledged.
 	 */
 	deactivate(liveId: string): void {
 		const state = this.target(liveId);
-		if (!state.active) return;
+		if (!state) return;
 		state.active = false;
 		state.baselineSync = undefined;
 		this.releaseBacklog(state);
 		state.live = false;
+		this.targets.set(liveId, null);
 		this.publication?.batches.delete(liveId);
 		this.publication?.resets.delete(liveId);
 	}
 
 	remove(liveId: string): void {
 		const state = this.targets.get(liveId);
-		if (!state) return;
-		this.releaseBacklog(state);
+		if (state) this.releaseBacklog(state);
 		this.publication?.batches.delete(liveId);
 		this.publication?.resets.delete(liveId);
 		this.targets.delete(liveId);
@@ -229,7 +229,7 @@ export class BaselineSyncPublicationReconciler {
 		// replays an ordered proof after each baseline finishes, even when idle.
 		// Never cache a connection proof for a later admission or reset epoch.
 		for (const state of this.targets.values()) {
-			if (state.active && state.live) state.target.applyProgress(mvcc);
+			if (state?.active && state.live) state.target.applyProgress(mvcc);
 		}
 	}
 
@@ -240,7 +240,7 @@ export class BaselineSyncPublicationReconciler {
 		>,
 	): void {
 		const state = this.target(message.live_id);
-		if (!state.active) return;
+		if (!state?.active) return;
 		const version = baselineSyncVersion(
 			message.epoch,
 			message.baseline_sync_attempt,
@@ -275,7 +275,7 @@ export class BaselineSyncPublicationReconciler {
 		>,
 	): void {
 		const state = this.target(message.live_id);
-		if (!state.active) return;
+		if (!state?.active) return;
 		const version = baselineSyncVersion(
 			message.epoch,
 			message.baseline_sync_attempt,
@@ -315,7 +315,7 @@ export class BaselineSyncPublicationReconciler {
 		message: Extract<ReconciliationMessage, { type: "baseline_sync_end" }>,
 	): void {
 		const state = this.target(message.live_id);
-		if (!state.active) return;
+		if (!state?.active) return;
 		const version = baselineSyncVersion(
 			message.epoch,
 			message.baseline_sync_attempt,
@@ -387,7 +387,7 @@ export class BaselineSyncPublicationReconciler {
 				throw new ProtocolError("invalid publication target");
 			}
 			bodyTargets.add(target.live_id);
-			if (!state.active) continue;
+			if (!state?.active) continue;
 			const sequence = BigInt(target.sequence);
 			const existing = publication.batches.get(target.live_id);
 			if (
@@ -431,7 +431,7 @@ export class BaselineSyncPublicationReconciler {
 		);
 		for (const target of message.targets) {
 			const state = this.target(target.live_id);
-			if (!state.active) continue;
+			if (!state?.active) continue;
 			const epoch = BigInt(target.epoch);
 			if (
 				epoch <= state.epoch ||
@@ -469,6 +469,7 @@ export class BaselineSyncPublicationReconciler {
 			validateChangeOrder(staged.changes);
 		for (const [liveId, staged] of publication.batches) {
 			const state = this.target(liveId);
+			if (!state?.active) continue;
 			const batch = Object.freeze({
 				changes: Object.freeze([...staged.changes]),
 				txids: Object.freeze([...staged.txids]),
@@ -498,6 +499,7 @@ export class BaselineSyncPublicationReconciler {
 		const resetStates: TargetState[] = [];
 		for (const [liveId, reset] of publication.resets) {
 			const state = this.target(liveId);
+			if (!state?.active) continue;
 			state.epoch = reset.epoch;
 			state.nextSequence = reset.firstSequence;
 			state.latestBaselineSync = undefined;
@@ -508,6 +510,7 @@ export class BaselineSyncPublicationReconciler {
 		}
 		this.events.publicationCommitted(bodyCount);
 		for (const state of resetStates) {
+			if (!state.active) continue;
 			state.lifecycle?.interrupted();
 			state.target.resetRequired();
 		}
@@ -515,7 +518,7 @@ export class BaselineSyncPublicationReconciler {
 			if (failure) state.target.decodeFailed(failure.error);
 		}
 		for (const { state, batch, install } of committed) {
-			if (install) state.target.publishBatch(batch);
+			if (install && state.active) state.target.publishBatch(batch);
 		}
 	}
 
@@ -539,9 +542,9 @@ export class BaselineSyncPublicationReconciler {
 		state.backlog = [];
 	}
 
-	private target(liveId: string): TargetState {
+	private target(liveId: string): TargetState | null {
 		const target = this.targets.get(liveId);
-		if (!target) throw new ProtocolError("unknown live ID");
+		if (target === undefined) throw new ProtocolError("unknown live ID");
 		return target;
 	}
 }
