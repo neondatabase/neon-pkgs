@@ -84,7 +84,10 @@ export class ReactLiveQueryStore<Row> {
 		} else {
 			const source = { callback: refreshQuery };
 			this.refreshSource = source;
-			this.queryRefresh.setRefreshCallback(() => source.callback());
+			this.queryRefresh.setRefreshCallback(() => {
+				const { callback } = source;
+				return callback();
+			});
 		}
 	}
 

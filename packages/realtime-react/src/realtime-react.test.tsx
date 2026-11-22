@@ -294,6 +294,7 @@ describe("Realtime React integration", () => {
 		try {
 			await act(async () => vi.advanceTimersByTimeAsync(1));
 			expect(firstRefresh).toHaveBeenCalledOnce();
+			expect(firstRefresh.mock.contexts).toEqual([undefined]);
 
 			view.rerender(viewWith(secondRefresh));
 			await act(async () => vi.advanceTimersByTimeAsync(100));
