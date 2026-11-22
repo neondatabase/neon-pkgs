@@ -437,7 +437,8 @@ export class Subscription<Row>
 		this.events.stateChanged(previousStatus, state.status);
 		beforeListeners?.();
 		this.notify(this.stateListeners, this.state);
-		if (publishChange && this.materialized) {
+		// A reentrant lifecycle transition publishes its own snapshot.
+		if (publishChange && this.materialized && this.state === state) {
 			this.notify(this.changeListeners, this.snapshot);
 		}
 	}
