@@ -33,6 +33,8 @@ const SOCKET_OPEN = 1;
 const SOCKET_CLOSING = 2;
 const SOCKET_CLOSED = 3;
 const SOCKET_CLOSE_GRACE_MS = 1_000;
+const BASELINE_IDLE_TIMEOUT_MS = 60_000;
+const RENEWAL_TIMEOUT_MS = 30_000;
 const NORMAL_CLOSE = 1_000;
 const APPLICATION_CLOSE = 4_000;
 
@@ -102,6 +104,8 @@ class ManagedSubscription {
 	liveId?: string;
 	renewing?: Renewal;
 	queuedRenewals: Renewal[] = [];
+	baselineDeadline?: ReconnectTimer;
+	renewalDeadline?: ReconnectTimer;
 
 	constructor(
 		public query: ConnectionSealedQuery,
@@ -112,6 +116,8 @@ class ManagedSubscription {
 
 	/** Forget a detached wire attempt, preserving renewals for re-admission. */
 	resetWire(): void {
+		this.cancelBaselineDeadline();
+		this.cancelRenewalDeadline();
 		this.recovery.interrupted();
 		this.requestId = undefined;
 		this.requestedCapability = undefined;
@@ -121,6 +127,16 @@ class ManagedSubscription {
 			this.queuedRenewals.unshift(this.renewing);
 			this.renewing = undefined;
 		}
+	}
+
+	cancelBaselineDeadline(): void {
+		this.baselineDeadline?.();
+		this.baselineDeadline = undefined;
+	}
+
+	cancelRenewalDeadline(): void {
+		this.renewalDeadline?.();
+		this.renewalDeadline = undefined;
 	}
 }
 
@@ -239,6 +255,7 @@ export class ConnectionCoordinator {
 		const error = new Error("Realtime client is closed");
 		for (const subscription of this.managedSubscriptions) {
 			subscription.recovery.cancel();
+			subscription.cancelBaselineDeadline();
 			this.rejectRenewals(subscription, error);
 		}
 		this.managedSubscriptions.clear();
@@ -300,6 +317,7 @@ export class ConnectionCoordinator {
 	private unsubscribe(subscription: ManagedSubscription): void {
 		if (subscription.state === "closed") return;
 		subscription.recovery.cancel();
+		subscription.cancelBaselineDeadline();
 		subscription.state = "closed";
 		this.managedSubscriptions.delete(subscription);
 		this.activeSubscriptions.delete(subscription);
@@ -506,8 +524,19 @@ export class ConnectionCoordinator {
 			firstSequence: message.first_sequence,
 			columnCount: message.columns.length,
 			target: subscription.callbacks.reconciliation,
-			lifecycle: subscription.recovery,
+			lifecycle: {
+				baselineProgress: () => this.armBaselineDeadline(subscription),
+				baselineCompleted: () => {
+					subscription.cancelBaselineDeadline();
+					subscription.recovery.baselineCompleted();
+				},
+				interrupted: () => {
+					subscription.recovery.interrupted();
+					this.armBaselineDeadline(subscription);
+				},
+			},
 		});
+		this.armBaselineDeadline(subscription);
 		if (acceptedCapability === subscription.query.capability) {
 			this.resolveRenewals(subscription);
 		} else if (subscription.queuedRenewals.length > 0) {
@@ -561,6 +590,7 @@ export class ConnectionCoordinator {
 			throw new ProtocolError("unexpected renewal response");
 		const renewal = subscription.renewing;
 		subscription.renewing = undefined;
+		subscription.cancelRenewalDeadline();
 		subscription.acceptedCapability = renewal.query.capability;
 		renewal.resolve();
 		subscription.events.renewed();
@@ -700,6 +730,16 @@ export class ConnectionCoordinator {
 		const renewal = subscription.queuedRenewals.shift();
 		if (!renewal) return;
 		subscription.renewing = renewal;
+		subscription.renewalDeadline = setDeadlineTimer(() => {
+			this.failLocalSubscription(
+				subscription,
+				new ConnectionCoordinatorError(
+					"subscription_renewal_timeout",
+					false,
+					"Realtime server did not acknowledge the subscription renewal",
+				),
+			);
+		}, RENEWAL_TIMEOUT_MS);
 		subscription.events.renewalStarted();
 		this.send({
 			type: "renew",
@@ -735,6 +775,21 @@ export class ConnectionCoordinator {
 		) {
 			this.scheduleReconnect();
 		}
+	}
+
+	private armBaselineDeadline(subscription: ManagedSubscription): void {
+		if (subscription.state !== "active") return;
+		subscription.cancelBaselineDeadline();
+		subscription.baselineDeadline = setDeadlineTimer(() => {
+			this.failLocalSubscription(
+				subscription,
+				new ConnectionCoordinatorError(
+					"subscription_baseline_timeout",
+					false,
+					"Realtime server stopped sending the subscription baseline",
+				),
+			);
+		}, BASELINE_IDLE_TIMEOUT_MS);
 	}
 
 	private scheduleReconnect(): void {
@@ -941,6 +996,7 @@ export class ConnectionCoordinator {
 		subscription: ManagedSubscription,
 		error: Error,
 	): void {
+		subscription.cancelRenewalDeadline();
 		subscription.renewing?.reject(error);
 		subscription.renewing = undefined;
 		this.rejectQueuedRenewals(subscription, error);
