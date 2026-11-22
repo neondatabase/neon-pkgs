@@ -193,6 +193,44 @@ describe("trusted direct subscriptions", () => {
 		).rejects.toThrow("direct client is closed");
 	});
 
+	it("does not schedule refresh for a direct subscription born after terminal disconnect", async () => {
+		vi.useFakeTimers();
+		const events: string[] = [];
+		const realtime = createRealtime({
+			secret: SECRET,
+			db: "app",
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: ({ event }) => events.push(event),
+		});
+		try {
+			const first = await realtime.subscribe(messagesByOwner("alice"));
+			const socket = connectAndAdmit();
+			baselineSync(socket, "before");
+			socket.receive({
+				type: "connection_error",
+				code: "invalid_payload",
+				message: "fixture terminal disconnect",
+			});
+			expect(first.getState().status).toBe("error");
+			expect(vi.getTimerCount()).toBe(0);
+			await Promise.resolve();
+			events.length = 0;
+
+			const second = await realtime.subscribe(messagesByOwner("bob"));
+			expect(second.getState()).toMatchObject({
+				status: "error",
+				error: { code: "invalid_payload" },
+			});
+			expect(FakeWebSocket.instances).toHaveLength(1);
+			expect(vi.getTimerCount()).toBe(0);
+			await Promise.resolve();
+			expect(events).not.toContain("query_refresh_scheduled");
+		} finally {
+			realtime.close();
+		}
+	});
+
 	it("refreshes the same prepared query and stops after unsubscribe", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);

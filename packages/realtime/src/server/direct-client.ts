@@ -55,6 +55,8 @@ export class DirectLiveQueryClient {
 		this.assertOpen();
 		const client = await this.getClient();
 		const subscription = subscribeClient(client, query, options);
+		const { status } = subscription.getState();
+		if (status === "error" || status === "closed") return subscription;
 		let managed!: ManagedDirectSubscription<typeof subscription>;
 		managed = manageDirectSubscription(
 			subscription,
