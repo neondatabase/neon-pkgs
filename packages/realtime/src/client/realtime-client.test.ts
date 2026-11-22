@@ -1219,6 +1219,72 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
+	it("waits for the full timeout when it exceeds the host timer range", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		// Advance the wait deadlines without advancing transport timers.
+		vi.useFakeTimers({
+			toFake: ["setTimeout", "clearTimeout", "performance"],
+		});
+		const timeout = 2 ** 31 + 100;
+		const failed = vi.fn();
+		const waits = Promise.all([
+			subscription.awaitTxId("42", timeout).catch(failed),
+			subscription.awaitRows(() => false, timeout).catch(failed),
+		]);
+		try {
+			await vi.advanceTimersByTimeAsync(2 ** 31);
+			expect(failed).not.toHaveBeenCalled();
+
+			await vi.advanceTimersByTimeAsync(100);
+			await waits;
+			expect(failed.mock.calls.map(([error]) => error.message)).toEqual([
+				"Timed out waiting for live-query transaction 42",
+				"Timed out waiting for live-query rows",
+			]);
+			expect(vi.getTimerCount()).toBe(0);
+		} finally {
+			vi.useRealTimers();
+			client.close();
+		}
+	});
+
+	it("cancels long row and transaction timeouts when an update satisfies the waits", async () => {
+		useFakeWebSocket();
+		vi.useFakeTimers({
+			toFake: ["setTimeout", "clearTimeout", "performance"],
+		});
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+		const idleTimerCount = vi.getTimerCount();
+		const timeout = 2 ** 31 + 100;
+		const waits = Promise.allSettled([
+			subscription.awaitTxId("42", timeout),
+			subscription.awaitRows(
+				(rows) => rows[0]?.title === "after",
+				timeout,
+			),
+		]);
+		try {
+			await vi.advanceTimersByTimeAsync(10);
+			publication(
+				socket,
+				[{ op: "upsert", row_key: ROW_KEY, values: ["1", "after"] }],
+				["42"],
+			);
+			expect(await waits).toMatchObject([
+				{ status: "fulfilled" },
+				{ status: "fulfilled" },
+			]);
+			expect(vi.getTimerCount()).toBe(idleTimerCount);
+		} finally {
+			client.close();
+		}
+	});
+
 	it("waits for matching materialized rows and handles an existing match", async () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({

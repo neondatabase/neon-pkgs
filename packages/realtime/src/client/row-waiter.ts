@@ -1,3 +1,4 @@
+import { setDeadlineTimer } from "./connection/timer.js";
 import type {
 	LiveQuerySnapshot,
 	MaterializedLiveQuerySubscription,
@@ -22,11 +23,11 @@ export function waitForRows<Row>(
 	return new Promise<void>((resolve, reject) => {
 		let settled = false;
 		let unsubscribe: () => void = () => undefined;
-		let timer: ReturnType<typeof setTimeout> | undefined;
+		let cancelTimeout: (() => void) | undefined;
 
 		const cleanup = () => {
 			unsubscribe();
-			if (timer !== undefined) clearTimeout(timer);
+			cancelTimeout?.();
 		};
 		const succeed = () => {
 			if (settled) return;
@@ -59,7 +60,7 @@ export function waitForRows<Row>(
 
 		unsubscribe = subscription.onChange(inspect);
 		if (timeout !== undefined) {
-			timer = setTimeout(
+			cancelTimeout = setDeadlineTimer(
 				() => fail(new Error("Timed out waiting for live-query rows")),
 				timeout,
 			);
