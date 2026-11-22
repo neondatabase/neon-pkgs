@@ -272,6 +272,50 @@ describe("Realtime React integration", () => {
 		expect(client.subscriptions).toHaveLength(1);
 	});
 
+	it("preserves signer retry pacing when the refresh callback changes", async () => {
+		vi.useFakeTimers();
+		const wire = wireClient();
+		const currentQuery = query("initial", 11);
+		const unavailable = async () => {
+			throw new Error("Signing temporarily unavailable");
+		};
+		const firstRefresh = vi.fn(unavailable);
+		const secondRefresh = vi.fn(unavailable);
+		const viewWith = (
+			refreshQuery?: () => Promise<SealedLiveQuery<MessageRow>>,
+		) => (
+			<RealtimeProvider client={wire.client}>
+				<Messages query={currentQuery} refreshQuery={refreshQuery} />
+			</RealtimeProvider>
+		);
+		const view = render(viewWith(firstRefresh));
+		try {
+			act(() => wire.baseline());
+			await act(async () => vi.advanceTimersByTimeAsync(999));
+			expect(firstRefresh).not.toHaveBeenCalled();
+			await act(async () => vi.advanceTimersByTimeAsync(1));
+			expect(firstRefresh).toHaveBeenCalledOnce();
+
+			view.rerender(viewWith(secondRefresh));
+			await act(async () => vi.advanceTimersByTimeAsync(999));
+			expect(secondRefresh).not.toHaveBeenCalled();
+			await act(async () => vi.advanceTimersByTimeAsync(1));
+			expect(secondRefresh).toHaveBeenCalledOnce();
+			expect(screen.getByText("live:before")).toBeTruthy();
+
+			view.rerender(viewWith());
+			await act(async () => vi.advanceTimersByTimeAsync(2_000));
+			expect(secondRefresh).toHaveBeenCalledOnce();
+			view.rerender(viewWith(secondRefresh));
+			await act(async () => vi.advanceTimersByTimeAsync(1));
+			expect(secondRefresh).toHaveBeenCalledTimes(2);
+		} finally {
+			view.unmount();
+			wire.client.close();
+			vi.useRealTimers();
+		}
+	});
+
 	it("refreshes an expiring query through renew", async () => {
 		const client = new TestClient<MessageRow>();
 		const replacement = query("query-2", 3_000);

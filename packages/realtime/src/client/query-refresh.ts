@@ -82,8 +82,11 @@ export class QueryRefreshController<Row> {
 		refreshQuery: (() => Promise<SealedLiveQuery<Row>>) | undefined,
 	): void {
 		this.refreshQuery = refreshQuery;
-		this.clearTimer();
-		if (this.active && !this.refreshInFlight && !this.refreshStopped) {
+		if (!refreshQuery) {
+			this.clearTimer();
+		} else if (this.refreshTimer === undefined && !this.refreshInFlight) {
+			// The timer reads the current callback when it fires. Preserve any
+			// retry delay already scheduled before the callback changed.
 			this.scheduleRefresh();
 		}
 	}
