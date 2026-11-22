@@ -49,7 +49,7 @@ export class QueryRefreshController<Row> {
 	private query: SealedLiveQuery<Row>;
 	private refreshQuery?: () => Promise<SealedLiveQuery<Row>>;
 	private refreshTimer?: ReturnType<typeof setTimeout>;
-	private refreshInFlight = false;
+	private refreshRequestId?: number;
 	private refreshStopped = false;
 	private active = false;
 	private generation = 0;
@@ -75,17 +75,17 @@ export class QueryRefreshController<Row> {
 	/**
 	 * Replace the callback used to obtain a fresh capability.
 	 *
-	 * Passing `undefined` disables scheduled refreshes without stopping the
+	 * A callback that is already running cannot apply a result after being
+	 * replaced. Passing `undefined` disables refreshes without stopping the
 	 * controller.
 	 */
 	setRefreshCallback(
 		refreshQuery: (() => Promise<SealedLiveQuery<Row>>) | undefined,
 	): void {
+		if (refreshQuery !== this.refreshQuery)
+			this.refreshRequestId = undefined;
 		this.refreshQuery = refreshQuery;
-		this.clearTimer();
-		if (this.active && !this.refreshInFlight && !this.refreshStopped) {
-			this.scheduleRefresh();
-		}
+		if (this.refreshRequestId === undefined) this.scheduleRefresh();
 	}
 
 	/**
@@ -109,7 +109,18 @@ export class QueryRefreshController<Row> {
 		this.assertSameQuery(query);
 		const generation = this.generation;
 		const replacementId = ++this.nextReplacementId;
-		await this.options.renewSubscription(query);
+		const refreshRequestId = this.refreshRequestId;
+		const renewal = this.options.renewSubscription(query);
+		if (
+			refreshRequestId !== undefined &&
+			this.refreshRequestId === refreshRequestId
+		) {
+			// The manual capability supersedes issuance that started earlier.
+			// Keep scheduling while acceptance is pending in case it fails or stalls.
+			this.refreshRequestId = undefined;
+			this.scheduleRefresh(REFRESH_RETRY_MS);
+		}
+		await renewal;
 		if (
 			generation !== this.generation ||
 			replacementId < this.appliedReplacementId
@@ -135,7 +146,7 @@ export class QueryRefreshController<Row> {
 		this.active = false;
 		this.generation += 1;
 		this.clearTimer();
-		this.refreshInFlight = false;
+		this.refreshRequestId = undefined;
 		this.refreshStopped = false;
 	}
 
@@ -157,7 +168,7 @@ export class QueryRefreshController<Row> {
 		if (
 			!this.active ||
 			!refreshQuery ||
-			this.refreshInFlight ||
+			this.refreshRequestId !== undefined ||
 			this.refreshStopped
 		)
 			return;
@@ -165,12 +176,13 @@ export class QueryRefreshController<Row> {
 			this.refreshStopped = true;
 			return;
 		}
-		this.refreshInFlight = true;
+		const requestId = ++this.nextReplacementId;
+		this.refreshRequestId = requestId;
 		const generation = this.generation;
 		this.refreshEvents.callbackStarted();
 		try {
 			const query = await refreshQuery();
-			if (!this.isCurrent(generation)) return;
+			if (this.refreshRequestId !== requestId) return;
 			if (this.subscriptionEnded()) {
 				this.refreshStopped = true;
 				return;
@@ -189,7 +201,7 @@ export class QueryRefreshController<Row> {
 			// Do not let a pending wire renewal prevent the next capability from
 			// being obtained. During a long outage, each newer capability supersedes
 			// the one still waiting for acceptance.
-			this.appliedReplacementId = ++this.nextReplacementId;
+			this.appliedReplacementId = requestId;
 			this.query = query;
 			// A short remaining lifetime or clock skew can keep every replacement
 			// inside the early-refresh window. Pace successful refreshes too.
@@ -201,7 +213,7 @@ export class QueryRefreshController<Row> {
 			);
 			void this.renewSubscriptionRecoverably(query, generation);
 		} catch (error) {
-			if (!this.isCurrent(generation)) return;
+			if (this.refreshRequestId !== requestId) return;
 			this.refreshEvents.callbackFailed(error);
 			if (this.subscriptionEnded()) {
 				this.refreshStopped = true;
@@ -209,7 +221,8 @@ export class QueryRefreshController<Row> {
 			}
 			this.scheduleRefresh(REFRESH_RETRY_MS);
 		} finally {
-			if (generation === this.generation) this.refreshInFlight = false;
+			if (this.refreshRequestId === requestId)
+				this.refreshRequestId = undefined;
 		}
 	}
 
