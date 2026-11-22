@@ -105,7 +105,8 @@ class RealtimeClientImpl implements RealtimeClient {
 			queryUnavailable: () => subscription.queryUnavailable(),
 			failed: (error) => subscription.fail(error),
 		});
-		this.handles.set(subscription as Subscription<unknown>, handle);
+		if (this.disposed) subscription.markClosed();
+		else this.handles.set(subscription as Subscription<unknown>, handle);
 		return subscription;
 	}
 

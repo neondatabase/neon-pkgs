@@ -215,6 +215,39 @@ describe("RealtimeClient", () => {
 		}
 	});
 
+	it.each([
+		"returns",
+		"throws",
+	] as const)("closes an in-flight subscription when its WebSocket factory closes the client then %s", async (result) => {
+		vi.useFakeTimers({
+			toFake: ["setTimeout", "clearTimeout", "performance"],
+		});
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			webSocketFactory: (url, protocols) => {
+				client.close();
+				if (result === "throws") throw new Error("Factory interrupted");
+				return new FakeWebSocket(url, protocols);
+			},
+		});
+
+		const subscription = client.subscribe(query("initial"));
+		expect({
+			socketStates: FakeWebSocket.instances.map(
+				(socket) => socket.readyState,
+			),
+			subscription: subscription.getState().status,
+			activeTimers: vi.getTimerCount(),
+		}).toEqual({
+			socketStates: result === "returns" ? [3] : [],
+			subscription: "closed",
+			activeTimers: 0,
+		});
+		await expect(subscription.awaitTxId("42")).rejects.toThrow(
+			"subscription is closed",
+		);
+	});
+
 	it("uses a custom WebSocket factory", () => {
 		const webSocketFactory = vi.fn(
 			(url: string, protocols: string | string[]) =>
