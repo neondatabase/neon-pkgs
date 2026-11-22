@@ -2,7 +2,7 @@ import type { QueryRefreshEventSink } from "./diagnostics.js";
 import { subscriptionEventsFor } from "./diagnostics.js";
 import type { NoInferCompat } from "./no-infer.js";
 import { type SealedLiveQuery, validateSealedQuery } from "./sealed-query.js";
-import type { LiveQueryState, RawLiveQuerySubscription } from "./types.js";
+import type { RawLiveQuerySubscription } from "./types.js";
 
 const REFRESH_EARLY_MS = 10_000;
 const REFRESH_RETRY_MS = 1_000;
@@ -29,10 +29,6 @@ interface QueryRefreshControllerOptions<Row> {
 	readonly subscription?: RawLiveQuerySubscription<NoInferCompat<Row>>;
 }
 
-interface StatefulSubscription {
-	getState(): LiveQueryState;
-}
-
 /**
  * Schedules capability refreshes for framework integrations.
  *
@@ -56,7 +52,8 @@ export class QueryRefreshController<Row> {
 	private nextReplacementId = 0;
 	private appliedReplacementId = 0;
 	private refreshEvents: QueryRefreshEventSink;
-	private subscription?: StatefulSubscription;
+	private subscription?: RawLiveQuerySubscription<Row>;
+	private detachSubscriptionState?: () => void;
 
 	constructor(private readonly options: QueryRefreshControllerOptions<Row>) {
 		this.query = options.query;
@@ -97,6 +94,12 @@ export class QueryRefreshController<Row> {
 	): void {
 		this.subscription = subscription;
 		this.refreshEvents = subscriptionEventsFor(subscription).refresh;
+		if (this.active) {
+			this.watchSubscription();
+			if (subscription?.getState().status === "stale") {
+				this.scheduleRefresh(0);
+			}
+		}
 	}
 
 	/**
@@ -127,6 +130,7 @@ export class QueryRefreshController<Row> {
 		if (this.active) return;
 		this.active = true;
 		this.refreshStopped = false;
+		this.watchSubscription();
 		this.scheduleRefresh();
 	}
 
@@ -134,9 +138,31 @@ export class QueryRefreshController<Row> {
 	stop(): void {
 		this.active = false;
 		this.generation += 1;
+		this.detachSubscriptionState?.();
+		this.detachSubscriptionState = undefined;
 		this.clearTimer();
 		this.refreshInFlight = false;
 		this.refreshStopped = false;
+	}
+
+	private watchSubscription(): void {
+		this.detachSubscriptionState?.();
+		const subscription = this.subscription;
+		const generation = this.generation;
+		this.detachSubscriptionState = subscription?.onStateChange((state) => {
+			if (state.status !== "stale") return;
+			// The client can immediately leave stale when it already has a newer
+			// capability to try. Check after it finishes handling the transition.
+			void Promise.resolve().then(() => {
+				if (
+					this.isCurrent(generation) &&
+					this.subscription === subscription &&
+					subscription.getState().status === "stale"
+				) {
+					this.scheduleRefresh(0);
+				}
+			});
+		});
 	}
 
 	private scheduleRefresh(delay?: number): void {
@@ -144,7 +170,12 @@ export class QueryRefreshController<Row> {
 		if (!this.active || !this.refreshQuery || this.refreshStopped) return;
 		const refreshDelay =
 			delay ??
-			Math.max(0, this.query.expiresAt - Date.now() - REFRESH_EARLY_MS);
+			(this.subscription?.getState().status === "stale"
+				? 0
+				: Math.max(
+						0,
+						this.query.expiresAt - Date.now() - REFRESH_EARLY_MS,
+					));
 		this.refreshEvents.scheduled(refreshDelay, this.query.expiresAt);
 		this.refreshTimer = setTimeout(() => {
 			this.refreshTimer = undefined;

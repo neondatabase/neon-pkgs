@@ -423,10 +423,16 @@ function statefulSubscription(state: {
 	setState(next: LiveQueryState): void;
 } {
 	let current: LiveQueryState = { ...state, error: undefined };
+	const listeners = new Set<(state: LiveQueryState) => void>();
 	return Object.assign({} as RawLiveQuerySubscription<unknown>, {
 		getState: () => current,
+		onStateChange: (listener: (state: LiveQueryState) => void) => {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
 		setState: (next: LiveQueryState) => {
 			current = next;
+			for (const listener of listeners) listener(current);
 		},
 	});
 }

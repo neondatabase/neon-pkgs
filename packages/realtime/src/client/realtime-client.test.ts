@@ -1402,6 +1402,47 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
+	it("refreshes when the proxy expires a query before the scheduled refresh", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const initial = query("local expiry is later");
+		const replacement = { ...query("replacement"), expiresAt: 90_000 };
+		const refreshQuery = vi.fn(async () => replacement);
+		const subscription = client.subscribe(initial);
+		const controller = new QueryRefreshController({
+			query: initial,
+			refreshQuery,
+			renewSubscription: (renewal) => subscription.renew(renewal),
+			onRefreshExhausted: vi.fn(),
+			subscription,
+		});
+		const socket = connectAndAdmit();
+		baselineSync(socket, "cached");
+		try {
+			controller.start();
+			await vi.advanceTimersByTimeAsync(1_000);
+			expect(refreshQuery).not.toHaveBeenCalled();
+			socket.receive({
+				type: "subscription_error",
+				live_id: "41",
+				code: "authorization_expired",
+				message: "expired at the proxy",
+			});
+			expect(subscription.getState().status).toBe("stale");
+			await vi.advanceTimersByTimeAsync(1);
+			expect(refreshQuery).toHaveBeenCalledOnce();
+			expect(socket.sent.at(-1)).toMatchObject({
+				type: "subscribe",
+				authorization: replacement.capability,
+			});
+		} finally {
+			controller.stop();
+			client.close();
+		}
+	});
+
 	it("maps permanent subscription failures to error", async () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({
