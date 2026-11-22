@@ -1019,7 +1019,7 @@ await neon.consumption.perProject({
 
 Every method takes `orgId`, which defaults to the client's `orgId`; with neither, the call
 fails with a `NeonClientError` before any request. Role changes, member removal, the
-spending limit writes, and creating or revoking keys need an organization admin.
+spending threshold changes, and creating or revoking keys need an organization admin.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
@@ -1031,7 +1031,7 @@ spending limit writes, and creating or revoking keys need an organization admin.
 | `invitations.list({ orgId? })` | `Invitation[]` | |
 | `invitations.create({ orgId?, invitations })` | `Invitation[]` | `invitations`: `[{ email, role }]`; each invitee is emailed |
 | `spendingLimit.get({ orgId? })` | `SpendingLimitResponse` | `spending_limit_cents` is `null` when unset |
-| `spendingLimit.set({ orgId?, spendingLimitCents })` | `SpendingLimitResponse` | Launch and Scale plans; notifies at 80% and 100%, never suspends computes |
+| `spendingLimit.set({ orgId?, spendingLimitCents })` | `SpendingLimitResponse` | Launch and Scale plans; sets a spending notification threshold (emails at 80% and 100%, never suspends computes) |
 | `spendingLimit.delete({ orgId? })` | **→void** | idempotent |
 | `apiKeys.list({ orgId? })` | `OrgApiKeysListResponseItem[]` | `project_id` is set on project-scoped keys |
 | `apiKeys.create({ orgId?, keyName, projectId? })` | `OrgApiKeyCreateResponse` | the `key` token is shown **once**; needs a personal API key |

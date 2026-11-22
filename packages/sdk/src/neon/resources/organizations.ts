@@ -374,8 +374,8 @@ export class OrganizationInvitations<DThrow extends boolean> {
 }
 
 /**
- * The organization's monthly spending limit (Launch and Scale plans). The limit only
- * sends notifications at 80% and 100%; computes keep running past it.
+ * The organization's monthly spending notification threshold (Launch and Scale plans).
+ * It only sends email notifications at 80% and 100%; computes keep running past it.
  */
 export class OrganizationSpendingLimit<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
@@ -385,7 +385,7 @@ export class OrganizationSpendingLimit<DThrow extends boolean> {
 	}
 
 	/**
-	 * `spending_limit_cents` is `null` when no limit is set.
+	 * `spending_limit_cents` is `null` when no threshold is set.
 	 *
 	 * @apiCall GET /organizations/{org_id}/billing/spending_limit
 	 */

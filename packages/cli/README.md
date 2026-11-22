@@ -1597,7 +1597,7 @@ Every subcommand except `list` takes `--org-id`. Without it, the CLI uses the or
 
 `members update` and `invitations create` take `--role`: `admin`, `member`, `editor`, `viewer`, or `collaborator`. The API decides which of them an organization accepts. Every invitee is emailed, and anyone who already has a Neon account joins immediately.
 
-`spending-limit set` takes dollars with up to two decimals and sends cents. The limit sends emails at 80% and 100% and does not suspend computes. JSON and YAML output keep the API's `spending_limit_cents`, and `members list` keeps the API's `{ member, user }` items. Role changes, member removal, and the spending limit writes need an organization admin.
+`spending-limit set` takes dollars with up to two decimals and sends cents. It sets a spending notification threshold, not a cap: Neon emails organization admins at 80% and 100% and does not suspend computes. JSON and YAML output keep the API's `spending_limit_cents`, and `members list` keeps the API's `{ member, user }` items. Role changes, member removal, and spending threshold changes need an organization admin.
 
 ## Commands
 
