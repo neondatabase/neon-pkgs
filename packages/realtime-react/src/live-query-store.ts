@@ -21,6 +21,7 @@ export class ReactLiveQueryStore<Row> {
 	private readonly updateListeners = new Set<UpdateListener<Row>>();
 	private readonly initialSnapshot: LiveQuerySnapshot<Row>;
 	private readonly queryRefresh: QueryRefreshController<Row>;
+	private refreshSource?: { callback: () => Promise<SealedLiveQuery<Row>> };
 	private subscription?: MaterializedLiveQuerySubscription<Row>;
 	private detachForwarders?: () => void;
 	private refreshError?: LiveQueryError;
@@ -74,7 +75,17 @@ export class ReactLiveQueryStore<Row> {
 	setRefreshCallback(
 		refreshQuery: (() => Promise<SealedLiveQuery<Row>>) | undefined,
 	): void {
-		this.queryRefresh.setRefreshCallback(refreshQuery);
+		if (!refreshQuery) {
+			this.refreshSource = undefined;
+			this.queryRefresh.setRefreshCallback(undefined);
+		} else if (this.refreshSource) {
+			// Renders may create a new callback for the same active query.
+			this.refreshSource.callback = refreshQuery;
+		} else {
+			const source = { callback: refreshQuery };
+			this.refreshSource = source;
+			this.queryRefresh.setRefreshCallback(() => source.callback());
+		}
 	}
 
 	subscribe = (listener: () => void): (() => void) => {
