@@ -254,7 +254,7 @@ function createRealtimeCollectionOptions<
 					| { readonly error: Error; reported: boolean }
 					| undefined;
 				let rowIds = new Map<string, Key>();
-				let keys = new Map<Key, string>();
+				let keys = new Set<Key>();
 				let subscription: RawLiveQuerySubscription<Row>;
 				try {
 					subscription = client.subscribe(latestQuery, {
@@ -364,7 +364,7 @@ function createRealtimeCollectionOptions<
 				) => {
 					try {
 						const nextRowIds = new Map<string, Key>();
-						const nextKeys = new Map<Key, string>();
+						const nextKeys = new Set<Key>();
 						for (const { rowId, row } of rows) {
 							const key = config.getKey(row);
 							if (nextRowIds.has(rowId)) {
@@ -378,7 +378,7 @@ function createRealtimeCollectionOptions<
 								);
 							}
 							nextRowIds.set(rowId, key);
-							nextKeys.set(key, rowId);
+							nextKeys.add(key);
 						}
 
 						begin({ snapshot: true });
@@ -398,69 +398,58 @@ function createRealtimeCollectionOptions<
 				) => {
 					try {
 						const nextRowIds = new Map(rowIds);
-						const nextKeys = new Map(keys);
-						const writes: Array<
-							| { type: "insert" | "update"; value: Row }
-							| { type: "delete"; key: Key }
-						> = [];
+						const nextKeys = new Set(keys);
+						const releasedKeys = new Set<Key>();
+						const upserts = new Map<
+							string,
+							{ key: Key; row: Row }
+						>();
 
+						// Wire row IDs can change within a publication. Release all
+						// touched ownership before validating the final collection keys.
 						for (const change of changes) {
 							// Collection membership and values are independent of server order.
 							if (change.type === "move") continue;
+							const previousKey = rowIds.get(change.rowId);
+							if (previousKey !== undefined) {
+								nextKeys.delete(previousKey);
+								releasedKeys.add(previousKey);
+							}
 							if (change.type === "upsert") {
 								const key = config.getKey(change.row);
-								const previousKey = nextRowIds.get(
-									change.rowId,
-								);
-								const keyOwner = nextKeys.get(key);
-								if (
-									keyOwner !== undefined &&
-									keyOwner !== change.rowId
-								) {
-									throw new Error(
-										`Realtime upserted an existing key: ${String(key)}`,
-									);
-								}
-								if (previousKey === undefined) {
-									nextRowIds.set(change.rowId, key);
-									nextKeys.set(key, change.rowId);
-									writes.push({
-										type: "insert",
-										value: change.row,
-									});
-								} else if (key !== previousKey) {
-									nextKeys.delete(previousKey);
-									nextKeys.set(key, change.rowId);
-									nextRowIds.set(change.rowId, key);
-									writes.push({
-										type: "delete",
-										key: previousKey,
-									});
-									writes.push({
-										type: "insert",
-										value: change.row,
-									});
-								} else {
-									writes.push({
-										type: "update",
-										value: change.row,
-									});
-								}
-							} else if (change.type === "remove") {
-								const key = nextRowIds.get(change.rowId);
-								if (key === undefined) {
+								nextRowIds.set(change.rowId, key);
+								upserts.set(change.rowId, {
+									key,
+									row: change.row,
+								});
+							} else {
+								if (!nextRowIds.delete(change.rowId)) {
 									throw new Error(
 										`Realtime deleted an unknown row ID: ${change.rowId}`,
 									);
 								}
-								nextRowIds.delete(change.rowId);
-								nextKeys.delete(key);
-								writes.push({ type: "delete", key });
+								upserts.delete(change.rowId);
 							}
+						}
+						for (const { key } of upserts.values()) {
+							if (nextKeys.has(key)) {
+								throw new Error(
+									`Realtime upserted an existing key: ${String(key)}`,
+								);
+							}
+							nextKeys.add(key);
+							releasedKeys.delete(key);
 						}
 
 						begin();
-						for (const message of writes) write(message);
+						for (const key of releasedKeys)
+							write({ type: "delete", key });
+						for (const { key, row } of upserts.values()) {
+							write({
+								type: keys.has(key) ? "update" : "insert",
+								value: row,
+							});
+						}
 						const receipt = commit();
 						rowIds = nextRowIds;
 						keys = nextKeys;
