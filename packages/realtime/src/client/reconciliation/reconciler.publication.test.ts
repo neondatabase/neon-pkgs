@@ -327,6 +327,59 @@ describe("publication reconciliation", () => {
 		expect(right.publishBatch).toHaveBeenCalledOnce();
 	});
 
+	it("releases an admitted target retired during shared publication delivery", () => {
+		const first = target();
+		const retired = target();
+		const last = target();
+		const reconciler = new BaselineSyncPublicationReconciler();
+		for (const [liveId, delivery] of [
+			["1", first],
+			["2", retired],
+			["3", last],
+		] as const) {
+			reconciler.add({
+				liveId,
+				epoch: "1",
+				firstSequence: "1",
+				columnCount: 1,
+				target: delivery,
+				lifecycle: {
+					baselineCompleted() {},
+					interrupted() {},
+				},
+			});
+			completeEmptyBaselineSync(reconciler, liveId);
+		}
+		first.publishBatch.mockImplementationOnce(() => {
+			reconciler.deactivate("2");
+		});
+		const publicationId = "retire";
+		accept(reconciler, { type: "open", publication_id: publicationId });
+		const message = keyedResults(publicationId, 0, "1", "1", [
+			upsert(ROW_A, "value"),
+		]);
+		message.targets = ["1", "2", "3"].map((liveId) => ({
+			live_id: liveId,
+			epoch: "1",
+			sequence: "1",
+		}));
+		accept(reconciler, message);
+		accept(reconciler, commit(publicationId, 1));
+
+		const targets: ReadonlyMap<string, unknown> = Reflect.get(
+			reconciler,
+			"targets",
+		);
+		expect(targets.get("2")).toBeNull();
+		expect(retired.publishBatch).not.toHaveBeenCalled();
+		expect(last.publishBatch).toHaveBeenCalledOnce();
+
+		// A frame already in flight for the retired live ID remains recognizable.
+		completeEmptyBaselineSync(reconciler, "2");
+		reconciler.remove("2");
+		expect(targets.has("2")).toBe(false);
+	});
+
 	it("rejects a baseline sync interleaved into an open publication", () => {
 		const reconciler = subscribed(target());
 		accept(reconciler, { type: "open", publication_id: "p" });
