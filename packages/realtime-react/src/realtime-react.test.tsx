@@ -219,6 +219,63 @@ describe("Realtime React integration", () => {
 		expect(screen.getByText("live:stream")).toBeTruthy();
 	});
 
+	it.each([
+		"onUpdate",
+		"onStateChange",
+		"onChange",
+	] as const)("isolates failed %s listeners without blocking the hook", async (method) => {
+		const wire = wireClient();
+		let observed: UseLiveQueryResult<MessageRow> | undefined;
+		const view = render(
+			<RealtimeProvider client={wire.client}>
+				<Messages
+					query={query("listeners")}
+					observe={(result) => {
+						observed = result;
+					}}
+				/>
+			</RealtimeProvider>,
+		);
+		const unhandled = vi.fn();
+		process.on("unhandledRejection", unhandled);
+		try {
+			if (!observed) throw new Error("Expected the query to render");
+			const { utils } = observed;
+			let finish!: () => void;
+			const pending = new Promise<void>((resolve) => {
+				finish = resolve;
+			});
+			utils[method](() => {
+				throw new Error("synchronous listener failure");
+			});
+			let asyncCalls = 0;
+			utils[method](async () => {
+				asyncCalls += 1;
+				await pending;
+				throw new Error("asynchronous listener failure");
+			});
+			const healthy = vi.fn();
+			utils[method](healthy);
+			act(() => wire.baseline());
+			expect(asyncCalls).toBe(1);
+			expect(healthy).toHaveBeenCalledOnce();
+			const confirmed = utils.awaitTxId("42");
+			wire.receive({
+				type: "progress",
+				mvcc: { xmin: "43", xmax: "43", xip: [] },
+			});
+			await confirmed;
+			expect(screen.getByText("live:before")).toBeTruthy();
+			finish();
+			await new Promise<void>((resolve) => setTimeout(resolve, 0));
+			expect(unhandled).not.toHaveBeenCalled();
+		} finally {
+			process.off("unhandledRejection", unhandled);
+			view.unmount();
+			wire.client.close();
+		}
+	});
+
 	it("replaces subscriptions when query identity changes", () => {
 		const client = new TestClient<MessageRow>();
 		const first = query("query-1");

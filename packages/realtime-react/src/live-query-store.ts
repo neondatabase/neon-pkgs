@@ -221,7 +221,13 @@ function notify<Arguments extends readonly unknown[]>(
 ): void {
 	for (const listener of [...listeners]) {
 		try {
-			listener(...args);
+			const result: unknown = listener(...args);
+			if (
+				typeof (result as PromiseLike<unknown> | undefined)?.then ===
+				"function"
+			) {
+				void Promise.resolve(result).catch(() => undefined);
+			}
 		} catch {
 			// One application listener cannot interrupt React or stream delivery.
 		}
