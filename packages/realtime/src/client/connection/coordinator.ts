@@ -643,6 +643,11 @@ export class ConnectionCoordinator {
 	}
 
 	private connectionError(code: string, message: string): void {
+		// Give a server-reported protocol error one reconnect per outage.
+		const retryProtocolError =
+			code === "protocol_error" &&
+			this.reconnect &&
+			!this.reconnect.active;
 		const retryable = [
 			"resource_exhausted",
 			"slow_consumer",
@@ -651,7 +656,7 @@ export class ConnectionCoordinator {
 			"fence_failed",
 			"internal_error",
 		].includes(code);
-		if (retryable) {
+		if (retryable || retryProtocolError) {
 			this.pendingConnectionError = new ConnectionCoordinatorError(
 				code,
 				true,

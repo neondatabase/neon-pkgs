@@ -701,18 +701,59 @@ describe("ConnectionCoordinator", () => {
 		expect(events).toEqual(["connection_failed"]);
 	});
 
-	it("fails a subscription created after a terminal connection failure", () => {
+	it("resubscribes active queries after a server protocol error", async () => {
+		vi.useFakeTimers();
+		const coordinator = createCoordinator();
+		const callbacks = [target(), target()] as const;
+		coordinator.subscribe({ capability: "one" }, callbacks[0]);
+		coordinator.subscribe({ capability: "two" }, callbacks[1]);
+		const first = admit();
+		const protocolError = {
+			type: "connection_error",
+			code: "protocol_error",
+			message: "protocol error",
+		};
+
+		first.receive(protocolError);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		const second = admit();
+		expect(second.sent).toEqual([
+			expect.objectContaining({
+				type: "subscribe",
+				authorization: "one",
+			}),
+			expect.objectContaining({
+				type: "subscribe",
+				authorization: "two",
+			}),
+		]);
+		for (const callback of callbacks) {
+			expect(callback.connecting).toHaveBeenCalledOnce();
+			expect(callback.failed).not.toHaveBeenCalled();
+		}
+
+		await vi.advanceTimersByTimeAsync(30);
+		second.receive(protocolError);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(3);
+		coordinator.close();
+	});
+
+	it("fails active and future subscriptions after a repeated protocol error", async () => {
+		vi.useFakeTimers();
 		const coordinator = createCoordinator();
 		const first = target();
 		coordinator.subscribe({ capability: "one" }, first);
-		const socket = defined(FakeWebSocket.instances[0]);
-		socket.open();
-		socket.receive({ type: "ready" });
-		socket.receive({
+		const protocolError = {
 			type: "connection_error",
 			code: "protocol_error",
 			message: "connection cannot recover",
-		});
+		};
+		admit().receive(protocolError);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		admit().receive(protocolError);
 		expect(first.failed).toHaveBeenCalledOnce();
 
 		const second = target();
@@ -725,7 +766,9 @@ describe("ConnectionCoordinator", () => {
 				retryable: false,
 			}),
 		);
-		expect(FakeWebSocket.instances).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(30);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		coordinator.close();
 	});
 
 	it("probes an idle ready connection and times it out without inbound activity", async () => {
