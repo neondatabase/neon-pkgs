@@ -63,6 +63,21 @@ const SILENT_RECONCILIATION_EVENTS: ReconciliationEventSink = Object.freeze({
 	publicationCommitted: () => undefined,
 });
 
+const rejectInactiveDelivery = (): never => {
+	throw new Error("Cannot deliver to an inactive Realtime target");
+};
+const INACTIVE_TARGET: ReconciliationTarget = {
+	baselineSyncStarted: rejectInactiveDelivery,
+	prepare: rejectInactiveDelivery,
+	publishReset: rejectInactiveDelivery,
+	publishBatch: rejectInactiveDelivery,
+	applyProgress: rejectInactiveDelivery,
+	caughtUp: rejectInactiveDelivery,
+	baselineSyncCompleted: rejectInactiveDelivery,
+	resetRequired: rejectInactiveDelivery,
+	decodeFailed: rejectInactiveDelivery,
+};
+
 interface BaselineSyncVersion {
 	readonly epoch: bigint;
 	readonly attempt: bigint;
@@ -150,6 +165,13 @@ export class BaselineSyncPublicationReconciler {
 			backlog: [],
 			live: false,
 		});
+	}
+
+	addInactive(
+		input: Omit<AddReconciliationTarget, "target" | "lifecycle">,
+	): void {
+		this.add({ ...input, target: INACTIVE_TARGET });
+		this.deactivate(input.liveId);
 	}
 
 	/**

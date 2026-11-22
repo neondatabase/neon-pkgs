@@ -8,6 +8,7 @@ import type { WebSocketLike } from "../types.js";
 import {
 	type ConnectionCallbacks,
 	ConnectionCoordinator,
+	ConnectionCoordinatorError,
 	type ConnectionCoordinatorOptions,
 } from "./coordinator.js";
 
@@ -104,6 +105,58 @@ afterEach(() => {
 });
 
 describe("ConnectionCoordinator", () => {
+	it.each([
+		"unsubscribe",
+		"local failure",
+	])("releases a pending query after %s and detaches a late admission", (stop) => {
+		const coordinator = createCoordinator();
+		const peer = target();
+		coordinator.subscribe({ capability: "peer" }, peer);
+		const socket = admit();
+		const retired = target();
+		const handle = coordinator.subscribe(
+			{ capability: "retired" },
+			retired,
+		);
+		if (stop === "unsubscribe") handle.unsubscribe();
+		else
+			handle.fail(
+				new ConnectionCoordinatorError(
+					"fixture_timeout",
+					false,
+					"Timed out",
+				),
+			);
+		expect(coordinator).toHaveProperty(
+			"pendingRequests",
+			new Map([["2", null]]),
+		);
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+		expect(socket.sent.at(-1)).toEqual({
+			type: "unsubscribe",
+			live_id: "42",
+		});
+		socket.receive({
+			type: "baseline_sync_start",
+			live_id: "42",
+			epoch: "1",
+			baseline_sync_attempt: "1",
+			mvcc: { xmin: "1", xmax: "2", xip: [] },
+		});
+		socket.receive({ type: "unsubscribed", live_id: "42" });
+		expect(coordinator).toHaveProperty("pendingRequests", new Map());
+		expect(retired.admitted).not.toHaveBeenCalled();
+		expect(peer.failed).not.toHaveBeenCalled();
+		coordinator.close();
+	});
+
 	it("recovers from a handshake error without waiting for a close event", async () => {
 		vi.useFakeTimers();
 		const callbacks = target();

@@ -132,7 +132,11 @@ export class ConnectionCoordinator {
 	// The managed subset participating in the wire lifecycle. Subscriptions
 	// awaiting replacement query, failed, or closed are excluded.
 	private readonly activeSubscriptions = new Set<ManagedSubscription>();
-	private readonly pendingRequests = new Map<string, ManagedSubscription>();
+	// A null entry remembers a retired request ID without retaining its query.
+	private readonly pendingRequests = new Map<
+		string,
+		ManagedSubscription | null
+	>();
 	private readonly liveSubscriptions = new Map<string, ManagedSubscription>();
 	private readonly detachingLiveIds = new Set<string>();
 	private readonly reconciler: BaselineSyncPublicationReconciler;
@@ -300,6 +304,7 @@ export class ConnectionCoordinator {
 	private unsubscribe(subscription: ManagedSubscription): void {
 		if (subscription.state === "closed") return;
 		subscription.recovery.cancel();
+		this.retirePendingRequest(subscription);
 		subscription.state = "closed";
 		this.managedSubscriptions.delete(subscription);
 		this.activeSubscriptions.delete(subscription);
@@ -461,32 +466,27 @@ export class ConnectionCoordinator {
 	): void {
 		const subscription = this.pendingRequests.get(message.request_id);
 		if (
-			!subscription ||
-			subscription.liveId ||
+			subscription === undefined ||
+			subscription?.liveId ||
 			this.liveSubscriptions.has(message.live_id)
 		) {
 			throw new ProtocolError("invalid subscription admission");
 		}
 		this.pendingRequests.delete(message.request_id);
-		subscription.requestId = undefined;
-		if (
-			subscription.state === "closed" ||
-			subscription.state === "failed"
-		) {
+		if (subscription === null) {
 			// Baseline/publication frames may already follow this admission on
 			// the wire. Keep an inactive target until Unsubscribe is acknowledged.
-			this.reconciler.add({
+			this.reconciler.addInactive({
 				liveId: message.live_id,
 				epoch: message.epoch,
 				firstSequence: message.first_sequence,
 				columnCount: message.columns.length,
-				target: subscription.callbacks.reconciliation,
 			});
-			this.reconciler.deactivate(message.live_id);
 			this.detachingLiveIds.add(message.live_id);
 			this.send({ type: "unsubscribe", live_id: message.live_id });
 			return;
 		}
+		subscription.requestId = undefined;
 		if (subscription.state !== "active") {
 			throw new ProtocolError("admitted an inactive subscription");
 		}
@@ -521,12 +521,11 @@ export class ConnectionCoordinator {
 		message: Extract<ServerMessage, { type: "subscribe_rejected" }>,
 	): void {
 		const subscription = this.pendingRequests.get(message.request_id);
-		if (!subscription)
+		if (subscription === undefined)
 			throw new ProtocolError("unknown subscribe request ID");
 		this.pendingRequests.delete(message.request_id);
+		if (subscription === null) return;
 		subscription.requestId = undefined;
-		if (subscription.state === "closed" || subscription.state === "failed")
-			return;
 		if (
 			message.code === "backend_overloaded" ||
 			message.code === "backend_unavailable" ||
@@ -852,6 +851,7 @@ export class ConnectionCoordinator {
 		if (subscription.state === "failed" || subscription.state === "closed")
 			return;
 		subscription.recovery.cancel();
+		this.retirePendingRequest(subscription);
 		subscription.state = "failed";
 		this.activeSubscriptions.delete(subscription);
 		const liveId = subscription.liveId;
@@ -870,6 +870,12 @@ export class ConnectionCoordinator {
 		if (this.activeSubscriptions.size === 0) {
 			this.cancelReconnectEpisode();
 			this.closeSocket(NORMAL_CLOSE, "no active subscriptions");
+		}
+	}
+
+	private retirePendingRequest(subscription: ManagedSubscription): void {
+		if (subscription.requestId !== undefined) {
+			this.pendingRequests.set(subscription.requestId, null);
 		}
 	}
 
