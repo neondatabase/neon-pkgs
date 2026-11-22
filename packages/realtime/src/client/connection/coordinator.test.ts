@@ -468,6 +468,39 @@ describe("ConnectionCoordinator", () => {
 		]);
 	});
 
+	it("does not acknowledge an interrupted renewal with a different admitted capability", async () => {
+		vi.useFakeTimers();
+		const coordinator = createCoordinator();
+		const handle = coordinator.subscribe(
+			{ capability: "initial" },
+			target(),
+		);
+		const original = admit();
+		const older = handle.renew({ capability: "older" });
+		const newest = handle.renew({ capability: "newest" });
+		const renewals = Promise.allSettled([older, newest]);
+		try {
+			expect(original.sent.at(-1)).toMatchObject({
+				type: "renew",
+				authorization: "older",
+			});
+			original.disconnect();
+
+			await vi.advanceTimersByTimeAsync(1);
+			const replacement = admit();
+			expect(replacement).not.toBe(original);
+			expect(replacement.sent).toEqual([
+				{ type: "subscribe", request_id: "2", authorization: "newest" },
+			]);
+			expect(await renewals).toMatchObject([
+				{ status: "rejected", reason: { code: "renewal_superseded" } },
+				{ status: "fulfilled" },
+			]);
+		} finally {
+			coordinator.close();
+		}
+	});
+
 	it("coalesces queued renewals while disconnected", async () => {
 		vi.useFakeTimers();
 		const coordinator = createCoordinator();
