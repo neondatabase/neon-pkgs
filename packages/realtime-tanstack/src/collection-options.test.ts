@@ -30,6 +30,7 @@ afterEach(async () => {
 	for (const cleanup of cleanups.splice(0)) await cleanup();
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
+	vi.useRealTimers();
 });
 
 describe("Realtime TanStack DB collection", () => {
@@ -452,6 +453,84 @@ describe("Realtime TanStack DB collection", () => {
 		expect(client.latest().unsubscribed).toBe(true);
 	});
 
+	it.each([
+		{ status: 404, classify: true, terminal: true },
+		{ status: 503, classify: true, terminal: false },
+		{ status: 404, classify: false, terminal: false },
+	])("handles refresh HTTP $status after expiry with classification $classify", async ({
+		status,
+		classify,
+		terminal,
+	}) => {
+		vi.useFakeTimers();
+		const wire = wireClient();
+		const failure = Object.assign(new Error(`Signing failed (${status})`), {
+			status,
+		});
+		let rejectRefresh!: (error: Error) => void;
+		const firstRefresh = new Promise<SealedLiveQuery<MessageRow>>(
+			(_resolve, reject) => {
+				rejectRefresh = reject;
+			},
+		);
+		const refreshQuery = vi.fn(async () => query("replacement"));
+		refreshQuery.mockImplementationOnce(() => firstRefresh);
+		const collection = createCollection(
+			realtimeCollectionOptions({
+				id: "refresh-messages",
+				client: wire.client,
+				query: query("initial", 20),
+				refreshQuery,
+				isTerminalRefreshError: classify
+					? (error) =>
+							error instanceof Error &&
+							"status" in error &&
+							error.status === 404
+					: undefined,
+				getKey: (message) => message.id,
+			}),
+		);
+		cleanups.push(async () => {
+			await collection.cleanup();
+			wire.client.close();
+		});
+		const preload = collection.preload();
+		wire.baseline();
+		await preload;
+		expect(collection.get(1)).toMatchObject({ title: "before" });
+
+		await vi.advanceTimersByTimeAsync(20_000);
+		expect(refreshQuery).toHaveBeenCalledOnce();
+		wire.receive({
+			type: "subscription_error",
+			live_id: "1",
+			code: "authorization_expired",
+			message: "Capability expired",
+		});
+		const waiting = collection.utils.awaitTxId("2", 5_000).then(
+			() => true,
+			(error: unknown) => error,
+		);
+		rejectRefresh(failure);
+		await vi.advanceTimersByTimeAsync(1_001);
+
+		if (terminal) {
+			expect(refreshQuery).toHaveBeenCalledOnce();
+			expect(collection.health.error?.message).toBe(failure.message);
+			await expect(waiting).resolves.toBe(failure);
+		} else {
+			expect(refreshQuery).toHaveBeenCalledTimes(2);
+			wire.baseline("2", "after");
+			wire.receive({
+				type: "progress",
+				mvcc: { xmin: "3", xmax: "3", xip: [] },
+			});
+			await expect(waiting).resolves.toBe(true);
+			expect(collection.get(1)).toMatchObject({ title: "after" });
+			expect(collection.health.error).toBeNull();
+		}
+	});
+
 	it("renews expiring query without changing the collection API", async () => {
 		const client = new TestClient<MessageRow>();
 		const replacement = query("query-2", 3_000);
@@ -848,12 +927,12 @@ function wireClient() {
 	return {
 		client,
 		receive,
-		baseline: () => {
-			receive({ type: "ready" });
+		baseline: (requestId = "1", title = "before") => {
+			if (requestId === "1") receive({ type: "ready" });
 			receive({
 				type: "subscribed",
-				request_id: "1",
-				live_id: "1",
+				request_id: requestId,
+				live_id: requestId,
 				epoch: "1",
 				first_sequence: "1",
 				columns: [
@@ -867,7 +946,7 @@ function wireClient() {
 				],
 			});
 			const target = {
-				live_id: "1",
+				live_id: requestId,
 				epoch: "1",
 				baseline_sync_attempt: "1",
 			};
@@ -880,7 +959,7 @@ function wireClient() {
 				type: "baseline_sync_batch",
 				...target,
 				index: 0,
-				rows: [{ row_key: "a".repeat(64), values: ["1", "before"] }],
+				rows: [{ row_key: "a".repeat(64), values: ["1", title] }],
 			});
 			receive({ type: "baseline_sync_end", ...target, batch_count: 1 });
 		},

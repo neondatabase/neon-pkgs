@@ -86,7 +86,9 @@ refreshed. If that query has expired, the run calls `refreshQuery` straight
 away and loads once the fresh query is accepted. Without `refreshQuery`, a run
 that starts after the query expired never receives rows: a restarted
 collection stays loading and a reload never completes. Pass `refreshQuery` to
-any collection that can outlive its query.
+any collection that can outlive its query. If the endpoint can distinguish
+permanent failures from temporary ones, pass `isTerminalRefreshError` to stop
+synchronization and report the failure through collection health.
 
 ## Optimistic mutations
 

@@ -12,13 +12,15 @@ interface QueryRefreshControllerOptions<Row> {
 	readonly query: SealedLiveQuery<Row>;
 	/** Callback that obtains a replacement capability for the same query. */
 	readonly refreshQuery?: () => Promise<SealedLiveQuery<NoInferCompat<Row>>>;
+	/** Return true to stop when `refreshQuery` rejects with a permanent error. */
+	readonly isTerminalRefreshError?: (error: unknown) => boolean;
 	/** Renew the underlying subscription with a replacement query. */
 	readonly renewSubscription: (
 		query: SealedLiveQuery<NoInferCompat<Row>>,
 	) => Promise<void>;
 	/** Called after the underlying subscription has been renewed successfully. */
 	readonly onSubscriptionRenewed?: () => void;
-	/** Called when invalid replacement data permanently stops automatic refresh. */
+	/** Called when a terminal error or invalid replacement stops automatic refresh. */
 	readonly onRefreshExhausted: (error: unknown) => void;
 	/**
 	 * Subscription whose diagnostic context receives refresh lifecycle events.
@@ -41,7 +43,8 @@ interface StatefulSubscription {
  * authors can use it to refresh shortly before expiry and keep retrying across
  * capability expiry or an arbitrarily long transport outage. Refreshes stop
  * once the associated subscription is in error or closed, because neither
- * state can accept a replacement capability.
+ * state can accept a replacement capability. Integrations may also identify
+ * permanent callback errors with `isTerminalRefreshError`.
  *
  * @typeParam Row - Row produced by the sealed query.
  */
@@ -179,9 +182,7 @@ export class QueryRefreshController<Row> {
 				validateSealedQuery(query);
 				this.assertSameQuery(query);
 			} catch (error) {
-				this.refreshStopped = true;
-				this.refreshEvents.stopped(error);
-				this.options.onRefreshExhausted(error);
+				this.stopRefresh(error);
 				return;
 			}
 			this.refreshEvents.callbackSucceeded();
@@ -205,6 +206,17 @@ export class QueryRefreshController<Row> {
 			this.refreshEvents.callbackFailed(error);
 			if (this.subscriptionEnded()) {
 				this.refreshStopped = true;
+				return;
+			}
+			let terminal: boolean | undefined;
+			try {
+				terminal = this.options.isTerminalRefreshError?.(error);
+			} catch (classifierError) {
+				this.stopRefresh(classifierError);
+				return;
+			}
+			if (terminal) {
+				this.stopRefresh(error);
 				return;
 			}
 			this.scheduleRefresh(REFRESH_RETRY_MS);
@@ -232,6 +244,13 @@ export class QueryRefreshController<Row> {
 			}
 			this.scheduleRefresh(REFRESH_RETRY_MS);
 		}
+	}
+
+	private stopRefresh(error: unknown): void {
+		this.refreshStopped = true;
+		this.clearTimer();
+		this.refreshEvents.stopped(error);
+		this.options.onRefreshExhausted(error);
 	}
 
 	private subscriptionEnded(): boolean {
