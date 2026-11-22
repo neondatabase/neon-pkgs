@@ -127,7 +127,11 @@ describe("ConnectionCoordinator", () => {
 					"Timed out",
 				),
 			);
-		expect(coordinator["pendingRequests"].get("2")).toBeNull();
+		const pendingRequests: Map<string, unknown> = Reflect.get(
+			coordinator,
+			"pendingRequests",
+		);
+		expect(pendingRequests.get("2")).toBeNull();
 		socket.receive({
 			type: "subscribed",
 			request_id: "2",
@@ -148,7 +152,7 @@ describe("ConnectionCoordinator", () => {
 			mvcc: { xmin: "1", xmax: "2", xip: [] },
 		});
 		socket.receive({ type: "unsubscribed", live_id: "42" });
-		expect(coordinator["pendingRequests"].size).toBe(0);
+		expect(pendingRequests.size).toBe(0);
 		expect(retired.admitted).not.toHaveBeenCalled();
 		expect(peer.failed).not.toHaveBeenCalled();
 		coordinator.close();
