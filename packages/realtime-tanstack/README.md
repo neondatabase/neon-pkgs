@@ -47,13 +47,34 @@ to `realtimeCollectionOptions()` and read the collection with TanStack DB, for
 example with `useLiveQuery` from `@tanstack/react-db`. `RealtimeProvider` and
 `useRealtimeClient()` are only one way to share a client through React context.
 
-`client`, `query`, and `getKey` are required. `getKey` must return a
-stable unique string or number for every row. Standard collection options such
+Pass `client`, `getKey`, and either `query` or `initialQuery`.
+`getKey` must return a stable unique string or number for every row. Standard collection options such
 as `id`, `schema`, garbage collection, collation, and mutation handlers are
 forwarded to TanStack DB.
 
 The sealed query preserves its live row type, including values such as `Date`,
 through JSON-aware RPC typing.
+
+Use `initialQuery` to declare the collection synchronously and request its
+first capability when synchronization starts. Use `refreshQuery` to renew
+the capability after the initial acquisition:
+
+```ts
+export const todos = createCollection(realtimeCollectionOptions({
+  id: "todos",
+  client,
+  initialQuery: (signal) => fetchSealedTodos(signal),
+  refreshQuery: () => fetchSealedTodos(),
+  getKey: (todo) => todo.id,
+}));
+```
+
+The supplier receives an abort signal for its sync run. The collection stays
+loading until its baseline arrives. A supplier rejection fails the first load
+and any transaction waits. Cleanup aborts a pending supplier and discards a
+capability it returns afterward. A restart can reuse the latest acquired
+capability under the same rules as the sealed-query form. Set a deadline or
+retry policy in the supplier when your application's signing request needs one.
 
 The integration synchronizes eagerly. It applies each complete-row replacement
 or incremental change batch as one TanStack sync transaction. Realtime

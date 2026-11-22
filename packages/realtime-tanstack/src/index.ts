@@ -5,6 +5,7 @@
  */
 
 export type {
+	LazyRealtimeCollectionConfig,
 	RealtimeCollectionConfig,
 	RealtimeCollectionOptions,
 	RealtimeCollectionUtils,

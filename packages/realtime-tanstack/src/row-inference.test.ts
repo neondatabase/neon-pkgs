@@ -42,6 +42,18 @@ it("infers collection rows from the sealed query, not callbacks", () => {
 			refreshQuery: async () => weakerQuery,
 			getKey: (row) => row.id,
 		});
+		const lazy = realtimeCollectionOptions({
+			client,
+			initialQuery: async (signal) => {
+				expectTypeOf(signal).toEqualTypeOf<AbortSignal>();
+				return query;
+			},
+			refreshQuery: async () => query,
+			getKey: (row) => row.id,
+		});
+		expectTypeOf(createCollection(lazy).get(1)).toEqualTypeOf<
+			WithVirtualProps<TimestampRow, number> | undefined
+		>();
 		const broadCallback = realtimeCollectionOptions({
 			client,
 			query,

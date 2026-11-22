@@ -77,6 +77,32 @@ export interface RealtimeCollectionConfig<
 	readonly getKey: (row: Row) => Key;
 }
 
+/** Configuration that acquires its first capability when a sync run starts. */
+export type LazyRealtimeCollectionConfig<
+	Row extends object,
+	Key extends string | number = string | number,
+	Schema extends StandardSchemaV1 = never,
+> = Omit<RealtimeCollectionConfig<Row, Key, Schema>, "query"> & {
+	readonly query?: never;
+	/**
+	 * Obtain the initial capability for this collection. A stopped sync run
+	 * aborts the signal and ignores a capability returned afterward.
+	 */
+	readonly initialQuery: (
+		signal: AbortSignal,
+	) => Promise<SealedLiveQuery<Row>>;
+};
+
+type RealtimeCollectionInput<
+	Row extends object,
+	Key extends string | number,
+	Schema extends StandardSchemaV1,
+> =
+	| (RealtimeCollectionConfig<Row, Key, Schema> & {
+			readonly initialQuery?: never;
+	  })
+	| LazyRealtimeCollectionConfig<Row, Key, Schema>;
+
 /**
  * TanStack DB collection options produced by {@link realtimeCollectionOptions}.
  *
@@ -115,9 +141,15 @@ export function realtimeCollectionOptions<
 	Schema extends StandardSchemaV1 = never,
 >(
 	// Infer rows from the query, then check collection options against that type.
-	config: RealtimeCollectionConfig<NoInferCompat<Row>, Key, Schema> & {
-		readonly query: SealedLiveQuery<Row>;
-	},
+	config: RealtimeCollectionInput<NoInferCompat<Row>, Key, Schema> &
+		(
+			| { readonly query: SealedLiveQuery<Row> }
+			| {
+					readonly initialQuery: (
+						signal: AbortSignal,
+					) => Promise<SealedLiveQuery<Row>>;
+			  }
+		),
 ): RealtimeCollectionOptions<Row, Key, Schema> {
 	const createOptions = () => createRealtimeCollectionOptions(config);
 	return withCollectionConfigFactory(createOptions(), createOptions);
@@ -156,13 +188,13 @@ function createRealtimeCollectionOptions<
 	Key extends string | number,
 	Schema extends StandardSchemaV1,
 >(
-	config: RealtimeCollectionConfig<Row, Key, Schema>,
+	config: RealtimeCollectionInput<Row, Key, Schema>,
 ): RealtimeCollectionOptions<Row, Key, Schema> {
-	const { client, query: initialQuery, refreshQuery, ...baseConfig } = config;
+	const { client, query, initialQuery, refreshQuery, ...baseConfig } = config;
 	// The newest capability this collection has obtained. A restarted or
 	// reloaded sync run subscribes with it rather than with the initial query,
 	// which has often expired by then.
-	let latestQuery = initialQuery;
+	let latestQuery = query;
 	let activeSubscription: RawLiveQuerySubscription<Row> | undefined;
 	let inactiveSubscriptionFailure: { readonly error: unknown } | undefined;
 	const terminalSubscriptionFailures = new WeakMap<
@@ -231,7 +263,7 @@ function createRealtimeCollectionOptions<
 		},
 	});
 
-	const options: RealtimeCollectionOptions<Row, Key, Schema> = {
+	const options = {
 		...baseConfig,
 		syncMode: "eager",
 		utils,
@@ -246,6 +278,9 @@ function createRealtimeCollectionOptions<
 				reportHealthy,
 				fail,
 			}) => {
+				const sealed = latestQuery;
+				if (!sealed)
+					throw new Error("Realtime sync requires a sealed query");
 				let cleaned = false;
 				let stopped = false;
 				let ready = false;
@@ -257,7 +292,7 @@ function createRealtimeCollectionOptions<
 				let keys = new Map<Key, string>();
 				let subscription: RawLiveQuerySubscription<Row>;
 				try {
-					subscription = client.subscribe(latestQuery, {
+					subscription = client.subscribe(sealed, {
 						materialize: false,
 					});
 				} catch (error) {
@@ -306,7 +341,7 @@ function createRealtimeCollectionOptions<
 					fail(error);
 				};
 				queryRefresh = new QueryRefreshController({
-					query: latestQuery,
+					query: sealed,
 					refreshQuery,
 					renewSubscription: (replacement) =>
 						subscription.renew(replacement),
@@ -515,7 +550,62 @@ function createRealtimeCollectionOptions<
 				};
 			},
 		},
-	};
+	} satisfies RealtimeCollectionOptions<Row, Key, Schema>;
 
-	return options;
+	if (!initialQuery) return options;
+	return {
+		...options,
+		sync: {
+			...options.sync,
+			sync: (params) => {
+				if (latestQuery) return options.sync.sync(params);
+
+				const controller = new AbortController();
+				const cleanupError = new Error(
+					"Realtime collection was cleaned up",
+				);
+				let unsubscribe: (() => void) | undefined;
+				let acquisitionFailure: { readonly error: unknown } | undefined;
+				let cancelAcquisition!: (error: Error) => void;
+				const canceled = new Promise<never>((_, reject) => {
+					cancelAcquisition = reject;
+				});
+				void Promise.race([
+					Promise.resolve().then(() => {
+						controller.signal.throwIfAborted();
+						return initialQuery(controller.signal);
+					}),
+					canceled,
+				])
+					.then((sealed) => {
+						if (controller.signal.aborted) return;
+						latestQuery = sealed;
+						const dispose = options.sync.sync(params);
+						if (controller.signal.aborted) dispose();
+						else unsubscribe = dispose;
+					})
+					.catch((error: unknown) => {
+						if (controller.signal.aborted) return;
+						acquisitionFailure = { error };
+						inactiveSubscriptionFailure = acquisitionFailure;
+						settleSyncStartWaiters(acquisitionFailure);
+						params.fail(error);
+					});
+				return () => {
+					controller.abort(cleanupError);
+					cancelAcquisition(cleanupError);
+					if (unsubscribe) {
+						unsubscribe();
+					} else {
+						if (
+							inactiveSubscriptionFailure === acquisitionFailure
+						) {
+							inactiveSubscriptionFailure = undefined;
+						}
+						settleSyncStartWaiters({ error: cleanupError });
+					}
+				};
+			},
+		},
+	};
 }
