@@ -151,6 +151,83 @@ describe("Realtime TanStack DB collection", () => {
 		await cancelled;
 	});
 
+	it.each([
+		"upsert first",
+		"remove first",
+		"duplicate final key",
+	] as const)("validates collection keys at publication commit (%s)", async (order) => {
+		const wire = wireClient();
+		const collection = createCollection(
+			realtimeCollectionOptions({
+				client: wire.client,
+				query: query("key-transfer"),
+				getKey: (message) => message.id,
+			}),
+		);
+		cleanups.push(async () => {
+			await collection.cleanup();
+			wire.client.close();
+		});
+		const preload = collection.preload();
+		wire.baseline();
+		await preload;
+		const observedValues: string[] = [];
+		const listener = collection.subscribeChanges(
+			() => observedValues.push(collection.get(1)?.title ?? "missing"),
+			{ includeInitialState: false },
+		);
+		const upsert = {
+			op: "upsert",
+			row_key: "b".repeat(64),
+			values: ["1", "replacement"],
+		};
+		const remove = { op: "remove", row_key: "a".repeat(64) };
+		const changes =
+			order === "remove first"
+				? [remove, upsert]
+				: order === "upsert first"
+					? [upsert, remove]
+					: [
+							{
+								op: "upsert",
+								row_key: "c".repeat(64),
+								values: ["2", "unrelated"],
+							},
+							upsert,
+						];
+		wire.receive({ type: "open", publication_id: "transfer" });
+		wire.receive({
+			type: "keyed_results",
+			publication_id: "transfer",
+			index: 0,
+			txids: ["42"],
+			targets: [{ live_id: "1", epoch: "1", sequence: "1" }],
+			changes,
+		});
+		expect(collection.get(1)?.title).toBe("before");
+		expect(observedValues).toEqual([]);
+		wire.receive({
+			type: "commit",
+			publication_id: "transfer",
+			body_count: 1,
+			frontier: { lsn: "0/10" },
+		});
+		if (order === "duplicate final key") {
+			expect(collection.health.error?.cause).toMatchObject({
+				message: "Realtime upserted an existing key: 1",
+			});
+			expect(collection.get(1)?.title).toBe("before");
+			expect(collection.has(2)).toBe(false);
+			expect(observedValues).toEqual([]);
+		} else {
+			expect(collection.health.error).toBeNull();
+			expect(collection.get(1)?.title).toBe("replacement");
+			expect(observedValues).toEqual(["replacement"]);
+			await expect(collection.utils.awaitTxId("42")).resolves.toBe(true);
+		}
+		listener.unsubscribe();
+	});
+
 	it("installs rows and changes as authoritative collection state", async () => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
