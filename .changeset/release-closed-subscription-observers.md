@@ -2,4 +2,4 @@
 "@neon/realtime": patch
 ---
 
-Release observer callbacks when a subscription closes, and ignore new listeners registered on a closed subscription.
+Release observer callbacks and unpublished replay batches when a subscription closes. Ignore new listeners registered on a closed subscription.

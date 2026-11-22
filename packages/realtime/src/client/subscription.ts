@@ -379,6 +379,7 @@ export class Subscription<Row>
 	markClosed(): void {
 		if (this.closed) return;
 		this.closed = true;
+		this.resetSynchronization();
 		this.transactions.close();
 		this.setLifecycle(
 			Object.freeze({ status: "closed", error: undefined }),
