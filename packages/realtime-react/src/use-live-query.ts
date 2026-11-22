@@ -23,12 +23,17 @@ export function useLiveQuery<Row>(
 	const client = useContext(RealtimeContext);
 	if (!client) throw new Error("useLiveQuery requires a RealtimeProvider");
 
-	// A new query prop represents a new logical query. Callback changes
-	// update the existing store and do not restart its subscription.
+	const { capability, queryFingerprint, expiresAt } = query;
+	// Equivalent decoded payloads represent the same subscription across renders.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: initialData only seeds a new logical query; changing it must not restart an active subscription.
 	const store = useMemo(
-		() => new ReactLiveQueryStore(client, query, options.initialData),
-		[client, query],
+		() =>
+			new ReactLiveQueryStore<Row>(
+				client,
+				{ capability, queryFingerprint, expiresAt },
+				options.initialData,
+			),
+		[client, capability, queryFingerprint, expiresAt],
 	);
 	useEffect(() => {
 		store.setRefreshCallback(options.refreshQuery);
