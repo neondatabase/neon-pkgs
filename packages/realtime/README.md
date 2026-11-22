@@ -333,6 +333,11 @@ so route it according to the application's normal error-logging policy. React
 and TanStack DB refresh callbacks automatically reuse the diagnostics
 configured on their shared client.
 
+The core subscription dispatches updates and lifecycle changes without waiting
+for listener promises. A listener that throws or returns a rejected promise
+emits a `subscription_listener_failed` event for diagnostic levels that include
+warnings.
+
 ### PostgreSQL result values
 
 The client includes browser-safe parsers that follow the familiar

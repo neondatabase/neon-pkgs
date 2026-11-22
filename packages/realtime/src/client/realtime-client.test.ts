@@ -693,6 +693,61 @@ describe("RealtimeClient", () => {
 		);
 	});
 
+	it.each([
+		"onUpdate",
+		"onStateChange",
+	] as const)("reports rejected async %s listeners without waiting for them", async (listen) => {
+		useFakeWebSocket();
+		const logger = vi.fn();
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "warn",
+			logger,
+		});
+		const subscription = client.subscribe(query("async listener"), {
+			materialize: false,
+		});
+		try {
+			const failure = new Error("Subscriber work failed");
+			let reject!: (error: Error) => void;
+			const pending = new Promise<void>((_resolve, fail) => {
+				reject = fail;
+			});
+			// Avoid a test-runner unhandled rejection when exercising the old code.
+			void pending.catch(() => undefined);
+			const callback = vi.fn(() => pending);
+			const detach = subscription[listen](callback);
+			const later = vi.fn();
+			subscription[listen](later);
+			const socket = connectAndAdmit();
+			baselineSync(socket, "before");
+			detach();
+			const confirmed = subscription.awaitTxId("42");
+			publication(
+				socket,
+				[{ op: "upsert", row_key: ROW_KEY, values: ["1", "after"] }],
+				["42"],
+			);
+
+			await confirmed;
+			expect(callback).toHaveBeenCalledOnce();
+			expect(later).toHaveBeenCalled();
+			expect(logger).not.toHaveBeenCalled();
+			reject(failure);
+			await Promise.resolve();
+			await Promise.resolve();
+			expect(logger).toHaveBeenCalledOnce();
+			expect(logger).toHaveBeenCalledWith(
+				expect.objectContaining({
+					event: "subscription_listener_failed",
+					error: failure,
+				}),
+			);
+		} finally {
+			client.close();
+		}
+	});
+
 	it("does not let a logger re-enter subscription admission", async () => {
 		useFakeWebSocket();
 		let subscription!: MaterializedLiveQuerySubscription<MessageRow>;

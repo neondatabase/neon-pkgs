@@ -29,7 +29,7 @@ export function createDiagnosticDispatcher(
 
 const ignoreLoggerFailure = (): void => undefined;
 
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+export function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
 	return (typeof value === "object" && value !== null) ||
 		typeof value === "function"
 		? typeof (value as { readonly then?: unknown }).then === "function"
