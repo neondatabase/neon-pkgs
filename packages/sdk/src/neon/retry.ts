@@ -1,7 +1,7 @@
 /**
  * Retry-with-backoff for the statuses Neon documents as always safe to replay, and for
- * reads whose connection dropped before a response. The raw layer does no retries; the
- * ergonomic client opts in via `retries`.
+ * reads that failed with a 500, a 502, or a connection dropped before a response. The
+ * raw layer does no retries; the ergonomic client opts in via `retries`.
  *
  * The scheduling decisions are pure functions so they can be tested directly, without
  * fake timers or a stopwatch: {@link parseRetryAfterMs} reads the header,
@@ -19,22 +19,24 @@ export interface RawOutcome {
 }
 
 // Only statuses Neon documents as always-safe to retry (no work performed / locked /
-// rate limited) — safe for non-idempotent methods too. 5xx other than 503 is
-// intentionally excluded, since a mutating request may have partially applied.
+// rate limited) — safe for non-idempotent methods too.
 const RETRYABLE_STATUS = new Set([423, 429, 503]);
 
+// A mutation that answered one of these may have partially applied, so only a GET is
+// sent again. Gateway timeouts (504, 524) are left out: resending one multiplies the wait.
+const RETRYABLE_READ_STATUS = new Set([500, 502]);
+
 // The server closed the connection before answering, as it does to a keep-alive socket
-// it already timed out. Timeouts are left out: resending one multiplies the wait.
+// it already timed out. Timeouts are left out for the same reason.
 const DROPPED_CONNECTION = new Set(["ECONNRESET", "EPIPE", "UND_ERR_SOCKET"]);
 
 // A mutation whose connection dropped may still have been applied, so only a GET is
 // sent again.
-function droppedRead(result: RawOutcome): boolean {
-	return (
-		result.response === undefined &&
-		result.request?.method === "GET" &&
-		DROPPED_CONNECTION.has(describeTransportFailure(result.error))
-	);
+function failedRead(result: RawOutcome): boolean {
+	if (result.request?.method !== "GET") return false;
+	const status = result.response?.status;
+	if (status !== undefined) return RETRYABLE_READ_STATUS.has(status);
+	return DROPPED_CONNECTION.has(describeTransportFailure(result.error));
 }
 
 /** Ceiling on generated backoff, and on how long a `Retry-After` is worth honouring. */
@@ -124,7 +126,7 @@ export function nextRetryDelayMs(
 
 /**
  * Run `exec` up to `retries + 1` times, retrying only on `423`, `429` and `503`, and on a
- * `GET` whose connection dropped before a response.
+ * `GET` that answered `500` or `502` or whose connection dropped before a response.
  * Non-retryable errors and successes return immediately, as does a cancelled deadline —
  * the caller inspects {@link Deadline.source} to tell cancellation from the last result.
  */
@@ -139,7 +141,7 @@ export async function withRetries<T extends RawOutcome>(
 		const status = result.response?.status;
 		const retryable =
 			(status !== undefined && RETRYABLE_STATUS.has(status)) ||
-			droppedRead(result);
+			failedRead(result);
 		if (!result.error || !retryable || attempt >= retries) return result;
 		if (deadline.source()) return result;
 
