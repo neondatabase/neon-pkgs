@@ -97,7 +97,7 @@ export class QueryRefreshController<Row> {
 		if (this.active) {
 			this.watchSubscription();
 			if (subscription?.getState().status === "stale") {
-				this.scheduleRefresh(0);
+				this.scheduleRefresh();
 			}
 		}
 	}
@@ -159,7 +159,7 @@ export class QueryRefreshController<Row> {
 					this.subscription === subscription &&
 					subscription.getState().status === "stale"
 				) {
-					this.scheduleRefresh(0);
+					this.scheduleRefresh();
 				}
 			});
 		});
@@ -168,9 +168,14 @@ export class QueryRefreshController<Row> {
 	private scheduleRefresh(delay?: number): void {
 		this.clearTimer();
 		if (!this.active || !this.refreshQuery || this.refreshStopped) return;
+		const staleSubscription =
+			delay === undefined &&
+			this.subscription?.getState().status === "stale"
+				? this.subscription
+				: undefined;
 		const refreshDelay =
 			delay ??
-			(this.subscription?.getState().status === "stale"
+			(staleSubscription
 				? 0
 				: Math.max(
 						0,
@@ -179,6 +184,15 @@ export class QueryRefreshController<Row> {
 		this.refreshEvents.scheduled(refreshDelay, this.query.expiresAt);
 		this.refreshTimer = setTimeout(() => {
 			this.refreshTimer = undefined;
+			// A replacement can start between the stale notification and this timer.
+			if (
+				staleSubscription &&
+				(staleSubscription !== this.subscription ||
+					staleSubscription.getState().status !== "stale")
+			) {
+				this.scheduleRefresh();
+				return;
+			}
 			void this.refresh();
 		}, refreshDelay);
 	}
