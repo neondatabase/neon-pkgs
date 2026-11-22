@@ -157,6 +157,33 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		]);
 	});
 
+	it("sql.run returns Postgres's text for dates a JavaScript Date can't hold", async () => {
+		const sql = `SELECT
+			timestamptz '2026-01-01 00:00:00+00' AS normal,
+			timestamptz 'infinity' AS infinite,
+			timestamp '294276-12-31 23:59:59' AS far,
+			date '5874897-12-31' AS far_date`;
+		const rows = [
+			{
+				normal: "2026-01-01T00:00:00.000Z",
+				infinite: "infinity",
+				far: "294276-12-31 23:59:59",
+				far_date: "5874897-12-31",
+			},
+		];
+		expect((await run(sql)).data.rows).toEqual(rows);
+		const readOnly = await tools["sql.run"].execute(
+			{ project_id: projectId, sql },
+			{ readOnly: true },
+		);
+		expect(readOnly.data.rows).toEqual(rows);
+		const transaction = await tools["sql.runTransaction"].execute({
+			project_id: projectId,
+			sql_statements: [sql],
+		});
+		expect(transaction.data[0]?.rows).toEqual(rows);
+	});
+
 	it("sql.run rejects a syntax error with the Postgres NeonDbError", async () => {
 		const failure = run("SELEC 1");
 		await expect(failure).rejects.toBeInstanceOf(NeonDbError);
