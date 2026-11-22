@@ -338,11 +338,17 @@ export class ConnectionCoordinator {
 				REALTIME_SUBPROTOCOL,
 			);
 		} catch (error) {
+			if (this.activeSubscriptions.size === 0) return;
 			this.noteConnectionLost(error);
 			this.scheduleReconnect();
 			return;
 		}
 		this.socket = socket;
+		// A custom factory can synchronously close the client or its last query.
+		if (this.activeSubscriptions.size === 0) {
+			this.closeSocket(NORMAL_CLOSE, "no active subscriptions");
+			return;
+		}
 		socket.addEventListener("message", (event) => {
 			if (this.socket !== socket) return;
 			if (typeof event.data !== "string") {
