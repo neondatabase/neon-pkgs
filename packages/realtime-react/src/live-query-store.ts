@@ -181,6 +181,8 @@ export class ReactLiveQueryStore<Row> {
 	private withRefreshError(
 		snapshot: LiveQuerySnapshot<Row>,
 	): LiveQuerySnapshot<Row> {
+		if (snapshot.status === "error" || snapshot.status === "closed")
+			return snapshot;
 		return this.refreshError
 			? Object.freeze({
 					status: "error",

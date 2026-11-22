@@ -358,6 +358,61 @@ describe("Realtime React integration", () => {
 		expect(subscription.unsubscribed).toBe(true);
 	});
 
+	it("shows the terminal query error after a signing failure", async () => {
+		vi.useFakeTimers();
+		const wire = wireClient();
+		const initial = query("initial", 10);
+		const replacement = query("replacement");
+		const invalid = { ...replacement, capability: "invalid" };
+		let observed: UseLiveQueryResult<MessageRow> | undefined;
+		const view = render(
+			<RealtimeProvider client={wire.client}>
+				<Messages
+					query={initial}
+					refreshQuery={async () => invalid}
+					observe={(result) => {
+						observed = result;
+					}}
+				/>
+			</RealtimeProvider>,
+		);
+		try {
+			act(() => wire.baseline());
+			await act(async () => vi.advanceTimersByTimeAsync(1));
+			expect(observed).toMatchObject({
+				status: "error",
+				error: { code: "QUERY_REFRESH_FAILED" },
+			});
+			if (!observed) throw new Error("Expected the query to render");
+			const { utils } = observed;
+			expect(utils.getState().status).toBe("live");
+
+			await act(async () => {
+				const denied = expect(
+					utils.renew(replacement),
+				).rejects.toMatchObject({
+					code: "renewal_failed",
+				});
+				wire.receive({
+					type: "subscription_error",
+					live_id: "1",
+					code: "renewal_failed",
+					message: "Renewal denied",
+				});
+				await denied;
+			});
+			expect(observed).toMatchObject({
+				status: "error",
+				error: { code: "renewal_failed" },
+				data: [{ id: 1, title: "before" }],
+			});
+		} finally {
+			view.unmount();
+			wire.client.close();
+			vi.useRealTimers();
+		}
+	});
+
 	it("renders preloaded server snapshots without opening a subscription", () => {
 		const client = new TestClient<MessageRow>();
 		const html = renderToString(
