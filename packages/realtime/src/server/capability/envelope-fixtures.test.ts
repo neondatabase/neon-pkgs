@@ -231,7 +231,7 @@ describe("Realtime envelope v3 fixtures", () => {
 		);
 		expect(
 			new TextEncoder().encode(byName.max_size_sql?.sql as string).length,
-		).toBe(32_768);
+		).toBe(131_072);
 		const credential = (
 			byName.oidc_jwt_shaped?.auth as { credential: string }
 		).credential;

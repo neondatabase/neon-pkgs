@@ -29,7 +29,7 @@ const NOW = 1_767_225_600; // 2026-01-01T00:00:00Z
 const LIFETIME_SECONDS = 60;
 const INFO = "neon-realtime/envelope/v3";
 const ALG = "HPKE-P256-SHA256-A256GCM";
-const MAX_SQL_BYTES = 32_768;
+const MAX_SQL_BYTES = 131_072;
 const MAX_CREDENTIAL_BYTES = 16_384;
 const FINGERPRINT_DOMAIN = "neon-live-query-fingerprint-v1\0";
 // Plain test values. Secret scanners flag `npg_` passwords and `ey...`-prefixed
