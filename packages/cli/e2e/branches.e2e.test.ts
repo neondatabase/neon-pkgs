@@ -238,7 +238,7 @@ describe.sequential("e2e — neon CLI branch commands against the real API", () 
 		expect(databases.length).toBeGreaterThan(0);
 	});
 
-	it("checkout --create creates a missing branch, then is a no-op", async () => {
+	it("checkout --create creates a missing branch, then reuses it and says so", async () => {
 		const contextFile = join(
 			mkdtempSync(join(tmpdir(), "neon-checkout-e2e-")),
 			".neon",
@@ -263,6 +263,8 @@ describe.sequential("e2e — neon CLI branch commands against the real API", () 
 			{ contextFile, json: false },
 		);
 		expect(created.code, created.stderr).toBe(0);
+		expect(created.stderr).toContain("Created branch dev");
+		expect(created.stderr).not.toContain("already exists");
 		await waitForProjectReady(projectId);
 
 		expect(JSON.parse(readFileSync(contextFile, "utf8"))).toMatchObject({
@@ -292,6 +294,10 @@ describe.sequential("e2e — neon CLI branch commands against the real API", () 
 			{ contextFile, json: false },
 		);
 		expect(again.code, again.stderr).toBe(0);
+		expect(again.stderr).toContain(
+			`Branch dev (${dev?.id}) already exists; checking it out unchanged instead of creating it.`,
+		);
+		expect(again.stderr).not.toContain("Created branch");
 		expect(JSON.parse(readFileSync(contextFile, "utf8"))).toMatchObject({
 			projectId,
 			branch: "dev",

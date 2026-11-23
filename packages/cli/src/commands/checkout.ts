@@ -96,7 +96,9 @@ export const builder = (argv: yargs.Argv) =>
 			},
 			create: {
 				describe:
-					"Create the named branch if it does not exist, then check it out",
+					"Create the named branch if it does not exist, then check it out. " +
+					"New branches start from the parent set in neon.ts, else the project's default branch. " +
+					"An existing branch is checked out unchanged.",
 				type: "boolean",
 				default: false,
 			},
@@ -214,6 +216,14 @@ export const handler = async (props: CheckoutProps) => {
 		await resolveBranchId(props, projectId, { hooks, git, event, cwd });
 
 	const orgId = await (orgRead ?? resolveOrgId(props, projectId));
+
+	if (props.create && !created) {
+		log.info(
+			"Branch %s (%s) already exists; checking it out unchanged instead of creating it.",
+			branchName,
+			branchId,
+		);
+	}
 
 	// `checkout` is a thin helper over `link`. It fully "heals" the context file:
 	// it always (re)writes `projectId`, `branch`, and `orgId` (when the project
