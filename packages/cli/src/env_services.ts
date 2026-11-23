@@ -136,14 +136,17 @@ export const envKeysForSelection = (
 	return ENV_PULL_KEYS.filter((key) => selected.has(key));
 };
 
-/** Parse repeated or comma-separated `--env` values into canonical env-key order. */
+/**
+ * Parse repeated or comma-separated `--env` values into canonical env-key order. Whitespace
+ * also separates, because npm's `.ps1` shim hands an unquoted PowerShell `A,B` to the CLI as
+ * the single value `A B`.
+ */
 export const parseEnvPullKeys = (
 	raw: readonly string[],
 	flag: string,
 ): EnvPullKey[] => {
 	const names = raw
-		.flatMap((value) => value.split(","))
-		.map((name) => name.trim())
+		.flatMap((value) => value.split(/[\s,]+/))
 		.filter((name) => name !== "");
 	const supported = `Supported values: ${ENV_PULL_KEY_HELP}.`;
 	if (names.length === 0) {

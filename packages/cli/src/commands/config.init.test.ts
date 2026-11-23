@@ -615,6 +615,30 @@ describe("config init", () => {
 		expect(content).toContain('assets: { access: "private" }');
 	});
 
+	test("--services accepts the space-joined list PowerShell passes for an unquoted a,b", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"config",
+				"init",
+				"--no-install",
+				"--services",
+				"ai-gateway storage",
+			],
+			{
+				unreachableHost: true,
+				code: 0,
+				cwd: workspace,
+				snapshot: false,
+			},
+		);
+
+		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
+		expect(content).toContain("aiGateway: true");
+		expect(content).toContain('assets: { access: "private" }');
+	});
+
 	test("--services realtime runs offline end to end", async ({
 		testCliCommand,
 	}) => {

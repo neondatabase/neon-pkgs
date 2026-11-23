@@ -18,6 +18,23 @@ describe("env pull key selection", () => {
 		).toEqual(["DATABASE_URL", "NEON_AUTH_BASE_URL", "NEON_AUTH_JWKS_URL"]);
 	});
 
+	it("accepts the space-joined value PowerShell passes for an unquoted comma list", () => {
+		expect(
+			parseEnvPullKeys(["NEON_AUTH_BASE_URL DATABASE_URL"], "--env"),
+		).toEqual(["DATABASE_URL", "NEON_AUTH_BASE_URL"]);
+	});
+
+	it("redacts each piece of a pasted value that contains whitespace", () => {
+		expect(() =>
+			parseEnvPullKeys(
+				["DATABASE_URL=postgres://u:s3cr3t@h/db napi_live_secret123"],
+				"--env",
+			),
+		).toThrow(
+			`Unknown env variables DATABASE_URL=<redacted>, <redacted invalid value>. Supported values: ${ENV_PULL_KEY_HELP}.`,
+		);
+	});
+
 	it("rejects unknown keys instead of silently widening the pull", () => {
 		expect(() => parseEnvPullKeys(["DATABSE_URL"], "--env")).toThrow(
 			`Unknown env variable <redacted invalid value>. Did you mean DATABASE_URL? Supported values: ${ENV_PULL_KEY_HELP}.`,
