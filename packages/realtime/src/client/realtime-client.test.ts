@@ -91,6 +91,83 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
+	it.each([
+		"state",
+		"snapshot",
+	] as const)("does not notify %s observers of live after reentrant unsubscribe", (observe) => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const seen: string[] = [];
+		const listen =
+			observe === "state"
+				? subscription.onStateChange
+				: subscription.onChange;
+		listen((state) => {
+			if (state.status === "live") subscription.unsubscribe();
+		});
+		listen((state) => seen.push(state.status));
+		try {
+			baselineSync(connectAndAdmit(), "value");
+			expect(subscription.getState().status).toBe("closed");
+			expect(seen.at(-1)).toBe("closed");
+			expect(seen).not.toContain("live");
+		} finally {
+			client.close();
+		}
+	});
+
+	it("does not notify stale after a listener renews into connecting", () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "value");
+		const seen: string[] = [];
+		subscription.onStateChange((state) => {
+			if (state.status === "stale")
+				void subscription.renew(query("replacement")).catch(() => {});
+		});
+		subscription.onStateChange((state) => seen.push(state.status));
+		try {
+			socket.receive({
+				type: "subscription_error",
+				live_id: "41",
+				code: "authorization_expired",
+				message: "expired",
+			});
+			expect(subscription.getState().status).toBe("connecting");
+			expect(seen).toEqual(["connecting"]);
+		} finally {
+			client.close();
+		}
+	});
+
+	it.each([
+		"state",
+		"snapshot",
+	] as const)("preserves in-flight %s listener removal semantics", (observe) => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const listen =
+			observe === "state"
+				? subscription.onStateChange
+				: subscription.onChange;
+		let removeLater = () => {};
+		listen(() => removeLater());
+		const later = vi.fn();
+		removeLater = listen(later);
+		try {
+			baselineSync(connectAndAdmit(), "value");
+			expect(later).toHaveBeenCalledOnce();
+			client.close();
+			expect(later).toHaveBeenCalledOnce();
+		} finally {
+			client.close();
+		}
+	});
+
 	it("does not restore stale when an older renewal is superseded", async () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({ url: "ws://live.test/v1" });
