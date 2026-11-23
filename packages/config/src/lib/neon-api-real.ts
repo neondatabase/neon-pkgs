@@ -293,6 +293,7 @@ const branchStorageSchema = z.object({
 const functionDeploymentSchema = z.object({
 	id: z.number(),
 	status: z.string(),
+	error: z.string().optional(),
 });
 const neonFunctionSchema = z.object({
 	id: z.string(),
@@ -1942,6 +1943,7 @@ function deploymentToSnapshot(
 	return {
 		id: deployment.id,
 		status: normalizeDeploymentStatus(deployment.status),
+		...(deployment.error === undefined ? {} : { error: deployment.error }),
 	};
 }
 

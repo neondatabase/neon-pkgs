@@ -18,6 +18,7 @@ const READY_TIMEOUT_MS = 90_000;
 type FunctionInfo = {
 	name: string;
 	invocation_url: string;
+	current_deployment?: { status: string };
 	active_deployment?: { id: string; environment?: string[] };
 };
 
@@ -116,6 +117,15 @@ describe.sequential("e2e — declared Function env", () => {
 	afterAll(async () => {
 		if (projectId) await deleteProject(projectId);
 		if (tmp) rmSync(tmp, { recursive: true, force: true });
+	});
+
+	it("neon deploy returns after every Function build completed", async () => {
+		expect((await getFunction("alpha")).current_deployment?.status).toBe(
+			"completed",
+		);
+		expect((await getFunction("beta")).current_deployment?.status).toBe(
+			"completed",
+		);
 	});
 
 	it("each Function has the display name neon.ts declares", async () => {

@@ -1479,6 +1479,262 @@ describe("pushConfig", () => {
 		expect(triggers[0]).toMatchObject({ enabled: true });
 	});
 
+	describe("function builds", () => {
+		const helloConfig = () =>
+			defineConfig({
+				functions: { fn1: { name: "Hello World", source: fnSource } },
+			});
+
+		test("resolves only after the submitted deployment finishes building", async () => {
+			const { api, projectId } = seededFake();
+			let reads = 0;
+			const originalGet = api.getBranchFunction.bind(api);
+			api.getBranchFunction = async (projectId, branchId, slug) => {
+				const fn = await originalGet(projectId, branchId, slug);
+				reads += 1;
+				const status =
+					reads === 1
+						? "pending"
+						: reads === 2
+							? "building"
+							: "completed";
+				return { ...fn, currentDeployment: { id: 1, status } };
+			};
+
+			const result = await withFastFunctionPoll(() =>
+				pushConfig(helloConfig(), {
+					api,
+					projectId,
+					branchId: "br-main",
+				}),
+			);
+
+			expect(reads).toBe(3);
+			expect(
+				result.applied.find((c) => c.identifier === "function:fn1")
+					?.details?.invocationUrl,
+			).toBe("https://br-main.fake.neon.tech/functions/fn1");
+		});
+
+		test("fails the apply with the platform's reason when the build fails", async () => {
+			const { api, projectId } = seededFake();
+			stubFunctionDeploymentReads(api, "fn1", [
+				{ id: 1, status: "building" },
+				{
+					id: 1,
+					status: "failed",
+					error: "bundle is missing an entry",
+				},
+			]);
+
+			await withFastFunctionPoll(() =>
+				expect(
+					pushConfig(helloConfig(), {
+						api,
+						projectId,
+						branchId: "br-main",
+					}),
+				).rejects.toSatisfy((err: unknown) => {
+					expect(err).toBeInstanceOf(PlatformError);
+					if (!(err instanceof PlatformError)) return false;
+					expect(err.message).toContain(
+						'"fn1" deployment 1 failed: bundle is missing an entry',
+					);
+					expect(err.details.deployments).toEqual([
+						{
+							slug: "fn1",
+							deploymentId: 1,
+							kind: "failed",
+							error: "bundle is missing an entry",
+						},
+					]);
+					return true;
+				}),
+			);
+		});
+
+		test("fails the apply when the build is still running at the timeout", async () => {
+			const { api, projectId } = seededFake();
+			stubFunctionDeploymentReads(api, "fn1", [
+				{ id: 1, status: "building" },
+			]);
+
+			await withFastFunctionPoll(
+				() =>
+					expect(
+						pushConfig(helloConfig(), {
+							api,
+							projectId,
+							branchId: "br-main",
+						}),
+					).rejects.toThrow(
+						/"fn1" deployment 1 did not complete within \d+s \(last seen: deployment 1 building\)/,
+					),
+				{ timeoutMs: "40" },
+			);
+		});
+
+		test("keeps polling through a transient status read failure", async () => {
+			const { api, projectId } = seededFake();
+			let reads = 0;
+			const originalGet = api.getBranchFunction.bind(api);
+			api.getBranchFunction = async (projectId, branchId, slug) => {
+				reads += 1;
+				if (reads === 1) {
+					throw new PlatformError(ErrorCode.ServerError, "HTTP 503", {
+						details: { status: 503 },
+					});
+				}
+				return originalGet(projectId, branchId, slug);
+			};
+
+			await withFastFunctionPoll(() =>
+				pushConfig(helloConfig(), {
+					api,
+					projectId,
+					branchId: "br-main",
+				}),
+			);
+
+			expect(reads).toBe(2);
+		});
+
+		test("fails the apply when a status read is refused", async () => {
+			const { api, projectId } = seededFake();
+			api.getBranchFunction = async () => {
+				throw new PlatformError(ErrorCode.Forbidden, "HTTP 403", {
+					details: { status: 403 },
+				});
+			};
+
+			await withFastFunctionPoll(() =>
+				expect(
+					pushConfig(helloConfig(), {
+						api,
+						projectId,
+						branchId: "br-main",
+					}),
+				).rejects.toThrow(
+					'"fn1" deployment 1 has an unknown status: HTTP 403',
+				),
+			);
+		});
+
+		test("reports every unfinished deployment, and only those", async () => {
+			const { api, projectId } = seededFake();
+			const secondSource = join(fnTmpDir, "second-build.ts");
+			writeFileSync(
+				secondSource,
+				"export default { fetch(_req: Request): Response { return new Response('ok'); } };\n",
+			);
+			const fn1Statuses = ["building", "building", "completed"] as const;
+			let fn1Reads = 0;
+			const originalGet = api.getBranchFunction.bind(api);
+			api.getBranchFunction = async (projectId, branchId, slug) => {
+				const fn = await originalGet(projectId, branchId, slug);
+				if (slug === "fn1") {
+					const status =
+						fn1Statuses[Math.min(fn1Reads, fn1Statuses.length - 1)];
+					fn1Reads += 1;
+					return { ...fn, currentDeployment: { id: 1, status } };
+				}
+				if (slug === "fn2") {
+					throw new PlatformError(ErrorCode.Forbidden, "HTTP 403", {
+						details: { status: 403 },
+					});
+				}
+				if (slug === "fn3") {
+					return {
+						...fn,
+						currentDeployment: {
+							id: 1,
+							status: "failed",
+							error: "boom",
+						},
+					};
+				}
+				return fn;
+			};
+			const config = defineConfig({
+				functions: {
+					fn1: { name: "One", source: fnSource },
+					fn2: { name: "Two", source: secondSource },
+					fn3: { name: "Three", source: secondSource },
+				},
+			});
+
+			await withFastFunctionPoll(() =>
+				expect(
+					pushConfig(config, { api, projectId, branchId: "br-main" }),
+				).rejects.toSatisfy((err: unknown) => {
+					expect(err).toBeInstanceOf(PlatformError);
+					if (!(err instanceof PlatformError)) return false;
+					expect(err.message).not.toContain('"fn1"');
+					expect(err.message).toContain(
+						'"fn2" deployment 1 has an unknown status: HTTP 403',
+					);
+					expect(err.message).toContain(
+						'"fn3" deployment 1 failed: boom',
+					);
+					expect(err.cause).toBeInstanceOf(PlatformError);
+					return true;
+				}),
+			);
+			expect(fn1Reads).toBe(3);
+		});
+
+		test("fails the apply when a newer deployment replaced this one", async () => {
+			const { api, projectId } = seededFake();
+			stubFunctionDeploymentReads(api, "fn1", [
+				{ id: 2, status: "building" },
+			]);
+
+			await withFastFunctionPoll(() =>
+				expect(
+					pushConfig(helloConfig(), {
+						api,
+						projectId,
+						branchId: "br-main",
+					}),
+				).rejects.toThrow(
+					/"fn1" deployment 1 was replaced by deployment 2/,
+				),
+			);
+		});
+
+		test("warns instead of waiting when the adapter cannot read a function", async () => {
+			const { api, projectId } = seededFake();
+			Object.defineProperty(api, "getBranchFunction", {
+				value: undefined,
+			});
+
+			const result = await pushConfig(helloConfig(), {
+				api,
+				projectId,
+				branchId: "br-main",
+			});
+
+			expect(result.warnings).toEqual([
+				'Did not wait for "fn1" to finish building: this NeonApi adapter does not implement getBranchFunction.',
+			]);
+		});
+
+		test("a dry run reads no deployment status", async () => {
+			const { api, projectId } = seededFake();
+
+			await pushConfig(helloConfig(), {
+				api,
+				projectId,
+				branchId: "br-main",
+				dryRun: true,
+			});
+
+			expect(
+				api.history.some((h) => h.method === "getBranchFunction"),
+			).toBe(false);
+		});
+	});
+
 	test("surfaces a first-deployed function's invocation URL in the applied details", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
