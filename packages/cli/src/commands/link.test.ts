@@ -2027,6 +2027,38 @@ describe("link", () => {
 				},
 			);
 		});
+
+		test("links an app with its own neon.ts instead of the linked folder around it", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const parentCtx = tmpContext("nested_app");
+			const parent = JSON.stringify({ projectId: "parent-project" });
+			writeFileSync(parentCtx, parent);
+			const app = join(parentCtx, "..", "my-app");
+			mkdirSync(app);
+			writeFileSync(join(app, "package.json"), "{}");
+			writeFileSync(join(app, "neon.ts"), "export default {};\n");
+
+			await testCliCommand(
+				[
+					"link",
+					"--no-checks",
+					"--org-id",
+					"org-anything",
+					"--project-id",
+					"app-project",
+					"--branch",
+					"main",
+				],
+				{ cwd: app, snapshot: false },
+			);
+
+			expect(readFileSync(parentCtx, "utf-8")).toBe(parent);
+			expect(
+				JSON.parse(readFileSync(join(app, ".neon"), "utf-8")),
+			).toMatchObject({ projectId: "app-project" });
+		});
 	});
 
 	test("overwrites an existing .neon when re-linking non-interactively", async ({

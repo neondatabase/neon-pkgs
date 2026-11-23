@@ -206,6 +206,54 @@ describe("resolveContext — .neon file discovery", () => {
 		});
 	});
 
+	test("stops at an app with its own package.json and neon.ts, like the neon CLI", () => {
+		const root = setup({
+			".neon": JSON.stringify({ projectId: "p-root", branch: "main" }),
+			"my-app/package.json": "{}",
+			"my-app/neon.ts": "export default {};\n",
+		});
+		expect(
+			resolveContext({ cwd: `${root}/my-app`, env: EMPTY_ENV }).ok,
+		).toBe(false);
+		expect(
+			resolveContext({
+				cwd: `${root}/my-app`,
+				projectId: "p-app",
+				branch: "main",
+				env: EMPTY_ENV,
+			}),
+		).toMatchObject({
+			ok: true,
+			context: { projectId: "p-app", projectDir: `${root}/my-app` },
+		});
+	});
+
+	test("walks past a workspace package without neon.ts", () => {
+		const root = setup({
+			".neon": JSON.stringify({ projectId: "p-root", branch: "main" }),
+			"apps/web/package.json": "{}",
+		});
+		expect(
+			resolveContext({ cwd: `${root}/apps/web`, env: EMPTY_ENV }),
+		).toMatchObject({
+			ok: true,
+			context: { projectId: "p-root", projectDir: root },
+		});
+	});
+
+	test("walks past a neon.ts client module without package.json", () => {
+		const root = setup({
+			".neon": JSON.stringify({ projectId: "p-root", branch: "main" }),
+			"src/lib/neon.ts": "export const client = {};\n",
+		});
+		expect(
+			resolveContext({ cwd: `${root}/src/lib`, env: EMPTY_ENV }),
+		).toMatchObject({
+			ok: true,
+			context: { projectId: "p-root", projectDir: root },
+		});
+	});
+
 	test("treats malformed .neon JSON as absent", () => {
 		const root = setup({
 			"package.json": "{}",

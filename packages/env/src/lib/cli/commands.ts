@@ -11,12 +11,10 @@ import {
 } from "@neon/config/v1";
 import { fetchEnvReusingSecrets } from "@neon-internals/env-core/reuse-secrets";
 import { resolveApiKey } from "./resolve-api-key.js";
-import { resolveContext } from "./resolve-context.js";
+import { NEON_CONFIG_FILENAMES, resolveContext } from "./resolve-context.js";
 
 /** File `env run` reads to layer one-time auth keys. Matches the Vercel/Next.js convention. */
 const DEFAULT_ENV_FILE = ".env.local";
-
-const NEON_CONFIG_FILENAMES = ["neon.ts", "neon.mts", "neon.js", "neon.mjs"];
 
 /** The project's `neon.ts` (or other supported extension). Never searches parent directories. */
 function projectConfigPath(projectDir: string): string {

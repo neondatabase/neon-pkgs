@@ -82,11 +82,20 @@ interface NeonFile {
 	branch?: string;
 }
 
+/** Config filenames the runtime loads (mirrors @neon/config's loader). */
+export const NEON_CONFIG_FILENAMES = [
+	"neon.ts",
+	"neon.mts",
+	"neon.js",
+	"neon.mjs",
+] as const;
+
 /**
  * Walk up from `cwd` looking for `.neon/project.json` (preferred) or `.neon` (neonctl
  * convention), with the same boundaries as the `neon` CLI's walk so both resolve the same
- * project directory: the home directory and the filesystem root are never checked, and
- * `.git` is not a boundary. Read-only.
+ * project directory: the home directory and the filesystem root are never checked, `.git`
+ * is not a boundary, and a directory holding `package.json` and a Neon config file but no
+ * `.neon` ends the walk (an unlinked project nested in a linked folder). Read-only.
  */
 function findNeonFile(cwd: string): { file: NeonFile; dir: string } | null {
 	const home = resolve(homedir());
@@ -99,9 +108,17 @@ function findNeonFile(cwd: string): { file: NeonFile; dir: string } | null {
 			readNeonFileAt(resolve(current, ".neon", "project.json")) ??
 			readNeonFileAt(resolve(current, ".neon"));
 		if (parsed) return { file: parsed, dir: current };
+		if (isProjectRoot(current)) return null;
 		current = parent;
 	}
 	return null;
+}
+
+function isProjectRoot(dir: string): boolean {
+	return (
+		isFile(resolve(dir, "package.json")) &&
+		NEON_CONFIG_FILENAMES.some((name) => isFile(resolve(dir, name)))
+	);
 }
 
 function readNeonFileAt(path: string): NeonFile | null {

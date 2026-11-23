@@ -46,6 +46,21 @@ describe("project directory", () => {
 		expect(resolvedPath).toBe(join(root, "neon.ts"));
 	});
 
+	test("is an app with its own package.json and neon.ts, not the linked folder around it", async () => {
+		writeFileSync(join(root, ".neon"), "{}\n");
+		writeFileSync(
+			join(root, "neon.ts"),
+			'throw new Error("parent neon.ts loaded");\n',
+		);
+		writeFileSync(join(web, "package.json"), "{}\n");
+		writeFileSync(join(web, "neon.ts"), POLICY);
+
+		expect(projectDir({ cwd: web })).toBe(web);
+		const { resolvedPath } = await loadProjectConfig({ cwd: web });
+		expect(resolvedPath).toBe(join(web, "neon.ts"));
+		expect(resolveEnvFilePath({ cwd: web })).toBe(join(web, ".env.local"));
+	});
+
 	test("does not look above the directory holding .neon", async () => {
 		writeFileSync(join(web, ".neon"), "{}\n");
 		writeFileSync(join(root, "neon.ts"), POLICY);
