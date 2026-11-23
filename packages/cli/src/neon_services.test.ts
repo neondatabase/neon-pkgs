@@ -82,6 +82,19 @@ describe("parseServices", () => {
 		]);
 	});
 
+	it("accepts the space-joined value PowerShell passes for an unquoted comma list", () => {
+		expect(parseServices(["postgres auth"], envPull)).toEqual([
+			"postgres",
+			"auth",
+		]);
+	});
+
+	it("names only the unknown part of a space-joined value", () => {
+		expect(() => parseServices(["postgres nope"], envPull)).toThrow(
+			/Unknown service nope\./,
+		);
+	});
+
 	it("rejects an unknown service rather than acting on everything but it", () => {
 		expect(() => parseServices(["postgres", "nope"], envPull)).toThrow(
 			/Unknown service nope\..*Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway, realtime\./s,

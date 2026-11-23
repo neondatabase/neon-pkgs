@@ -75,9 +75,12 @@ export type ParseServicesOptions<Selection extends NeonService = NeonService> =
  * Parse the raw values of a services flag into a canonical selection.
  *
  * Accepts the flag repeated (`-s auth -s postgres`) and comma-separated
- * (`-s auth,postgres`), since both read naturally and users will try either. The result is
- * deduplicated and sorted into {@link NEON_SERVICES} order, so what a command does never
- * depends on typing order.
+ * (`-s auth,postgres`), since both read naturally and users will try either. Whitespace also
+ * separates: PowerShell reads an unquoted `auth,postgres` as an array, and npm's `.ps1` shim
+ * hands it to the CLI as the single value `auth postgres`.
+ *
+ * The result is deduplicated and sorted into {@link NEON_SERVICES} order, so what a command
+ * does never depends on typing order.
  *
  * An unrecognized name is rejected rather than dropped: a typo would otherwise act on
  * everything *except* the service that was asked for, and report success. A name that is a
@@ -92,8 +95,7 @@ export const parseServices = <const Selection extends NeonService>(
 	const supported = `Supported values: ${allowed.join(", ")}.`;
 
 	const names = raw
-		.flatMap((value) => value.split(","))
-		.map((name) => name.trim())
+		.flatMap((value) => value.split(/[\s,]+/))
 		.filter((name) => name !== "");
 
 	if (names.length === 0) {

@@ -547,6 +547,22 @@ describe("neon mcp", () => {
 		);
 	});
 
+	test("--category accepts the space-joined value PowerShell passes for an unquoted a,b", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		await testCliCommand(
+			["mcp", "-y", "--oauth", "--category", "schema docs"],
+			{ ...runOptions(home, cwd), apiKey: false },
+		);
+		const written = JSON.parse(
+			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon.url).toBe(
+			neonMcpUrl({ categories: ["schema", "docs"] }),
+		);
+	});
+
 	test("unknown --category fails without writing", async ({
 		testCliCommand,
 	}) => {
