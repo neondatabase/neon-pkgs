@@ -8,6 +8,7 @@ import {
 	serviceForEnvKey,
 } from "../env_services.js";
 import { NEON_SERVICE_LABELS, NEON_SERVICES } from "../neon_services.js";
+import { getCliName } from "../utils/cli_name.js";
 import type { ResolvedBranchRef } from "../utils/enrichers.js";
 import type { PullOutcome } from "./env.js";
 
@@ -102,6 +103,16 @@ export const formatPulledEnv = (
 	if (outcome.removed.some(isLegacyFunctionBaseUrlKey)) {
 		lines.push(
 			row("", 'Use functionBaseUrl("<slug>") from @neon/env instead.'),
+		);
+	}
+	const withheld = outcome.withheld ?? [];
+	if (withheld.length > 0) {
+		lines.push(
+			row(
+				"Not pulled",
+				`${withheld.map((service) => NEON_SERVICE_LABELS[service]).join(", ")} (secrets). ` +
+					`Add with \`${getCliName()} env pull ${withheld.map((service) => `-s ${service}`).join(" ")}\``,
+			),
 		);
 	}
 	if (fresh.size > 0) {
