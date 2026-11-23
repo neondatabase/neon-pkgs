@@ -201,7 +201,7 @@ describe("editNeonConfig on a file that declares services already", () => {
 
 	it("reports an existing function or bucket as already declared", () => {
 		expect(editNeonConfig(FULL, fn("hello")).changes).toEqual([]);
-		expect(editNeonConfig(FULL, bucket("assets")).changes).toEqual([]);
+		expect(editNeonConfig(FULL, bucket("uploads")).changes).toEqual([]);
 	});
 });
 

@@ -52,8 +52,8 @@ export const FUNCTION_SLUG = "hello";
 export const FUNCTION_NAME = "Hello World";
 export const FUNCTION_FILENAME = "hello.ts";
 
-/** Name of the bucket scaffolded for `storage`. */
-export const BUCKET_NAME = "assets";
+/** Bucket scaffolded for `object-storage`. Neon's Object Storage guides read and write this name. */
+export const BUCKET_NAME = "uploads";
 
 /**
  * One indentation level in the emitted `neon.ts`. Two spaces, which is what every renderer

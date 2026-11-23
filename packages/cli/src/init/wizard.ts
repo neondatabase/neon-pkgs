@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import prompts from "prompts";
 
-import { CONFIG_INIT_SERVICES } from "../config_template.js";
+import { BUCKET_NAME, CONFIG_INIT_SERVICES } from "../config_template.js";
 import type { AgentType } from "../mcp/agents.js";
 import { getAgentDisplayName, listMcpAgentIds } from "../mcp/agents.js";
 import type { NeonService } from "../neon_services.js";
@@ -354,8 +354,7 @@ export const pickInitServicesInteractively = async (): Promise<
 			{
 				value: "object-storage",
 				title: "Object Storage",
-				description:
-					"Declare a private S3-compatible bucket named assets.",
+				description: `Declare a private S3-compatible bucket named ${BUCKET_NAME}.`,
 			},
 			{
 				value: "ai-gateway",
