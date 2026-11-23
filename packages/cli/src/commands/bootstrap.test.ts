@@ -608,6 +608,39 @@ describe("bootstrap", () => {
 		expect(existsSync(join(dest, "package-lock.json"))).toBe(true);
 	});
 
+	test("without a terminal, installs only when --install is passed", async () => {
+		const npmOffline = {
+			npm_config_user_agent: "npm/11.0.0 node/v22.0.0",
+			npm_config_offline: "true",
+			npm_config_audit: "false",
+			npm_config_fund: "false",
+		};
+		const omitted = join(dest, "omitted");
+		const skipped = await runBootstrap(
+			server,
+			[omitted, "--template", "hono"],
+			npmOffline,
+		);
+		expect(skipped.code, skipped.stderr).toBe(0);
+		expect(skipped.stdout).toMatch(/Dependencies\s+skipped/);
+		expect(existsSync(join(omitted, "package-lock.json"))).toBe(false);
+
+		const explicit = join(dest, "explicit");
+		const installed = await runBootstrap(
+			server,
+			[explicit, "--template", "hono", "--install"],
+			npmOffline,
+		);
+		expect(installed.code, installed.stderr).toBe(0);
+		expect(installed.stderr).toContain("Installing dependencies with npm…");
+		expect(installed.stdout).toMatch(/Dependencies\s+installed with npm/);
+		expect(installed.stdout).toMatch(/Git\s+skipped/);
+		expect(installed.stdout).toMatch(/Agents\s+skipped/);
+		expect(installed.stdout).toMatch(/Project\s+not linked/);
+		expect(existsSync(join(explicit, "package-lock.json"))).toBe(true);
+		expect(existsSync(join(explicit, ".git"))).toBe(false);
+	}, 30_000);
+
 	test("selectedTemplate scaffolds the catalog source for a known id", async () => {
 		const base = `http://localhost:${(server.address() as AddressInfo).port}`;
 		const previousCodeload = process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD;
