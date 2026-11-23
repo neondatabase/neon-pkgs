@@ -17,6 +17,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import yargs from "yargs";
 import { takeCommandSuccessExtras } from "../analytics.js";
 import {
+	NEON_AGENT_SECTION,
+	NEON_SECTION_BEGIN,
+} from "../init/agent_instructions.js";
+import {
 	CLAIMABLE_ACCOUNT_FLAGS,
 	CLAIMABLE_ALREADY_LINKED,
 	CLAIMABLE_MCP_API_KEY,
@@ -2763,6 +2767,93 @@ describe("init handler", () => {
 	});
 });
 
+describe("init agent instructions", () => {
+	beforeEach(() => {
+		vi.stubEnv("CI", "true");
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+	});
+
+	afterEach(() => {
+		takeCommandSuccessExtras();
+		clearCredentialInputs();
+		vi.unstubAllEnvs();
+		vi.restoreAllMocks();
+		vi.resetModules();
+	});
+
+	const runWith = async (
+		cwd: string,
+		overrides: Record<string, unknown> = {},
+	) => {
+		const { handler } = await import("./init.js");
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+				initConfig: vi.fn().mockResolvedValue(undefined),
+				linkProject: vi.fn().mockResolvedValue(undefined),
+				detectProjectAgents: async () => [],
+				...overrides,
+			}),
+		);
+	};
+
+	test("-y writes the Neon section into AGENTS.md and no CLAUDE.md without Claude Code", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-agents-md-"));
+
+		await runWith(cwd);
+
+		expect(readFileSync(join(cwd, "AGENTS.md"), "utf8")).toBe(
+			`${NEON_AGENT_SECTION}\n`,
+		);
+		expect(existsSync(join(cwd, "CLAUDE.md"))).toBe(false);
+	});
+
+	test("Claude Code detected in the project gets a CLAUDE.md that imports AGENTS.md", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claude-md-"));
+
+		await runWith(cwd, {
+			detectProjectAgents: async () => ["claude-code"],
+		});
+
+		expect(readFileSync(join(cwd, "CLAUDE.md"), "utf8")).toBe(
+			"@AGENTS.md\n",
+		);
+		expect(readFileSync(join(cwd, "AGENTS.md"), "utf8")).toContain(
+			NEON_SECTION_BEGIN,
+		);
+	});
+
+	test("a re-run updates the section in place and keeps the user's text", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-rerun-"));
+		writeFileSync(join(cwd, "AGENTS.md"), "# Team rules\n\nBe kind.\n");
+
+		await runWith(cwd);
+		await runWith(cwd);
+
+		const agents = readFileSync(join(cwd, "AGENTS.md"), "utf8");
+		expect(agents.split(NEON_SECTION_BEGIN)).toHaveLength(2);
+		expect(agents.startsWith("# Team rules\n\nBe kind.\n\n")).toBe(true);
+		expect(agents).toBe(
+			`# Team rules\n\nBe kind.\n\n${NEON_AGENT_SECTION}\n`,
+		);
+	});
+
+	test("--no-agent-instructions writes neither file", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-opt-out-"));
+
+		await runWith(cwd, {
+			agentInstructions: false,
+			detectProjectAgents: async () => ["claude-code"],
+		});
+
+		expect(existsSync(join(cwd, "AGENTS.md"))).toBe(false);
+		expect(existsSync(join(cwd, "CLAUDE.md"))).toBe(false);
+	});
+});
+
 describe("init CLI", () => {
 	cliTest("help describes the orchestrator", async ({ testCliCommand }) => {
 		const { stdout, stderr } = await testCliCommand(["init", "--help"], {
@@ -3112,6 +3203,7 @@ describe("init flag parsing", () => {
 			config?: boolean;
 			link?: boolean;
 			agentSetup?: boolean;
+			agentInstructions?: boolean;
 			services?: string[];
 		};
 
@@ -3135,6 +3227,13 @@ describe("init flag parsing", () => {
 	test("--no-agent-setup skips agent setup", async () => {
 		expect((await parse(["--no-agent-setup"])).agentSetup).toBe(false);
 		expect((await parse([])).agentSetup).toBe(true);
+	});
+
+	test("--no-agent-instructions skips the AGENTS.md and CLAUDE.md section", async () => {
+		expect((await parse([])).agentInstructions).toBe(true);
+		expect(
+			(await parse(["--no-agent-instructions"])).agentInstructions,
+		).toBe(false);
 	});
 
 	test("--claimable is a boolean flag", async () => {

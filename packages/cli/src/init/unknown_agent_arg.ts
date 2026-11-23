@@ -32,6 +32,8 @@ const BOOLEAN_FLAGS = new Set([
 	"--env-pull",
 	"--no-env-pull",
 	"--no-agent-setup",
+	"--no-agent-instructions",
+	"--agent-instructions",
 	"--no-link",
 	"--no-config",
 	"--claimable",

@@ -911,6 +911,8 @@ Custom asks how to add Neon to coding agents (plugin, skills and MCP separately,
 
 Empty directories are set up in place. `neon init` does not scaffold starter files.
 
+Init also writes a short Neon section into `AGENTS.md` in the project, wrapped in `<!-- neon:begin -->` and `<!-- neon:end -->` markers. Re-running init updates that section in place and leaves the rest of the file alone. When Claude Code is selected or detected, it also makes `CLAUDE.md` pick the section up: it creates `CLAUDE.md` containing `@AGENTS.md` when there is none, leaves it alone when it already imports `AGENTS.md`, and otherwise adds the same marked section. `--no-agent-instructions` skips both files.
+
 ```bash
 $ neon init
 $ neon init -y

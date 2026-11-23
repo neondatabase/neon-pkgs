@@ -43,6 +43,10 @@ import {
 	resolvePackageManager,
 } from "../utils/package_manager.js";
 import {
+	describeAgentInstructionOutcome,
+	writeAgentInstructions,
+} from "./agent_instructions.js";
+import {
 	pullInitEnv as defaultPullInitEnv,
 	type InitAuthOptions,
 	resolveInitConfigApi,
@@ -205,6 +209,8 @@ export type InitProps = CommonProps & {
 	regionId?: string;
 	branch?: string;
 	agentSetup?: boolean;
+	/** `false` for `--no-agent-instructions`: skips the Neon section in AGENTS.md and CLAUDE.md. */
+	agentInstructions?: boolean;
 	claimable?: boolean;
 	packageManager?: PackageManager;
 	mcpConfigLocation?: InitMcpConfigLocation;
@@ -1431,6 +1437,30 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					: "created";
 		} else {
 			funnel.config = "skipped";
+		}
+
+		// Before env pull, so a failed pull does not leave the instruction files out. Nothing in
+		// them depends on the link. A file that cannot be written is a warning, not a failure.
+		if (props.agentInstructions !== false) {
+			const claudeCode = [
+				...named,
+				...detection.detectedAgents,
+				...agentsForStep(tooling, "plugins"),
+				...agentsForStep(tooling, "skills"),
+				...agentsForStep(tooling, "mcp"),
+			].includes("claude-code");
+			for (const outcome of writeAgentInstructions({ cwd, claudeCode })) {
+				if (outcome.action === "failed") {
+					log.warning(
+						`Could not write the Neon section to ${outcome.file}: ${outcome.reason}`,
+					);
+					continue;
+				}
+				const line = describeAgentInstructionOutcome(outcome);
+				if (line !== null) {
+					printInitProgress(line);
+				}
+			}
 		}
 
 		const context = readContextFile(contextFile);

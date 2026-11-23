@@ -103,6 +103,8 @@ const FLAG_ALIASES: Readonly<Record<string, string>> = {
 	"--mcp-project-scoped": "--mcp-project-scoped",
 	"--no-agent-setup": "--no-agent-setup",
 	"--agent-setup": "--agent-setup",
+	"--no-agent-instructions": "--no-agent-instructions",
+	"--agent-instructions": "--agent-instructions",
 	"--no-analytics": "--no-analytics",
 	"--analytics": "--analytics",
 	"--profile": "--profile",
