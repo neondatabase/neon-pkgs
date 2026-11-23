@@ -677,6 +677,25 @@ describe("neon plugins", () => {
 		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
 
+	test("names the Command Line Tools when the macOS git shim cannot request them", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		const gitBin = nodeOnlyBin({ git: false });
+		writeGit(
+			gitBin,
+			'echo "xcode-select: error: No developer tools were found and no install could be requested (possibly because there is no active GUI session)" >&2\nexit 1\n',
+		);
+		const { stderr } = await testCliCommand(["plugins", "-y"], {
+			...runOptions(home, cwd, bin, { PATH: `${bin}:${gitBin}` }),
+			code: 1,
+		});
+		expect(strip(stderr)).toContain(
+			'ERROR: Cannot install the Neon plugin: the plugins CLI downloads it with git, and "git" did not run ("git --version" failed: xcode-select: error: No developer tools were found and no install could be requested (possibly because there is no active GUI session)). Install the Command Line Tools (xcode-select --install) or install Git, then retry.',
+		);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
+	});
+
 	test("help lists the plugin, its contents, and supported agents", async ({
 		testCliCommand,
 	}) => {

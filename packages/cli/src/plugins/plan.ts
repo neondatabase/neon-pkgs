@@ -65,8 +65,8 @@ const gitFix = (problem: PluginsGitProblem): string => {
 	if (problem.kind === "missing") {
 		return "Install Git (https://git-scm.com/downloads) or add it to PATH";
 	}
-	// macOS ships /usr/bin/git as an xcrun shim that only works once the Command Line Tools are installed.
-	return problem.detail.startsWith("xcrun:")
+	// macOS ships /usr/bin/git as a shim that only works once the Command Line Tools are installed; it fails through xcrun or xcode-select.
+	return /^(xcrun|xcode-select):/.test(problem.detail)
 		? "Install the Command Line Tools (xcode-select --install) or install Git"
 		: "Repair or reinstall Git";
 };
