@@ -40,9 +40,8 @@ export const builder = (yargs: yargs.Argv) =>
 		})
 		.option("agent-instructions", {
 			type: "boolean",
-			default: true,
 			describe:
-				"Write a Neon section into AGENTS.md, and into CLAUDE.md when Claude Code is selected or detected. Use --no-agent-instructions to skip",
+				"Write a Neon section into AGENTS.md, and into CLAUDE.md when this project uses Claude Code. On by default; off with --no-agent-instructions or --no-agent-setup",
 		})
 		.option("claimable", {
 			type: "boolean",

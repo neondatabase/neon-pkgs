@@ -44,6 +44,7 @@ import {
 } from "../utils/package_manager.js";
 import {
 	describeAgentInstructionOutcome,
+	hasClaudeCodeProjectFiles,
 	writeAgentInstructions,
 } from "./agent_instructions.js";
 import {
@@ -209,7 +210,10 @@ export type InitProps = CommonProps & {
 	regionId?: string;
 	branch?: string;
 	agentSetup?: boolean;
-	/** `false` for `--no-agent-instructions`: skips the Neon section in AGENTS.md and CLAUDE.md. */
+	/**
+	 * `false` for `--no-agent-instructions`: skips the Neon section in AGENTS.md and CLAUDE.md.
+	 * Unset follows agent setup, so `--no-agent-setup` skips the section too.
+	 */
 	agentInstructions?: boolean;
 	claimable?: boolean;
 	packageManager?: PackageManager;
@@ -633,6 +637,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		if (yes) {
 			detection.interactive = false;
 		}
+		// Read before any setup step runs, so files that init itself creates (project skills
+		// or MCP config under .claude/) do not count as the user's evidence.
+		const claudeProjectFiles = hasClaudeCodeProjectFiles(cwd);
+		// Agents the user picked in a prompt, as opposed to detected ones preselected for `-y`.
+		const pickedAgents = new Set<AgentType>();
 		if (analytics) {
 			emitInitStart(
 				initStartProperties({
@@ -793,11 +802,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						: inferred.kind;
 				if (setup !== "skip") {
 					const namedFallback = named.length === 0;
-					const pickAgents = (
+					const pickAgents = async (
 						setup: "plugin" | "skills" | "mcp",
 						available: readonly AgentType[],
-					) =>
-						pickOrDetectAgents({
+					) => {
+						const picked = await pickOrDetectAgents({
 							named,
 							available,
 							detected: detection.detectedAgents,
@@ -821,6 +830,18 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							setup,
 							pickAgents: props.pickAgents,
 						});
+						// Without a prompt, the result is the detected agents, not a choice.
+						if (
+							named.length === 0 &&
+							(props.pickAgents !== undefined ||
+								detection.interactive)
+						) {
+							for (const id of picked ?? []) {
+								pickedAgents.add(id);
+							}
+						}
+						return picked;
+					};
 					if (setup === "plugin" || setup === "skills") {
 						const available =
 							setup === "plugin"
@@ -1441,14 +1462,16 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		// Before env pull, so a failed pull does not leave the instruction files out. Nothing in
 		// them depends on the link. A file that cannot be written is a warning, not a failure.
-		if (props.agentInstructions !== false) {
-			const claudeCode = [
-				...named,
-				...detection.detectedAgents,
-				...agentsForStep(tooling, "plugins"),
-				...agentsForStep(tooling, "skills"),
-				...agentsForStep(tooling, "mcp"),
-			].includes("claude-code");
+		// `--no-agent-setup` skips them too unless `--agent-instructions` is passed.
+		if (props.agentInstructions ?? !skipAgents) {
+			// CLAUDE.md only when Claude Code is used for this project: named or picked in
+			// init, running init right now, or already set up here. Installed elsewhere on the
+			// machine is not enough, so global detection and the `-y` plan do not count.
+			const claudeCode =
+				named.includes("claude-code") ||
+				pickedAgents.has("claude-code") ||
+				detection.hostAgent === "claude-code" ||
+				claudeProjectFiles;
 			for (const outcome of writeAgentInstructions({ cwd, claudeCode })) {
 				if (outcome.action === "failed") {
 					log.warning(

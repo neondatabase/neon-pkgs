@@ -1,7 +1,12 @@
 import {
+	chmodSync,
+	lstatSync,
+	mkdirSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	rmSync,
+	statSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -10,13 +15,17 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import {
+	ConcurrentChangeError,
 	describeAgentInstructionOutcome,
+	hasClaudeCodeProjectFiles,
+	importsAgentsFile,
 	NEON_AGENT_SECTION,
 	NEON_SECTION_BEGIN,
 	NEON_SECTION_END,
 	NeonSectionMarkersError,
 	upsertNeonSection,
 	writeAgentInstructions,
+	writeFileIfUnchanged,
 } from "./agent_instructions.js";
 
 const read = (dir: string, name: string): string =>
@@ -74,6 +83,49 @@ describe("upsertNeonSection", () => {
 		);
 	});
 
+	test("a marker quoted inline is content, not a marker", () => {
+		const existing = `# Notes\n\nNeon init owns the text after \`${NEON_SECTION_BEGIN}\`.\n`;
+		expect(upsertNeonSection(existing)).toEqual({
+			content: `${existing}\n${NEON_AGENT_SECTION}\n`,
+			action: "added",
+		});
+	});
+
+	test("whole-line markers inside a code fence are content; the real pair is replaced", () => {
+		const example = `\`\`\`md\n${NEON_SECTION_BEGIN}\nexample\n${NEON_SECTION_END}\n\`\`\`\n`;
+		const before = `# Notes\n\n${example}\n`;
+		const after = "\nMore notes.\n";
+		const stale = `${NEON_SECTION_BEGIN}\nold\n${NEON_SECTION_END}`;
+
+		expect(upsertNeonSection(`# Notes\n\n${example}`)).toEqual({
+			content: `# Notes\n\n${example}\n${NEON_AGENT_SECTION}\n`,
+			action: "added",
+		});
+		expect(upsertNeonSection(`${before}${stale}${after}`)).toEqual({
+			content: `${before}${NEON_AGENT_SECTION}${after}`,
+			action: "updated",
+		});
+	});
+
+	test("tilde fences and longer fences are recognised", () => {
+		const example = `~~~~\n${NEON_SECTION_BEGIN}\n~~~\nstill inside\n~~~~\n`;
+		expect(upsertNeonSection(example).action).toBe("added");
+	});
+
+	test("an indented or CRLF marker line still counts as the whole line", () => {
+		const existing = `intro\r\n  ${NEON_SECTION_BEGIN}  \r\nold\r\n${NEON_SECTION_END}\r\nend\r\n`;
+		expect(upsertNeonSection(existing)).toEqual({
+			content: `intro\r\n${NEON_AGENT_SECTION}\r\nend\r\n`,
+			action: "updated",
+		});
+	});
+
+	test("the written section is found again: its own SQL fence does not hide the end marker", () => {
+		const once = upsertNeonSection("# Notes\n").content;
+		const twice = upsertNeonSection(once.replace("## Neon", "## Old"));
+		expect(twice).toEqual({ content: once, action: "updated" });
+	});
+
 	test("repeated or reversed markers are refused", () => {
 		const pair = `${NEON_SECTION_BEGIN}\nx\n${NEON_SECTION_END}`;
 		expect(() => upsertNeonSection(`${pair}\n${pair}\n`)).toThrow(
@@ -82,6 +134,110 @@ describe("upsertNeonSection", () => {
 		expect(() =>
 			upsertNeonSection(`${NEON_SECTION_END}\n${NEON_SECTION_BEGIN}\n`),
 		).toThrow(NeonSectionMarkersError);
+	});
+});
+
+describe("importsAgentsFile", () => {
+	test("@AGENTS.md on its own line imports AGENTS.md", () => {
+		expect(importsAgentsFile("# Claude\n\n@AGENTS.md\n")).toBe(true);
+		expect(importsAgentsFile("  @AGENTS.md  \r\n")).toBe(true);
+	});
+
+	test("@AGENTS.md inline or inside a code fence is not an import", () => {
+		expect(importsAgentsFile("Claude reads @AGENTS.md too.\n")).toBe(false);
+		expect(importsAgentsFile("# Example\n\n```md\n@AGENTS.md\n```\n")).toBe(
+			false,
+		);
+	});
+});
+
+describe("hasClaudeCodeProjectFiles", () => {
+	let cwd: string;
+
+	beforeEach(() => {
+		cwd = mkdtempSync(join(tmpdir(), "neon-claude-project-"));
+	});
+
+	afterEach(() => {
+		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	test("a .claude directory or a CLAUDE.md is project-level evidence", () => {
+		expect(hasClaudeCodeProjectFiles(cwd)).toBe(false);
+		mkdirSync(join(cwd, ".claude"));
+		expect(hasClaudeCodeProjectFiles(cwd)).toBe(true);
+		rmSync(join(cwd, ".claude"), { recursive: true });
+		writeFileSync(join(cwd, "CLAUDE.md"), "# Claude\n");
+		expect(hasClaudeCodeProjectFiles(cwd)).toBe(true);
+	});
+
+	test("a .claude file is not a .claude directory", () => {
+		writeFileSync(join(cwd, ".claude"), "");
+		expect(hasClaudeCodeProjectFiles(cwd)).toBe(false);
+	});
+});
+
+describe("writeFileIfUnchanged", () => {
+	let cwd: string;
+
+	beforeEach(() => {
+		cwd = mkdtempSync(join(tmpdir(), "neon-atomic-write-"));
+	});
+
+	afterEach(() => {
+		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	test("replaces the file by renaming a flushed temp file over it, keeping its mode", () => {
+		const path = join(cwd, "AGENTS.md");
+		writeFileSync(path, "old\n");
+		chmodSync(path, 0o640);
+		const before = statSync(path);
+
+		writeFileIfUnchanged({ path, content: "old\n" }, "new\n");
+
+		const after = statSync(path);
+		expect(readFileSync(path, "utf8")).toBe("new\n");
+		// A rename puts a different inode at the path; an in-place rewrite keeps the old one.
+		if (process.platform !== "win32") {
+			expect(after.ino).not.toBe(before.ino);
+			expect(after.mode & 0o777).toBe(0o640);
+		}
+		expect(readdirSync(cwd)).toEqual(["AGENTS.md"]);
+	});
+
+	test("creates a missing file", () => {
+		const path = join(cwd, "CLAUDE.md");
+
+		writeFileIfUnchanged({ path, content: undefined }, "@AGENTS.md\n");
+
+		expect(readFileSync(path, "utf8")).toBe("@AGENTS.md\n");
+		expect(readdirSync(cwd)).toEqual(["CLAUDE.md"]);
+	});
+
+	test("refuses when the file changed after it was read, keeping the other edit", () => {
+		const path = join(cwd, "AGENTS.md");
+		writeFileSync(path, "read by init\n");
+		writeFileSync(path, "edited meanwhile\n");
+
+		expect(() =>
+			writeFileIfUnchanged({ path, content: "read by init\n" }, "ours\n"),
+		).toThrow(ConcurrentChangeError);
+
+		expect(readFileSync(path, "utf8")).toBe("edited meanwhile\n");
+		expect(readdirSync(cwd)).toEqual(["AGENTS.md"]);
+	});
+
+	test("refuses when a file appeared after init saw none", () => {
+		const path = join(cwd, "CLAUDE.md");
+		writeFileSync(path, "written meanwhile\n");
+
+		expect(() =>
+			writeFileIfUnchanged({ path, content: undefined }, "@AGENTS.md\n"),
+		).toThrow(ConcurrentChangeError);
+
+		expect(readFileSync(path, "utf8")).toBe("written meanwhile\n");
+		expect(readdirSync(cwd)).toEqual(["CLAUDE.md"]);
 	});
 });
 
@@ -185,6 +341,32 @@ describe("writeAgentInstructions", () => {
 		]);
 		expect(read(cwd, "AGENTS.md").split(NEON_SECTION_BEGIN)).toHaveLength(
 			2,
+		);
+	});
+
+	test("a symlink to a file inside the project stays a symlink; its target gets the section", () => {
+		mkdirSync(join(cwd, "docs"));
+		writeFileSync(join(cwd, "docs", "agents.md"), "# Shared\n");
+		symlinkSync(join("docs", "agents.md"), join(cwd, "AGENTS.md"));
+
+		const outcomes = writeAgentInstructions({ cwd, claudeCode: false });
+
+		expect(outcomes).toEqual([{ file: "AGENTS.md", action: "added" }]);
+		expect(lstatSync(join(cwd, "AGENTS.md")).isSymbolicLink()).toBe(true);
+		expect(read(cwd, "docs/agents.md")).toBe(
+			`# Shared\n\n${NEON_AGENT_SECTION}\n`,
+		);
+	});
+
+	test("a CLAUDE.md with @AGENTS.md only inside a code fence gets the section", () => {
+		const fenced = "# Claude\n\n```md\n@AGENTS.md\n```\n";
+		writeFileSync(join(cwd, "CLAUDE.md"), fenced);
+
+		const outcomes = writeAgentInstructions({ cwd, claudeCode: true });
+
+		expect(outcomes[1]).toEqual({ file: "CLAUDE.md", action: "added" });
+		expect(read(cwd, "CLAUDE.md")).toBe(
+			`${fenced}\n${NEON_AGENT_SECTION}\n`,
 		);
 	});
 

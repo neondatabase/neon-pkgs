@@ -2811,8 +2811,9 @@ describe("init agent instructions", () => {
 		expect(existsSync(join(cwd, "CLAUDE.md"))).toBe(false);
 	});
 
-	test("Claude Code detected in the project gets a CLAUDE.md that imports AGENTS.md", async () => {
+	test("a project with a .claude directory gets a CLAUDE.md that imports AGENTS.md", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claude-md-"));
+		mkdirSync(join(cwd, ".claude"));
 
 		await runWith(cwd, {
 			detectProjectAgents: async () => ["claude-code"],
@@ -2824,6 +2825,44 @@ describe("init agent instructions", () => {
 		expect(readFileSync(join(cwd, "AGENTS.md"), "utf8")).toContain(
 			NEON_SECTION_BEGIN,
 		);
+	});
+
+	test("init run from Claude Code gets a CLAUDE.md that imports AGENTS.md", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claude-host-"));
+
+		await runWith(cwd, { detectAgent: () => "claude-code" });
+
+		expect(readFileSync(join(cwd, "CLAUDE.md"), "utf8")).toBe(
+			"@AGENTS.md\n",
+		);
+	});
+
+	test("Claude Code picked in init gets a CLAUDE.md that imports AGENTS.md", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claude-picked-"));
+
+		await runWith(cwd, {
+			yes: false,
+			config: false,
+			pickAgentSetup: async () => "skills",
+			pickAgents: async () => ["claude-code"],
+		});
+
+		expect(readFileSync(join(cwd, "CLAUDE.md"), "utf8")).toBe(
+			"@AGENTS.md\n",
+		);
+	});
+
+	test("Claude Code installed globally only does not create CLAUDE.md", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claude-global-"));
+
+		await runWith(cwd, {
+			detectInstalledAgents: async () => ["claude-code"],
+		});
+
+		expect(readFileSync(join(cwd, "AGENTS.md"), "utf8")).toBe(
+			`${NEON_AGENT_SECTION}\n`,
+		);
+		expect(existsSync(join(cwd, "CLAUDE.md"))).toBe(false);
 	});
 
 	test("a re-run updates the section in place and keeps the user's text", async () => {
@@ -2851,6 +2890,28 @@ describe("init agent instructions", () => {
 
 		expect(existsSync(join(cwd, "AGENTS.md"))).toBe(false);
 		expect(existsSync(join(cwd, "CLAUDE.md"))).toBe(false);
+	});
+
+	test("--no-agent-setup writes neither file", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-no-agent-setup-"));
+		mkdirSync(join(cwd, ".claude"));
+
+		await runWith(cwd, { agentSetup: false });
+
+		expect(existsSync(join(cwd, "AGENTS.md"))).toBe(false);
+		expect(existsSync(join(cwd, "CLAUDE.md"))).toBe(false);
+	});
+
+	test("--no-agent-setup --agent-instructions still writes the section", async () => {
+		const cwd = mkdtempSync(
+			join(tmpdir(), "neon-init-setup-off-notes-on-"),
+		);
+
+		await runWith(cwd, { agentSetup: false, agentInstructions: true });
+
+		expect(readFileSync(join(cwd, "AGENTS.md"), "utf8")).toBe(
+			`${NEON_AGENT_SECTION}\n`,
+		);
 	});
 });
 
@@ -3230,7 +3291,8 @@ describe("init flag parsing", () => {
 	});
 
 	test("--no-agent-instructions skips the AGENTS.md and CLAUDE.md section", async () => {
-		expect((await parse([])).agentInstructions).toBe(true);
+		// Unset follows --agent-setup, so --no-agent-setup skips the section too.
+		expect((await parse([])).agentInstructions).toBeUndefined();
 		expect(
 			(await parse(["--no-agent-instructions"])).agentInstructions,
 		).toBe(false);
