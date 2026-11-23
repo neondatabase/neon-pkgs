@@ -60,6 +60,8 @@ export type EnvPullProps = BranchScopeProps & {
 	 * by walking cwd.
 	 */
 	config?: string;
+	/** Role for `DATABASE_URL` / `DATABASE_URL_UNPOOLED` (`--role-name`). Omit to auto-pick. */
+	roleName?: string;
 	/**
 	 * CLI config directory. Claimable env resolve looks up the assertion file
 	 * here; `.neon` is identifiers only.
@@ -123,6 +125,12 @@ export const builder = (argv: yargs.Argv) =>
 								"Path to a neon.ts policy (defaults to the neon.ts next to .neon, or in cwd without one)",
 							type: "string",
 						},
+						"role-name": {
+							describe:
+								"Role for DATABASE_URL and DATABASE_URL_UNPOOLED. Defaults to the only role, else neondb_owner, else the only role besides the Data API and Neon Auth roles",
+							type: "string",
+							requiresArg: true,
+						},
 					})
 					.epilogue(
 						[
@@ -171,8 +179,17 @@ export const builder = (argv: yargs.Argv) =>
 						"$0 env pull -s functions",
 						'Pull NEON_BRANCH_ID and NEON_FUNCTION_HOST_SUFFIX, which functionBaseUrl("<slug>") from @neon/env reads',
 					)
+					.example(
+						"$0 env pull --role-name app_owner",
+						"Connect DATABASE_URL as app_owner on a branch with several roles",
+					)
 					.strict(),
 			async (args) => {
+				if (args.roleName === "") {
+					throw new Error(
+						"--role-name cannot be empty. Omit the flag to auto-pick the role.",
+					);
+				}
 				const rawServices = servicesFlagValue(args.service);
 				const rawEnvKeys = envPullFlagValue(args.env);
 				const services = rawServices
@@ -318,6 +335,7 @@ export const pull = async (
 		omitUnsetFunctionEnv: true,
 		...(claimable ? { claimable: true } : {}),
 		...(props.config ? { config: props.config } : {}),
+		...(props.roleName ? { roleName: props.roleName } : {}),
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),

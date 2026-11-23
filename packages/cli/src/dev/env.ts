@@ -84,6 +84,8 @@ export type DevEnvContext = {
 	 * uses the same file for registration and the bundled env pull.
 	 */
 	config?: string;
+	/** Role for the Postgres URLs (`env pull --role-name`). Omit to let `fetchEnv` auto-pick. */
+	roleName?: string;
 	/**
 	 * This request is talking to Claimable Neon. Skip credential minting.
 	 * neon.ts is still the source of truth when it only declares Postgres, Auth,
@@ -907,6 +909,7 @@ const fetchAndProject = async (
 		branch: ctx.branchId as string,
 		...apiOptions(ctx),
 		...(ctx.env ? { env: ctx.env } : {}),
+		...(ctx.roleName ? { roleName: ctx.roleName } : {}),
 		...(opts.keys ? { keys: opts.keys } : {}),
 		...(opts.revokeSuperseded === false ? { revokeSuperseded: false } : {}),
 		...(opts.resolvedBranch ? { resolvedBranch: opts.resolvedBranch } : {}),

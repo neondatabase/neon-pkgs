@@ -605,6 +605,9 @@ neon env pull -s auth -e DATABASE_URL
 
 # The variables functionBaseUrl("<slug>") from @neon/env reads
 neon env pull -s functions
+
+# Connect DATABASE_URL as app_owner on a branch with several roles and no neondb_owner
+neon env pull --role-name app_owner
 ```
 
 Every services flag in the CLI takes those three spellings, the same value syntax, and the same service names — see [`config init --services`](#getting-a-neonts-config-init).

@@ -1913,6 +1913,84 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 	});
 });
 
+/** A project created with a custom owner role, plus a second app role: no `neondb_owner`. */
+class TwoRoleNeonApi extends FakeNeonApi {
+	override async listBranchRoles(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRoleSnapshot[]> {
+		void projectId;
+		return [
+			{ name: "app_owner", branchId, protected: false },
+			{ name: "app_reader", branchId, protected: false },
+		];
+	}
+	override async listBranchDatabases(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonDatabaseSnapshot[]> {
+		void projectId;
+		return [{ name: "app", branchId, ownerName: "app_owner" }];
+	}
+}
+
+describe("env pull --role-name", () => {
+	let cwd: string;
+	beforeEach(() => {
+		cwd = mkdtempSync(join(tmpdir(), "neonctl-env-role-"));
+	});
+	afterEach(() => {
+		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	const runPull = (argv: string[], api: FakeNeonApi) =>
+		builder(
+			yargs()
+				.exitProcess(false)
+				.fail((message, error) => {
+					throw error ?? new Error(message);
+				}),
+		).parseAsync(["pull", ...argv], baseProps(api, cwd));
+
+	it("names the flag when the branch's role cannot be auto-picked", async () => {
+		await expect(runPull([], new TwoRoleNeonApi())).rejects.toThrow(
+			/has 2 roles and none is "neondb_owner".*`--role-name` to the Neon CLI's `neon env pull`/,
+		);
+		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
+	});
+
+	it("connects DATABASE_URL and DATABASE_URL_UNPOOLED as the named role", async () => {
+		await runPull(["--role-name", "app_reader"], new TwoRoleNeonApi());
+
+		const env = readEnvFile(join(cwd, ".env.local"));
+		expect(new URL(env.DATABASE_URL).username).toBe("app_reader");
+		expect(new URL(env.DATABASE_URL_UNPOOLED).username).toBe("app_reader");
+	});
+
+	it("applies the named role when a neon.ts sets the policy", async () => {
+		writeFileSync(join(cwd, "neon.ts"), "export default {};\n");
+
+		await runPull(["--role-name", "app_owner"], new TwoRoleNeonApi());
+
+		const env = readEnvFile(join(cwd, ".env.local"));
+		expect(new URL(env.DATABASE_URL).username).toBe("app_owner");
+	});
+
+	it("lists the branch's roles when the named role does not exist", async () => {
+		await expect(
+			runPull(["--role-name", "app_writer"], new TwoRoleNeonApi()),
+		).rejects.toThrow(
+			/role "app_writer" not found.*Existing roles: app_owner, app_reader/,
+		);
+	});
+
+	it("rejects an empty role name instead of auto-picking", async () => {
+		await expect(
+			runPull(["--role-name", ""], new TwoRoleNeonApi()),
+		).rejects.toThrow("--role-name cannot be empty");
+	});
+});
+
 describe("env pull option parsing", () => {
 	it("rejects a misspelled selector before starting an unscoped pull", () => {
 		const parser = builder(
