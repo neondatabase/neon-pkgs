@@ -1864,6 +1864,23 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 		expect(content).toMatch(/^DATABASE_URL=/m);
 	});
 
+	it("writes a new Nuxt app's vars into a gitignored .env", async () => {
+		writeFileSync(join(cwd, "nuxt.config.ts"), "export default {}\n");
+		writeFileSync(join(cwd, ".gitignore"), ".env.*\n!.env.example\n");
+
+		const result = await autoPullEnvAfterPin({
+			...baseProps(new FakeNeonApi(), cwd),
+			envPull: true,
+		});
+
+		expect(result.status).toBe("written");
+		expect(readEnvFile(join(cwd, ".env")).DATABASE_URL).toBeDefined();
+		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
+		expect(
+			readFileSync(join(cwd, ".gitignore"), "utf8").split("\n"),
+		).toContain(".env");
+	});
+
 	it("pulls when neon.ts function env vars are unset", async () => {
 		const key = "NEON_PKGS_UNSET_FN_ENV_AUTOPULL_TEST";
 		delete process.env[key];

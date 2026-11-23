@@ -2,11 +2,21 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { type ProjectLocation, projectDir } from "./project.js";
 
+/** Nuxt's CLI loads only `.env` unless `--dotenv` names another file. */
+const NUXT_CONFIG_FILENAMES = [
+	"nuxt.config.ts",
+	"nuxt.config.mts",
+	"nuxt.config.cts",
+	"nuxt.config.js",
+	"nuxt.config.mjs",
+	"nuxt.config.cjs",
+];
+
 /**
- * Default dotenv file `env pull` writes to: `.env` when one already exists in the project
- * directory (update where secrets already live), otherwise `.env.local` — matching the
- * `vercel env pull` convention. An explicit `--file` always wins over this and is
- * relative to `cwd`.
+ * Default dotenv file `env pull` writes to: an existing `.env`, else an existing
+ * `.env.local` (update where secrets already live). With neither, `.env` in a Nuxt app
+ * and `.env.local` otherwise, matching the `vercel env pull` convention. An explicit
+ * `--file` always wins over this and is relative to `cwd`.
  */
 export const resolveEnvFilePath = (
 	location: ProjectLocation & { cwd: string },
@@ -16,8 +26,14 @@ export const resolveEnvFilePath = (
 	// would write under the working directory. resolve() keeps an absolute path as-is.
 	if (file) return resolve(location.cwd, file);
 	const dir = projectDir(location);
-	if (existsSync(join(dir, ".env"))) return join(dir, ".env");
-	return join(dir, ".env.local");
+	const dotenv = join(dir, ".env");
+	const local = join(dir, ".env.local");
+	if (existsSync(dotenv)) return dotenv;
+	if (existsSync(local)) return local;
+	const isNuxt = NUXT_CONFIG_FILENAMES.some((name) =>
+		existsSync(join(dir, name)),
+	);
+	return isNuxt ? dotenv : local;
 };
 
 /**

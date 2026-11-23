@@ -178,6 +178,17 @@ describe("resolveEnvFilePath", () => {
 		writeFileSync(join(cwd, ".env"), "EXISTING=1\n");
 		expect(resolveEnvFilePath({ cwd: cwd })).toBe(join(cwd, ".env"));
 	});
+
+	it("defaults to .env in a Nuxt app, the only file nuxt dev loads", () => {
+		writeFileSync(join(cwd, "nuxt.config.ts"), "export default {}\n");
+		expect(resolveEnvFilePath({ cwd: cwd })).toBe(join(cwd, ".env"));
+	});
+
+	it("keeps an existing .env.local in a Nuxt app", () => {
+		writeFileSync(join(cwd, "nuxt.config.ts"), "export default {}\n");
+		writeFileSync(join(cwd, ".env.local"), "EXISTING=1\n");
+		expect(resolveEnvFilePath({ cwd: cwd })).toBe(join(cwd, ".env.local"));
+	});
 });
 
 describe("readEnvFile", () => {

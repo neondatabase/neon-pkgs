@@ -228,7 +228,7 @@ export const builder = (argv: yargs.Argv) =>
 					})
 					.option("file", {
 						describe:
-							"Target dotenv file. Defaults to an existing .env, otherwise .env.local",
+							"Target dotenv file. Defaults to an existing .env, else an existing .env.local; with neither, .env in a Nuxt app and .env.local otherwise",
 						type: "string",
 					})
 					.option("config", {
