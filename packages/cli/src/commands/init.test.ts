@@ -26,6 +26,7 @@ import {
 	namedAgentsUnavailable,
 } from "../init/copy.js";
 import type { InitAgentSetup } from "../init/plan.js";
+import type { InitConfigFn } from "../init/run.js";
 import type { AgentType } from "../mcp/agents.js";
 import { test as cliTest } from "../test_utils/fixtures.js";
 import { npmEnvForIsolatedHome } from "../test_utils/npm_env.js";
@@ -2666,16 +2667,21 @@ describe("init handler", () => {
 	test("a failed dependency install reports its cause on screen and in cli_init_end", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-install-fails-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
-		const { ConfigInstallFailed } = await import("./config.js");
-		const initConfig = vi
-			.fn()
-			.mockRejectedValue(
-				new ConfigInstallFailed(
-					"npm install @neon/config @neon/env",
-					"npm",
-					"ERESOLVE",
-				),
-			);
+		writeFileSync(join(cwd, "package-lock.json"), "{}\n");
+		const { initCmd } = await import("./config.js");
+		const initConfig = vi.fn<InitConfigFn>((input) =>
+			initCmd({
+				cwd: input.cwd,
+				install: input.install,
+				silent: true,
+				requireInstall: true,
+				...(input.services ? { services: input.services } : {}),
+				...(input.packageManager
+					? { packageManager: input.packageManager }
+					: {}),
+				run: () => Promise.resolve({ ok: false, detail: "ERESOLVE" }),
+			}),
+		);
 		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { handler } = await import("./init.js");
 		const { trackEvent } = await import("../analytics.js");
@@ -2702,7 +2708,11 @@ describe("init handler", () => {
 		expect(out).toContain(
 			"Could not install the Neon dependencies with npm (ERESOLVE).",
 		);
-		expect(out).toContain("npm install @neon/config @neon/env");
+		expect(out).toContain(
+			"npm stops on a peer dependency conflict in this project's dependency tree.",
+		);
+		expect(out).toContain("npm install --force @neon/config @neon/env");
+		expect(out).not.toContain("npm install @neon/config @neon/env");
 		const end = vi
 			.mocked(trackEvent)
 			.mock.calls.find((call) => call[0] === "cli_init_end")?.[1];
@@ -2711,6 +2721,8 @@ describe("init handler", () => {
 				outcome: "error",
 				error_step: "config",
 				error_code: "DEPENDENCY_INSTALL_FAILED",
+				error_message:
+					"Could not install the Neon dependencies with npm (ERESOLVE).",
 				error_detail: "ERESOLVE",
 			}),
 		);

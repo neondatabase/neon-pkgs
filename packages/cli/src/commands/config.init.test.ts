@@ -271,7 +271,70 @@ describe("config init", () => {
 			command: expect.stringMatching(
 				/^cd \S*neonctl-config-init-\S+ && npm install @neon\/config @neon\/env$/,
 			),
+			hint: undefined,
 		});
+	});
+
+	test("after npm ERESOLVE, the retry it prints adds --force and says why", async () => {
+		const failed = initCmd({
+			cwd: workspace,
+			requireInstall: true,
+			packageManager: "npm",
+			run: () => Promise.resolve({ ok: false, detail: "ERESOLVE" }),
+		});
+
+		await expect(failed).rejects.toMatchObject({
+			message:
+				"Could not install the Neon dependencies with npm (ERESOLVE).",
+			detail: "ERESOLVE",
+			command: expect.stringMatching(
+				/ && npm install --force @neon\/config @neon\/env$/,
+			),
+			hint: expect.stringContaining("peer dependency conflict"),
+		});
+	});
+
+	// A script under pnpm can run npm, so pnpm's install can report npm's code.
+	test.each([
+		"ERR_PNPM_PEER_DEP_ISSUES",
+		"ERESOLVE",
+	])("after pnpm %s, the retry stays the plain command", async (detail) => {
+		const failed = initCmd({
+			cwd: workspace,
+			requireInstall: true,
+			packageManager: "pnpm",
+			run: () => Promise.resolve({ ok: false, detail }),
+		});
+
+		await expect(failed).rejects.toMatchObject({
+			command: expect.stringMatching(
+				/ && pnpm add @neon\/config @neon\/env$/,
+			),
+			hint: undefined,
+		});
+	});
+
+	test("the warning after npm ERESOLVE names the --force retry", async () => {
+		const warnings: string[] = [];
+		const stderr = vi
+			.spyOn(process.stderr, "write")
+			.mockImplementation((chunk: string | Uint8Array) => {
+				warnings.push(String(chunk));
+				return true;
+			});
+		try {
+			await initCmd({
+				cwd: workspace,
+				packageManager: "npm",
+				run: () => Promise.resolve({ ok: false, detail: "ERESOLVE" }),
+			});
+		} finally {
+			stderr.mockRestore();
+		}
+
+		const warning = warnings.join("");
+		expect(warning).toContain("peer dependency conflict");
+		expect(warning).toContain("npm install --force @neon/config @neon/env");
 	});
 
 	test("leaves an existing package.json as is", async () => {

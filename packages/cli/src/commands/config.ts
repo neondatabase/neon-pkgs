@@ -271,8 +271,17 @@ const DEPENDENCY_FIELDS = [
 	"optionalDependencies",
 ] as const;
 
+// npm re-checks the whole tree on every add, so retrying without --force fails again.
+const isNpmPeerConflict = (pm: PackageManager, detail: string): boolean =>
+	pm === "npm" && detail === "ERESOLVE";
+
+const PEER_CONFLICT_HINT =
+	"npm stops on a peer dependency conflict in this project's dependency tree. --force installs the Neon packages anyway and reports the conflict as a warning.";
+
 export class ConfigInstallFailed extends DetailedError {
+	/** The retry to run by hand. */
 	readonly command: string;
+	readonly hint: string | undefined;
 
 	constructor(command: string, pm: PackageManager, detail: string) {
 		super(
@@ -281,6 +290,9 @@ export class ConfigInstallFailed extends DetailedError {
 		);
 		this.name = "ConfigInstallFailed";
 		this.command = command;
+		this.hint = isNpmPeerConflict(pm, detail)
+			? PEER_CONFLICT_HINT
+			: undefined;
 	}
 }
 
@@ -589,14 +601,19 @@ export const ensureConfigPackages = async (
 	}
 	const result = await run(pm, args, cwd);
 	if (!result.ok) {
+		const peerConflict = isNpmPeerConflict(pm, result.detail);
+		const retry = installCommandFrom(cwd, pm, missing, {
+			acceptPeerConflicts: peerConflict,
+		});
 		if (props.requireInstall) {
-			throw new ConfigInstallFailed(installHint, pm, result.detail);
+			throw new ConfigInstallFailed(retry, pm, result.detail);
 		}
 		log.warning(
-			"Could not install the config packages automatically with %s (%s). Run by hand: %s",
+			"Could not install the config packages automatically with %s (%s).%s Run by hand: %s",
 			pm,
 			result.detail,
-			installHint,
+			peerConflict ? ` ${PEER_CONFLICT_HINT}` : "",
+			retry,
 		);
 	}
 };

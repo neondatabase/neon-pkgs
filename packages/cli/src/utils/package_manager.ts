@@ -275,8 +275,17 @@ export const recommendedCliUpgradeCommand = (
 /**
  * Where an added package lands in `package.json`. `dir` is the directory it is
  * added to; pass it whenever that can be a monorepo root.
+ *
+ * `acceptPeerConflicts` adds npm's `--force`, which lets npm add packages to a tree
+ * that already has a peer dependency conflict (`ERESOLVE`). The other managers read
+ * `--force` as "refetch and reinstall everything", so they get nothing.
  */
-export type AddOptions = { dev?: boolean; exact?: boolean; dir?: string };
+export type AddOptions = {
+	dev?: boolean;
+	exact?: boolean;
+	dir?: string;
+	acceptPeerConflicts?: boolean;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
@@ -351,6 +360,9 @@ export const installArgs = (
 				...(options?.dir === undefined
 					? []
 					: workspaceRootFlag(pm, options.dir)),
+				...(options?.acceptPeerConflicts && pm === "npm"
+					? ["--force"]
+					: []),
 				// All four accept -D for devDependencies, bun included.
 				...(options?.dev ? ["-D"] : []),
 				...(options?.exact ? ["-E"] : []),
