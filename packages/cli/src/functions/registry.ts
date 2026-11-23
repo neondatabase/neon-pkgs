@@ -1,3 +1,5 @@
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
+
 const MAX_PATH_LENGTH = 255;
 export const MAX_FILE_BYTES = 256 * 1024;
 export const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
@@ -134,10 +136,9 @@ export const resolveOperationById = (
 ): FunctionTemplateOperation => {
 	const operation = operations.find((candidate) => candidate.id === id);
 	if (!operation) {
+		const ids = operations.map((candidate) => candidate.id);
 		throw new Error(
-			`Unknown operation "${id}". Available operations: ${operations
-				.map((candidate) => candidate.id)
-				.join(", ")}.`,
+			`Unknown operation ${REDACTED_INVALID_VALUE}.${didYouMean([id], ids)} Available operations: ${ids.join(", ")}.`,
 		);
 	}
 	return operation;

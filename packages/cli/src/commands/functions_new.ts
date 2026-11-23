@@ -4,6 +4,7 @@ import prompts from "prompts";
 import { recordScaffoldedTemplate } from "../analytics.js";
 import { isInteractiveTerminal } from "../env.js";
 import { resolveEnvFilePath } from "../env_file.js";
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import {
 	type FunctionTemplateOperation,
 	type RegistryIndexEntry,
@@ -157,12 +158,12 @@ export const listTemplates = async (props: OutputProps): Promise<void> => {
 	writeTemplates(props, (await openRegistry()).entries);
 };
 
-const unknownTemplate = (id: string, registry: Registry): Error =>
-	new Error(
-		`Unknown function template "${id}" in ${describeRegistrySources(registry.sources)}. Available templates: ${registry.entries
-			.map((entry) => entry.id)
-			.join(", ")}.`,
+const unknownTemplate = (id: string, registry: Registry): Error => {
+	const ids = registry.entries.map((entry) => entry.id);
+	return new Error(
+		`Unknown function template ${REDACTED_INVALID_VALUE} in ${describeRegistrySources(registry.sources)}.${didYouMean([id], ids)} Available templates: ${ids.join(", ")}.`,
 	);
+};
 
 const pickOperations = async (
 	operations: readonly FunctionTemplateOperation[],

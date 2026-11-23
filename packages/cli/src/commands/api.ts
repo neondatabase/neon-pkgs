@@ -6,6 +6,7 @@ import YAML from "yaml";
 import type yargs from "yargs";
 
 import { codeFromBody, isNeonApiError, type RequestParams } from "../api.js";
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import type { CommonProps } from "../types.js";
 import {
 	DEFAULT_SPEC_URL,
@@ -44,7 +45,7 @@ export function parseTypedValue(raw: string): unknown {
 export function parseKeyValue(input: string): { key: string; value: string } {
 	const eq = input.indexOf("=");
 	if (eq === -1) {
-		throw new Error(`Invalid "key=value" pair: "${input}".`);
+		throw new Error(`Invalid "key=value" pair: ${REDACTED_INVALID_VALUE}.`);
 	}
 	return { key: input.slice(0, eq), value: input.slice(eq + 1) };
 }
@@ -105,7 +106,9 @@ export function parseHeaders(pairs: string[]): Record<string, string> {
 	for (const pair of pairs) {
 		const idx = pair.indexOf(":");
 		if (idx === -1) {
-			throw new Error(`Invalid header "${pair}". Expected "key:value".`);
+			throw new Error(
+				`Invalid header ${REDACTED_INVALID_VALUE}. Expected "key:value".`,
+			);
 		}
 		headers[pair.slice(0, idx).trim()] = pair.slice(idx + 1).trim();
 	}
@@ -115,7 +118,7 @@ export function parseHeaders(pairs: string[]): Record<string, string> {
 function assertMethod(method: string): asserts method is HttpMethod {
 	if (!(HTTP_METHODS as readonly string[]).includes(method)) {
 		throw new Error(
-			`Unsupported method "${method}". Use one of: ${HTTP_METHODS.join(", ")}.`,
+			`Unsupported method ${REDACTED_INVALID_VALUE}.${didYouMean([method], HTTP_METHODS)} Use one of: ${HTTP_METHODS.join(", ")}.`,
 		);
 	}
 }

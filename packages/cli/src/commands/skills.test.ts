@@ -331,7 +331,7 @@ describe("neon skills", () => {
 			["skills", "-y", "-s", "eve"],
 			{ ...runOptions(home, cwd, bin), code: 1 },
 		);
-		expect(unknownSkill).toMatch(/Unknown skill: "eve"/);
+		expect(unknownSkill).toMatch(/Unknown skill: <redacted invalid value>/);
 		const { stderr: star } = await testCliCommand(
 			["skills", "-y", "-s", "*"],
 			{ ...runOptions(home, cwd, bin), code: 1 },
@@ -680,7 +680,7 @@ describe("neon skills", () => {
 			["skills", "-y", "--agent", "eve"],
 			{ ...runOptions(home, cwd, bin), code: 1 },
 		);
-		expect(stderr).toMatch(/Unknown agent: "eve"/);
+		expect(stderr).toMatch(/Unknown agent: <redacted invalid value>/);
 		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
 

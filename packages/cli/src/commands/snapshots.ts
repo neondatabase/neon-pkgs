@@ -6,6 +6,7 @@ import type {
 } from "@neon/sdk";
 import type yargs from "yargs";
 import { isNeonApiError, retryOnLock } from "../api.js";
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import { log } from "../log.js";
 import type { ProjectScopeProps } from "../types.js";
 import {
@@ -624,7 +625,7 @@ const parseScheduleJson = (raw: string): BackupScheduleItem[] => {
 		}
 		if (!isSnapshotFrequency(frequency)) {
 			throw new Error(
-				`--schedule entry ${index} has an unsupported "frequency": "${frequency}". Use one of: ${SNAPSHOT_FREQUENCIES.join(", ")}.`,
+				`--schedule entry ${index} has an unsupported "frequency": ${REDACTED_INVALID_VALUE}.${didYouMean([frequency], SNAPSHOT_FREQUENCIES)} Use one of: ${SNAPSHOT_FREQUENCIES.join(", ")}.`,
 			);
 		}
 		const item: BackupScheduleItem = { frequency };

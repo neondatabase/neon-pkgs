@@ -125,7 +125,7 @@ const USAGE_ERRORS = [
 	},
 	{
 		args: ["config", "add", "--output", "bogus"],
-		error: 'Invalid values:\n  Argument: output, Given: "bogus", Choices: "json", "yaml", "table"',
+		error: 'Invalid values:\n  Argument: output, Given: <redacted invalid value>, Choices: "json", "yaml", "table"',
 		helpFor: ["config", "add"],
 	},
 ] as const;

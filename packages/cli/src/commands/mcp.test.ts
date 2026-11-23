@@ -571,7 +571,9 @@ describe("neon mcp", () => {
 			["mcp", "-y", "--oauth", "--category", "nope"],
 			{ ...runOptions(home, cwd), apiKey: false, code: 1 },
 		);
-		expect(stderr).toMatch(/Unknown MCP category: "nope"/);
+		expect(stderr).toMatch(
+			/Unknown MCP category: <redacted invalid value>/,
+		);
 		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
 	});
 
@@ -804,7 +806,7 @@ describe("neon mcp", () => {
 			["mcp", "--agent", "not-an-agent"],
 			{ ...runOptions(home, cwd), code: 1 },
 		);
-		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
+		expect(stderr).toMatch(/Unknown agent: <redacted invalid value>/);
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
 });

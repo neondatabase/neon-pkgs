@@ -413,9 +413,9 @@ describe("functions new", () => {
 	it("rejects an unknown operation and an unknown template", async () => {
 		await expect(
 			run({ template: "mailer", operations: ["nope"] }),
-		).rejects.toThrow(/Unknown operation "nope"/);
+		).rejects.toThrow(/Unknown operation <redacted invalid value>/);
 		await expect(run({ template: "nope" })).rejects.toThrow(
-			/Available templates: hello, notes, mailer/,
+			/^Unknown function template <redacted invalid value> in .*\. Did you mean notes\? Available templates: hello, notes, mailer\.$/,
 		);
 	});
 });
