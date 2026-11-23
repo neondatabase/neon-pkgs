@@ -1,4 +1,8 @@
-import { spawnSync } from "node:child_process";
+import {
+	type SpawnSyncOptionsWithStringEncoding,
+	type SpawnSyncReturns,
+	spawnSync,
+} from "node:child_process";
 import { delimiter, dirname, join, resolve } from "node:path";
 import which from "which";
 
@@ -153,6 +157,49 @@ const withPath = (env: NodeJS.ProcessEnv, path: string): NodeJS.ProcessEnv => {
 	return { ...env, [key ?? "PATH"]: path };
 };
 
+const versionRunOptions = (options: {
+	cwd: string;
+	searchPath: string;
+}): SpawnSyncOptionsWithStringEncoding => ({
+	cwd: options.cwd,
+	env: withPath(pluginsChildEnv(), options.searchPath),
+	encoding: "utf8",
+	stdio: ["ignore", "pipe", "pipe"],
+	timeout: VERSION_TIMEOUT_MS,
+	windowsHide: true,
+});
+
+const versionRunProblem = (
+	result: SpawnSyncReturns<string>,
+): Extract<PluginsCommandProblem, { kind: "broken" }> | undefined => {
+	if (result.error !== undefined) {
+		const code =
+			"code" in result.error && typeof result.error.code === "string"
+				? result.error.code
+				: undefined;
+		return {
+			kind: "broken",
+			detail:
+				code === "ETIMEDOUT"
+					? `timed out after ${VERSION_TIMEOUT_MS / 1000} seconds`
+					: (code ?? result.error.message),
+		};
+	}
+	if (result.status !== 0) {
+		const line = firstLine(result.stderr) || firstLine(result.stdout);
+		return {
+			kind: "broken",
+			detail:
+				line.length > 0
+					? line.slice(0, 160).replace(/\.$/, "")
+					: result.signal !== null
+						? `killed by ${result.signal}`
+						: `exit code ${result.status}`,
+		};
+	}
+	return undefined;
+};
+
 /**
  * Runs `<command> --version` the way the plugins CLI spawns the command (no shell, the npx
  * search PATH, its child env), so a command it could not run is caught before it runs.
@@ -168,41 +215,53 @@ const probePluginsCommand = (
 	if (resolved === null) {
 		return { kind: "missing" };
 	}
-	const result = spawnSync(resolved, ["--version"], {
-		cwd: options.cwd,
-		env: withPath(pluginsChildEnv(), options.searchPath),
-		encoding: "utf8",
-		stdio: ["ignore", "pipe", "pipe"],
-		timeout: VERSION_TIMEOUT_MS,
-		windowsHide: true,
+	const result = spawnSync(
+		resolved,
+		["--version"],
+		versionRunOptions(options),
+	);
+	return (
+		versionRunProblem(result) ??
+		pluginsCommandVersionProblem(
+			command,
+			`${result.stdout}\n${result.stderr}`,
+		)
+	);
+};
+
+export type PluginsGitProblem = Extract<
+	PluginsCommandProblem,
+	{ kind: "missing" | "broken" }
+>;
+
+/**
+ * The plugins CLI runs `git clone` through a shell, so this probe runs `git --version`
+ * through one too: without a shell, Node cannot run a Windows `git.cmd`. A slow git is
+ * left to the plugins CLI rather than blocking the install.
+ */
+export const pluginsGitProblem = (options: {
+	cwd: string;
+	path?: string;
+}): PluginsGitProblem | undefined => {
+	const searchPath = pluginsCommandSearchPath(
+		options.cwd,
+		options.path ?? process.env.PATH ?? "",
+	);
+	if (which.sync("git", { nothrow: true, path: searchPath }) === null) {
+		return { kind: "missing" };
+	}
+	const result = spawnSync("git --version", {
+		...versionRunOptions({ cwd: options.cwd, searchPath }),
+		shell: true,
 	});
-	if (result.error !== undefined) {
-		const code =
-			"code" in result.error && typeof result.error.code === "string"
-				? result.error.code
-				: undefined;
-		return {
-			kind: "broken",
-			detail:
-				code === "ETIMEDOUT"
-					? `timed out after ${VERSION_TIMEOUT_MS / 1000} seconds`
-					: (code ?? result.error.message),
-		};
+	if (
+		result.error !== undefined &&
+		"code" in result.error &&
+		result.error.code === "ETIMEDOUT"
+	) {
+		return undefined;
 	}
-	const output = `${result.stdout}\n${result.stderr}`;
-	if (result.status !== 0) {
-		const line = firstLine(result.stderr) || firstLine(result.stdout);
-		return {
-			kind: "broken",
-			detail:
-				line.length > 0
-					? line.slice(0, 160).replace(/\.$/, "")
-					: result.signal !== null
-						? `killed by ${result.signal}`
-						: `exit code ${result.status}`,
-		};
-	}
-	return pluginsCommandVersionProblem(command, output);
+	return versionRunProblem(result);
 };
 
 const commandRows = (

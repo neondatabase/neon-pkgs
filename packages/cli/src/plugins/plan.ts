@@ -17,6 +17,7 @@ import {
 	getPluginsTargetName,
 	mappedPluginsTargets,
 	missingPluginsCommands,
+	type PluginsGitProblem,
 	type PluginsMappedTarget,
 	pluginsCommandFix,
 	pluginsCommandProblemText,
@@ -55,6 +56,24 @@ export const unusablePluginsCommandsError = (
 					`Cannot install the Neon plugin for ${getAgentDisplayName(row.agent)}: "${row.command.name}" ${pluginsCommandProblemText(row)}. ${pluginsCommandFix(row)}, then retry.`,
 			)
 			.join("\n"),
+	);
+
+const gitErrorPrefix =
+	'Cannot install the Neon plugin: the plugins CLI downloads it with git, and "git"';
+
+const gitFix = (problem: PluginsGitProblem): string => {
+	if (problem.kind === "missing") {
+		return "Install Git (https://git-scm.com/downloads) or add it to PATH";
+	}
+	// macOS ships /usr/bin/git as an xcrun shim that only works once the Command Line Tools are installed.
+	return problem.detail.startsWith("xcrun:")
+		? "Install the Command Line Tools (xcode-select --install) or install Git"
+		: "Repair or reinstall Git";
+};
+
+export const pluginsGitError = (problem: PluginsGitProblem): Error =>
+	new Error(
+		`${gitErrorPrefix} ${problem.kind === "missing" ? "was not found on PATH" : `did not run ("git --version" failed: ${problem.detail})`}. ${gitFix(problem)}, then retry.`,
 	);
 
 export const assertPluginsCanRun = (options: {
