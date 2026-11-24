@@ -1,3 +1,4 @@
+import type { LanguageModelV3File } from "@ai-sdk/provider";
 import type { FetchFunction } from "@ai-sdk/provider-utils";
 
 // Keep this module until the Neon AI Gateway returns a string `content` for
@@ -20,15 +21,22 @@ import type { FetchFunction } from "@ai-sdk/provider-utils";
  *     { "type": "text", "text": "…" }
  *   ]
  *
- * and Gemini models send text parts on non-streaming responses:
+ * Gemini models send text parts on non-streaming responses:
  *
  *   "content": [{ "type": "text", "text": "…", "thoughtSignature": "…" }]
  *
+ * and the Gemini image models send the generated image as a part:
+ *
+ *   "content": [{ "type": "image_url", "image_url": { "url": "data:image/png;base64,…" } }]
+ *
  * The Chat Completions spec requires `content` to be a string, so any strict
  * OpenAI-compatible client (incl. the Vercel AI SDK) rejects it. We flatten the
- * `text` parts into the string `content` and hoist reasoning into
+ * `text` parts into the string `content`, hoist reasoning into
  * `reasoning_content` (which `@ai-sdk/openai-compatible` already surfaces as an
- * AI SDK reasoning part).
+ * AI SDK reasoning part), and move `image_url` parts to `images`, the field
+ * OpenRouter and the Vercel AI Gateway use for generated images.
+ * `@ai-sdk/openai-compatible` ignores `images`, so `NeonChatLanguageModel`
+ * turns them into AI SDK file parts (`imageFilesFrom`).
  *
  * The transform only rewrites when `content` is an array, and the fetch wrapper
  * returns the response untouched when nothing was rewritten. So it is a true
@@ -40,9 +48,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+interface ImageUrlPart {
+	type: "image_url";
+	image_url: { url: string };
+}
+
 interface ExtractedHarmony {
 	text: string;
 	reasoning: string;
+	images: ImageUrlPart[];
+}
+
+function isImageUrlPart(
+	part: Record<string, unknown>,
+): part is Record<string, unknown> & ImageUrlPart {
+	return (
+		part.type === "image_url" &&
+		isRecord(part.image_url) &&
+		typeof part.image_url.url === "string"
+	);
 }
 
 /** The result of a normalization pass, flagging whether anything was rewritten. */
@@ -65,9 +89,17 @@ export function extractHarmonyContent(
 
 	const texts: string[] = [];
 	const reasonings: string[] = [];
+	const images: ImageUrlPart[] = [];
 
 	for (const part of content) {
 		if (!isRecord(part)) {
+			continue;
+		}
+		if (isImageUrlPart(part)) {
+			images.push({
+				type: "image_url",
+				image_url: { url: part.image_url.url },
+			});
 			continue;
 		}
 		if (part.type === "text") {
@@ -99,7 +131,56 @@ export function extractHarmonyContent(
 		}
 	}
 
-	return { text: texts.join(""), reasoning: reasonings.join("\n") };
+	return { text: texts.join(""), reasoning: reasonings.join("\n"), images };
+}
+
+const DATA_URL = /^data:([^;,]+);base64,(.*)$/s;
+
+/**
+ * The generated images a normalized message or delta carries in `images`, as AI SDK file
+ * parts. The gateway returns each image inline as a base64 data URL; any other URL throws,
+ * because a file part cannot carry a remote reference and dropping the image would bill the
+ * caller for output they never receive.
+ */
+export function imageFilesFrom(messageOrDelta: unknown): LanguageModelV3File[] {
+	if (!isRecord(messageOrDelta) || !Array.isArray(messageOrDelta.images)) {
+		return [];
+	}
+	const files: LanguageModelV3File[] = [];
+	for (const image of messageOrDelta.images) {
+		if (!isRecord(image) || !isImageUrlPart(image)) {
+			continue;
+		}
+		const match = DATA_URL.exec(image.image_url.url);
+		if (!match) {
+			throw new Error(
+				`The Neon AI Gateway returned an image as "${image.image_url.url.slice(0, 40)}…"; ` +
+					"@neon/ai-sdk-provider only reads base64 data URLs.",
+			);
+		}
+		files.push({ type: "file", mediaType: match[1], data: match[2] });
+	}
+	return files;
+}
+
+export function firstChoiceField(
+	body: unknown,
+	field: "message" | "delta",
+): unknown {
+	if (!isRecord(body) || !Array.isArray(body.choices)) {
+		return undefined;
+	}
+	const choice = body.choices[0];
+	return isRecord(choice) ? choice[field] : undefined;
+}
+
+function moveImages(
+	target: Record<string, unknown>,
+	images: ImageUrlPart[],
+): void {
+	if (images.length > 0 && target.images == null) {
+		target.images = images;
+	}
 }
 
 /**
@@ -124,6 +205,7 @@ export function normalizeCompletionBody(body: unknown): NormalizeResult {
 			continue;
 		}
 		message.content = extracted.text;
+		moveImages(message, extracted.images);
 		changed = true;
 		if (
 			extracted.reasoning.length > 0 &&
@@ -164,6 +246,7 @@ export function normalizeChunkBody(body: unknown): NormalizeResult {
 		} else {
 			delta.content = undefined;
 		}
+		moveImages(delta, extracted.images);
 		if (
 			extracted.reasoning.length > 0 &&
 			delta.reasoning_content == null &&
