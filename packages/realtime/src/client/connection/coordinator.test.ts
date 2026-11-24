@@ -269,7 +269,7 @@ describe("ConnectionCoordinator", () => {
 		const coordinator = createCoordinator();
 		coordinator.subscribe({ capability: "token" }, callbacks);
 		const socket = defined(FakeWebSocket.instances[0]);
-		expect(socket.protocols).toBe("neon.realtime.v2");
+		expect(socket.protocols).toBe("neon.realtime.v3");
 		socket.open();
 		expect(socket.sent).toEqual([]);
 		socket.receive({ type: "ready" });
@@ -406,6 +406,7 @@ describe("ConnectionCoordinator", () => {
 		await expect(remainingRenewal).resolves.toBeUndefined();
 		socket.receive({
 			type: "baseline_sync_start",
+			scope: { kind: "all" },
 			live_id: "42",
 			epoch: "1",
 			baseline_sync_attempt: "1",
@@ -963,6 +964,7 @@ describe("subscription load-shedding recovery", () => {
 	function baseline(socket: FakeWebSocket, liveId: string) {
 		socket.receive({
 			type: "baseline_sync_start",
+			scope: { kind: "all" },
 			live_id: liveId,
 			epoch: "1",
 			baseline_sync_attempt: "1",

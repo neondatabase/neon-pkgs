@@ -1,12 +1,12 @@
 import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
-// The client still speaks protocol v2, from its frozen snapshot.
-import protocolSchema from "../../../../schema/legacy/realtime-protocol-v2.schema.json";
+import protocolSchema from "../../../../schema/realtime-protocol.schema.json";
 import capabilitySchema from "../../../../schema/realtime-query-capability.schema.json";
 import capabilityFixtures from "../../../server/capability/schema/realtime-query-capability-v2.fixtures.json";
 import orderedFixtures from "./ordered-changes.fixtures.json";
 import protocolFixtures from "./realtime-protocol.fixtures.json";
+import segmentRoundFixtures from "./segment-rounds.fixtures.json";
 
 describe("Realtime protocol contracts", () => {
 	it("accepts every public protocol fixture marked valid", () => {
@@ -14,6 +14,7 @@ describe("Realtime protocol contracts", () => {
 		for (const fixture of [
 			...protocolFixtures.valid,
 			...orderedFixtures.valid,
+			...segmentRoundFixtures.valid,
 		]) {
 			expect(validate(fixture), JSON.stringify(validate.errors)).toBe(
 				true,
@@ -26,6 +27,7 @@ describe("Realtime protocol contracts", () => {
 		for (const fixture of [
 			...protocolFixtures.invalid,
 			...orderedFixtures.invalid,
+			...segmentRoundFixtures.invalid,
 		]) {
 			expect(validate(fixture), JSON.stringify(fixture)).toBe(false);
 		}

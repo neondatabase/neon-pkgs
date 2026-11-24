@@ -17,13 +17,10 @@ After editing an active schema, run `pnpm --filter @neon/realtime generate` to
 refresh the generated TypeScript types and standalone protocol validator.
 Build and test scripts check that the generated files match the active schemas.
 
-Until the client adopts protocol v3, the protocol generator still reads the
-frozen v2 snapshot under `legacy/`, so the generated code and the WebSocket
-behavior are unchanged.
-
 ## Legacy contracts and export compatibility
 
-The schemas under `legacy/` are frozen snapshots. The isolated legacy contract test checks their exact bytes and
+The schemas under `legacy/` are frozen snapshots. No generator or runtime code
+consumes them. The isolated legacy contract test checks their exact bytes and
 their original contracts. Shared fixtures belong to the active codec and
 contract tests.
 
@@ -48,10 +45,17 @@ Protocol v3 was first published as `schema-next/realtime-protocol-v3.schema.json
 it is now the active `realtime-protocol.schema.json` with its bytes unchanged, so
 both paths have the same digest. Protocol v2 keeps its bytes under `legacy/`.
 
-Deploy the proxy changes that require client metadata over `neon.realtime.v2`
-and accept capability v2 before releasing this SDK. Protocol v1 and capability
-v1 remain available during the transition. This SDK requests v2 and emits
-capability v2.
+This SDK requests only `neon.realtime.v3`, including on reconnect, and emits
+capability v2. Deploy a proxy that serves protocol v3 before releasing it.
+Protocol v1 and v2 remain available for previously released clients.
+
+Protocol v3 adds partial refreshes. A publication can commit a hole
+(`segments_pending`): some of a live query's rows for that tick arrive later, in
+a round. A round is a baseline sync whose `scope` is `selected`: it replaces
+only the named segments and resolves the holes in its `covered` range. Rows and
+upserts of multi-row segments carry an opaque `segment_tag`, and rows of an
+ordered round can carry `after_row_key`. Applications never see tags, scopes
+or holes; the client turns each round into an ordinary `changes` update.
 
 V2 added `move` with required `row_key` and
 `after_row_key`; the latter is a row key or null for head. Validate normalized

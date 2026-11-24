@@ -939,6 +939,7 @@ function wireClient() {
 			};
 			receive({
 				type: "baseline_sync_start",
+				scope: { kind: "all" },
 				...target,
 				mvcc: { xmin: "1", xmax: "2", xip: [] },
 			});
