@@ -1223,7 +1223,7 @@ const { data, error } = await neon.request({
 });
 ```
 
-`path` is relative to `baseUrl` with every placeholder filled in; query parameters go in `query`, and `body` is sent as JSON. A path that does not start with `/`, keeps a `{placeholder}`, carries `?` or `#`, or has an empty, `.`, `..`, or encoded-slash segment (after percent-decoding) is refused with a `NeonClientError` before anything is sent. `parseApiPath(path)` returns the decoded segments the same check produces, for callers that apply their own rules to a path.
+`path` is relative to `baseUrl` with every placeholder filled in; query parameters go in `query`, and `body` is sent as JSON. A path that does not start with `/`, keeps a `{placeholder}`, carries `?` or `#`, or has an empty, `.`, `..`, or encoded-slash segment (after percent-decoding) is refused with a `NeonClientError` before anything is sent. `parseApiPath(path)` returns `{ data, error }` with the decoded segments the same check produces, for callers that apply their own rules to a path.
 
 ### `@neon/sdk/openapi`
 

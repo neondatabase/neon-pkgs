@@ -1,6 +1,6 @@
 import type { CallOptions, RequestContext } from "./context.js";
 import { NeonClientError } from "./errors.js";
-import { err, finalize } from "./result.js";
+import { err, finalize, type NeonResult, ok } from "./result.js";
 
 export type ApiRequestMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -23,10 +23,12 @@ const PCHARS = /^[A-Za-z0-9\-._~!$&'()*+,;=:@%/]+$/;
  * is refused. Policy checks on a path must read these segments: `fetch` and the server
  * decode percent-escapes, so the raw string is not the path that gets routed.
  */
-export function parseApiPath(path: string): string[] | NeonClientError {
+export function parseApiPath(path: string): NeonResult<string[]> {
 	const refuse = (reason: string) =>
-		new NeonClientError(
-			`Invalid API path ${JSON.stringify(path)}: ${reason}`,
+		err<string[]>(
+			new NeonClientError(
+				`Invalid API path ${JSON.stringify(path)}: ${reason}`,
+			),
 		);
 	if (!path.startsWith("/")) {
 		return refuse('it must start with "/", e.g. /projects.');
@@ -61,7 +63,7 @@ export function parseApiPath(path: string): string[] | NeonClientError {
 		}
 		segments.push(segment);
 	}
-	return segments;
+	return ok(segments);
 }
 
 const parseBody = (text: string, response: Response | undefined): unknown => {
@@ -80,8 +82,8 @@ export async function apiRequest(
 	opts?: CallOptions,
 ): Promise<unknown> {
 	const parsed = parseApiPath(request.path);
-	if (parsed instanceof NeonClientError) {
-		return finalize(err(parsed), ctx.shouldThrow(opts));
+	if (parsed.error) {
+		return finalize(parsed, ctx.shouldThrow(opts));
 	}
 	return ctx.run(
 		{ ...opts, waitForReadiness: false },

@@ -168,7 +168,10 @@ describe("parseApiPath", () => {
 	it("returns the decoded segments", () => {
 		expect(
 			parseApiPath("/projects/p-1/branches/br-1/roles/my%20role"),
-		).toEqual(["projects", "p-1", "branches", "br-1", "roles", "my role"]);
+		).toEqual({
+			data: ["projects", "p-1", "branches", "br-1", "roles", "my role"],
+			error: undefined,
+		});
 	});
 
 	it.each([
@@ -188,10 +191,9 @@ describe("parseApiPath", () => {
 		["/projects/%zz", "not valid percent-encoding"],
 		["//evil.example/x", "empty segment"],
 	])("refuses %j", (path, reason) => {
-		const result = parseApiPath(path);
-		expect(result).toBeInstanceOf(NeonClientError);
-		expect(result instanceof NeonClientError && result.message).toContain(
-			reason,
-		);
+		const { data, error } = parseApiPath(path);
+		expect(data).toBeUndefined();
+		expect(error).toBeInstanceOf(NeonClientError);
+		expect(error?.message).toContain(reason);
 	});
 });

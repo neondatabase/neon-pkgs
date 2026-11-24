@@ -1,4 +1,4 @@
-import { NeonClientError, parseApiPath } from "@neon/sdk";
+import { parseApiPath } from "@neon/sdk";
 import {
 	type DescribedField,
 	describeEndpoint,
@@ -133,7 +133,12 @@ const searchApiOutputSchema = z.looseObject({
 				summary: z.string(),
 				operation_id: z.string(),
 				body_required: z.boolean(),
-				content_type: z.string(),
+				content_type: z
+					.string()
+					.nullish()
+					.describe(
+						"The body's media type; absent when there is no body.",
+					),
 				fields: z.array(fieldSchema),
 			}),
 		)
@@ -188,7 +193,9 @@ export const searchApiTool = (options: ToolClientOptions) => {
 							summary: described.summary,
 							operation_id: described.operationId,
 							body_required: described.bodyRequired,
-							content_type: described.contentType,
+							...(described.contentType === ""
+								? {}
+								: { content_type: described.contentType }),
 							fields: described.fields.map(briefField),
 						};
 					},
@@ -257,9 +264,9 @@ export const callApiTool = (options: ToolClientOptions) =>
 			},
 		},
 		async (neon, { method, path, query, body }, signal, context) => {
-			const segments = parseApiPath(path);
-			if (segments instanceof NeonClientError) {
-				throw segments;
+			const { data: segments, error } = parseApiPath(path);
+			if (error) {
+				throw error;
 			}
 			if (
 				(context.secrets ?? "all") !== "all" &&
