@@ -320,4 +320,61 @@ describe("e2e — neon init", () => {
 			}
 		},
 	);
+
+	e2eTest(
+		"--services pulls a declared service the branch already has",
+		async ({ track }) => {
+			const dirs = scratch();
+			const projectId = await createProject({
+				name: uniqueProjectName("cli-init-services"),
+			});
+			track(projectId);
+			try {
+				const { branches } = await apiRequest<{
+					branches: Array<{ id: string; default: boolean }>;
+				}>(`/projects/${projectId}/branches`);
+				const branch = branches.find((candidate) => candidate.default);
+				if (!branch)
+					throw new Error(`${projectId} has no default branch`);
+				await enableNeonAuth(projectId, branch.id);
+
+				const result = await runCli(
+					[
+						"init",
+						"-y",
+						"--no-agent-setup",
+						"--package-manager",
+						"npm",
+						"--services",
+						"auth",
+						"--project-id",
+						projectId,
+						...orgArgs(),
+					],
+					{
+						configDir: dirs.configDir,
+						contextFile: dirs.contextFile,
+						cwd: dirs.cwd,
+						json: false,
+						env: isolatedAgentEnv(dirs.home),
+					},
+				);
+				const output = `${result.stderr}\n${result.stdout}`;
+				expect(result.code, output).toBe(0);
+				const envLocal = readFileSync(
+					join(dirs.cwd, ".env.local"),
+					"utf8",
+				);
+				for (const key of [
+					"DATABASE_URL",
+					"NEON_AUTH_BASE_URL",
+					"NEON_AUTH_JWKS_URL",
+				]) {
+					expect(envLocal).toMatch(new RegExp(`^${key}=`, "m"));
+				}
+			} finally {
+				await deleteProject(projectId);
+			}
+		},
+	);
 });
