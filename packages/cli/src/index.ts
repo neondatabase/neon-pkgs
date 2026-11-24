@@ -113,156 +113,162 @@ const NO_SUBCOMMANDS_VERBS = [
 // A named profile can record its own hosts, so the defaults depend on the arguments.
 const hosts = invocationHosts(hideBin(process.argv));
 
-let builder = yargs(hideBin(process.argv));
-builder = builder
-	.scriptName(pkg.name)
-	.locale("en")
-	.usage("$0 <command> [options]")
-	.parserConfiguration({
-		"populate--": true,
-		"sort-commands": true,
-		// yargs otherwise rewrites numeric-looking tokens after `--` into numbers (`1e3` becomes
-		// 1000) before they reach psql. Declared positionals keep their own `type` either way.
-		"parse-positional-numbers": false,
-	})
-	.help()
-	.option("output", {
-		alias: "o",
-		group: "Global options:",
-		describe: "Set output format",
-		type: "string",
-		choices: ["json", "yaml", "table"],
-		default: "table",
-	})
-	.option("api-host", {
-		describe: "The API host",
-		hidden: true,
-		default: hosts.apiHost,
-	})
-	// Setup config directory
-	.option("config-dir", {
-		describe: "Path to config directory",
-		group: "Global options:",
-		type: "string",
-		default: defaultDir,
-	})
-	.option("profile", {
-		describe:
-			"Named credentials to use, from profiles.json (default: NEON_PROFILE, else DEFAULT)",
-		group: "Global options:",
-		type: "string",
-	})
-	.option("force-auth", {
-		describe: "Force authentication",
-		type: "boolean",
-		hidden: true,
-		default: false,
-	})
-	.middleware(ensureConfigDir)
-	.options({
-		"oauth-host": {
-			description: "URL to Neon OAuth host",
-			hidden: true,
-			default: hosts.oauthHost,
-		},
-		"client-id": {
-			description: "OAuth client id",
-			hidden: true,
+// yargs 17 cannot parse the same instance again after a command has run: the first run
+// leaves its command on the stack, so a re-parse resolves `projects get <id>` as
+// `projects projects get` and finds no positional. The 401/SSO retry below builds a new one.
+const createBuilder = () =>
+	yargs(hideBin(process.argv))
+		.scriptName(pkg.name)
+		.locale("en")
+		.usage("$0 <command> [options]")
+		.parserConfiguration({
+			"populate--": true,
+			"sort-commands": true,
+			// yargs otherwise rewrites numeric-looking tokens after `--` into numbers (`1e3` becomes
+			// 1000) before they reach psql. Declared positionals keep their own `type` either way.
+			"parse-positional-numbers": false,
+		})
+		.help()
+		.option("output", {
+			alias: "o",
+			group: "Global options:",
+			describe: "Set output format",
 			type: "string",
-			default: defaultClientID,
-		},
-		"api-key": {
-			describe: "API key",
+			choices: ["json", "yaml", "table"],
+			default: "table",
+		})
+		.option("api-host", {
+			describe: "The API host",
+			hidden: true,
+			default: hosts.apiHost,
+		})
+		// Setup config directory
+		.option("config-dir", {
+			describe: "Path to config directory",
 			group: "Global options:",
 			type: "string",
-			// Take the next token as the value even when it looks like an option, so
-			// `--api-key -` binds the dash rather than being read as a command of its own.
-			// `profile create` gives `-` its meaning; everywhere else it is just a value.
-			nargs: 1,
-			// The default must never be the value of NEON_API_KEY: yargs renders an
-			// option's default into every help screen, so that printed the user's key
-			// verbatim on `neon --help`. `resolveApiKeyFromEnv` reads the env var
-			// instead, and `defaultDescription` names it in help without its value.
-			default: "",
-			defaultDescription: "NEON_API_KEY",
-		},
-		apiClient: {
-			hidden: true,
-			coerce: (v) => v as NeonApiClient,
-			default: null as unknown as NeonApiClient,
-		},
-		"context-file": {
-			describe: "Context file",
-			group: "Global options:",
-			type: "string",
-			default: currentContextFile,
-		},
-		color: {
-			group: "Global options:",
-			describe: "Colorize the output. Example: --no-color, --color false",
-			type: "boolean",
-			default: true,
-		},
-		analytics: {
+			default: defaultDir,
+		})
+		.option("profile", {
 			describe:
-				"Manage analytics. Example: --no-analytics, --analytics false",
+				"Named credentials to use, from profiles.json (default: NEON_PROFILE, else DEFAULT)",
 			group: "Global options:",
+			type: "string",
+		})
+		.option("force-auth", {
+			describe: "Force authentication",
 			type: "boolean",
-			default: true,
-		},
-	})
-	// Before `resolveApiKeyFromEnv`, which replaces a repeated `--api-key` with NEON_API_KEY.
-	.middleware((args) => {
-		collapseRepeatedFlags(args, declaredOptions(builder));
-	}, true)
-	.middleware((args) => {
-		fillInArgs(args);
-	}, true)
-	.middleware(resolveApiKeyFromEnv, true)
-	.middleware(initAnalyticsClientMiddleware, true)
-	.help(false)
-	.group("help", "Global options:")
-	.option("help", {
-		describe: "Show help",
-		type: "boolean",
-		default: false,
-	})
-	.alias("help", "h")
-	// Before validation, so a missing required option can't turn `--help` into an error.
-	.middleware(async (args) => {
-		if (args.help) {
-			await showHelp(builder);
-		}
-	}, true)
-	.middleware(async (args) => {
-		if (
-			(args._.length === 1 &&
-				!NO_SUBCOMMANDS_VERBS.includes(args._[0] as string)) ||
-			(args._.length > 1 && isBareParentCommand(builder, args._))
-		) {
-			await showHelp(builder);
-		}
-	})
-	.middleware(ensureAuth)
-	.middleware(enrichFromContext as any)
-	.middleware(analyticsMiddleware)
-	// @types/yargs declares builders synchronous; yargs 17 awaits a builder's promise.
-	.command(
-		lazyCommands({
-			staging: isStagingApiHost(hosts.apiHost),
-		}) as any,
-	)
-	.strictCommands()
-	.version(pkg.version)
-	.group("version", "Global options:")
-	.alias("version", "v")
-	.completion()
-	.scriptName(getCliName())
-	.epilog(
-		"For more information, visit https://neon.com/docs/reference/neon-cli",
-	)
-	.wrap(null)
-	.fail(failOnUsageError);
+			hidden: true,
+			default: false,
+		})
+		.middleware(ensureConfigDir)
+		.options({
+			"oauth-host": {
+				description: "URL to Neon OAuth host",
+				hidden: true,
+				default: hosts.oauthHost,
+			},
+			"client-id": {
+				description: "OAuth client id",
+				hidden: true,
+				type: "string",
+				default: defaultClientID,
+			},
+			"api-key": {
+				describe: "API key",
+				group: "Global options:",
+				type: "string",
+				// Take the next token as the value even when it looks like an option, so
+				// `--api-key -` binds the dash rather than being read as a command of its own.
+				// `profile create` gives `-` its meaning; everywhere else it is just a value.
+				nargs: 1,
+				// The default must never be the value of NEON_API_KEY: yargs renders an
+				// option's default into every help screen, so that printed the user's key
+				// verbatim on `neon --help`. `resolveApiKeyFromEnv` reads the env var
+				// instead, and `defaultDescription` names it in help without its value.
+				default: "",
+				defaultDescription: "NEON_API_KEY",
+			},
+			apiClient: {
+				hidden: true,
+				coerce: (v) => v as NeonApiClient,
+				default: null as unknown as NeonApiClient,
+			},
+			"context-file": {
+				describe: "Context file",
+				group: "Global options:",
+				type: "string",
+				default: currentContextFile,
+			},
+			color: {
+				group: "Global options:",
+				describe:
+					"Colorize the output. Example: --no-color, --color false",
+				type: "boolean",
+				default: true,
+			},
+			analytics: {
+				describe:
+					"Manage analytics. Example: --no-analytics, --analytics false",
+				group: "Global options:",
+				type: "boolean",
+				default: true,
+			},
+		})
+		// Before `resolveApiKeyFromEnv`, which replaces a repeated `--api-key` with NEON_API_KEY.
+		.middleware((args) => {
+			collapseRepeatedFlags(args, declaredOptions(builder));
+		}, true)
+		.middleware((args) => {
+			fillInArgs(args);
+		}, true)
+		.middleware(resolveApiKeyFromEnv, true)
+		.middleware(initAnalyticsClientMiddleware, true)
+		.help(false)
+		.group("help", "Global options:")
+		.option("help", {
+			describe: "Show help",
+			type: "boolean",
+			default: false,
+		})
+		.alias("help", "h")
+		// Before validation, so a missing required option can't turn `--help` into an error.
+		.middleware(async (args) => {
+			if (args.help) {
+				await showHelp(builder);
+			}
+		}, true)
+		.middleware(async (args) => {
+			if (
+				(args._.length === 1 &&
+					!NO_SUBCOMMANDS_VERBS.includes(args._[0] as string)) ||
+				(args._.length > 1 && isBareParentCommand(builder, args._))
+			) {
+				await showHelp(builder);
+			}
+		})
+		.middleware(ensureAuth)
+		.middleware(enrichFromContext as any)
+		.middleware(analyticsMiddleware)
+		// @types/yargs declares builders synchronous; yargs 17 awaits a builder's promise.
+		.command(
+			lazyCommands({
+				staging: isStagingApiHost(hosts.apiHost),
+			}) as any,
+		)
+		.strictCommands()
+		.version(pkg.version)
+		.group("version", "Global options:")
+		.alias("version", "v")
+		.completion()
+		.scriptName(getCliName())
+		.epilog(
+			"For more information, visit https://neon.com/docs/reference/neon-cli",
+		)
+		.wrap(null)
+		.fail(failOnUsageError);
+
+let builder = createBuilder();
 
 async function handleError(
 	msg: string,
@@ -450,6 +456,7 @@ void (async () => {
 				await closeAnalytics();
 				process.exit(1);
 			}
+			builder = createBuilder();
 			// If shouldRetry is true and we haven't hit max attempts, loop continues
 		}
 	}

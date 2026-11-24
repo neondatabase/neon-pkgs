@@ -28,7 +28,8 @@ export const startNeonApiServer = async (
 			"",
 		);
 
-		if (url.pathname !== "/users/me") {
+		const project = /^\/projects\/([^/]+)$/.exec(url.pathname);
+		if (url.pathname !== "/users/me" && project === null) {
 			return json(res, 404, { message: "Not Found" });
 		}
 
@@ -36,6 +37,20 @@ export const startNeonApiServer = async (
 
 		if (rejectAll || token === "" || rejected.has(token)) {
 			return json(res, 401, { message: "Unauthorized" });
+		}
+
+		if (project !== null) {
+			return json(res, 200, {
+				project: {
+					id: project[1],
+					name: "test-project",
+					region_id: "aws-us-east-2",
+					platform_id: "aws",
+					pg_version: 17,
+					created_at: "2026-01-01T00:00:00Z",
+					updated_at: "2026-01-01T00:00:00Z",
+				},
+			});
 		}
 
 		if (failUserLookup) {
