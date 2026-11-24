@@ -205,6 +205,7 @@ function validateServerUtf8Limits(message: WireRecord): void {
 	switch (wireString(message, "type")) {
 		case "open":
 		case "keyed_results":
+		case "segments_pending":
 		case "reset_required":
 		case "commit":
 			assertMaxUtf8Bytes(

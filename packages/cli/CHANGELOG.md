@@ -1,5 +1,12 @@
 # neon
 
+## 9.9.6
+
+### Patch Changes
+
+- 6e8d190: `neon checkout <name> --create` now prints a `WARNING:` line when the branch already exists and is checked out unchanged instead of created; the exit code stays 0. `--help` for `--create` names the parent a new branch starts from: the `parent` in `neon.ts`, else the project's default branch.
+- 2b82b4d: `neon plugins` and the plugin step of `neon init` and `neon bootstrap` now stop with one error that names git when `git` is missing or does not run, instead of failing every agent with an error such as "Repository not found".
+
 ## 9.9.5
 
 ### Patch Changes
