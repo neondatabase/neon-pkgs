@@ -2027,6 +2027,43 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 		expect(api.createCalls).toBe(1);
 	});
 
+	it("does not revoke a credential whose withheld storage keys stay in the file", async () => {
+		const api = new DefaultCredsNeonApi();
+		api.credentials.push({
+			tokenId: "cred-fake-0001",
+			tokenIdShort: "credfake0001",
+			name: "neon-env main",
+			scopes: ["storage:read", "storage:write", "ai_gateway:invoke"],
+			principalType: "user",
+			branchId: BRANCH_ID,
+			createdAt: "2026-01-01T00:00:00Z",
+		});
+		writeFileSync(
+			join(cwd, ".env"),
+			[
+				"AWS_ACCESS_KEY_ID=cred-fake-0001",
+				`AWS_SECRET_ACCESS_KEY=${"s3secret1".padEnd(64, "0")}`,
+				"NEON_AI_GATEWAY_TOKEN=nt_live_credfake0001_secret",
+				"",
+			].join("\n"),
+		);
+
+		await captureLog(async () => {
+			await autoPullEnvAfterPin({
+				...baseProps(api, cwd),
+				envPull: true,
+			});
+		});
+
+		expect(readEnvFile(join(cwd, ".env")).AWS_ACCESS_KEY_ID).toBe(
+			"cred-fake-0001",
+		);
+		expect(
+			api.credentials.find((c) => c.tokenId === "cred-fake-0001")
+				?.revokedAt,
+		).toBeUndefined();
+	});
+
 	it("degrades a pull failure to a warning instead of throwing (the pin still stands)", async () => {
 		const result = await autoPullEnvAfterPin({
 			...baseProps(new UnreachableNeonApi(), cwd),

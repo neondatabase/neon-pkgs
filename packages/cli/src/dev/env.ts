@@ -450,6 +450,9 @@ export const resolveNeonEnvVars = async (
 						projectId: ctx.projectId,
 						branchId: ctx.branchId,
 						resolvedBranch,
+						// Withheld storage keys left in the file may name the credential a
+						// refreshed gateway token replaces.
+						revokeSuperseded: !withheld.includes("object-storage"),
 					})
 				: await fetchAndProject(config, ctx, { resolvedBranch });
 		return withheld.length > 0 ? { ...resolved, withheld } : resolved;
@@ -521,12 +524,16 @@ const resolveWithImpliedGateway = async (
 		projectId: string;
 		branchId: string;
 		resolvedBranch: NeonBranchSnapshot;
+		revokeSuperseded?: boolean;
 	},
 ): Promise<ResolvedNeonEnvVars> => {
 	const unreachable = await credentialsUnreachable(ctx, branch);
 	if (unreachable === null) {
 		return await fetchAndProject(withAiGateway(config), ctx, {
 			resolvedBranch: branch.resolvedBranch,
+			...(branch.revokeSuperseded === false
+				? { revokeSuperseded: false }
+				: {}),
 		});
 	}
 	// Deliberately does not assert that the project lacks the gateway: a read can also fail
