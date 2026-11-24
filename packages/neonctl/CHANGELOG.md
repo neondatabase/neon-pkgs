@@ -1,5 +1,11 @@
 # neonctl
 
+## 9.9.8
+
+### Patch Changes
+
+- neon@9.9.8
+
 ## 9.9.7
 
 ### Patch Changes
