@@ -2027,8 +2027,24 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 		expect(api.createCalls).toBe(1);
 	});
 
-	it("does not revoke a credential whose withheld storage keys stay in the file", async () => {
-		const api = new DefaultCredsNeonApi();
+	it.each([
+		["withheld", () => new DefaultCredsNeonApi()],
+		[
+			"not discovered",
+			() =>
+				new (class extends DefaultCredsNeonApi {
+					override async listBranchBuckets(): Promise<
+						NeonBucketSnapshot[]
+					> {
+						throw new PlatformError(
+							ErrorCode.FeatureUnavailable,
+							"Object storage isn't available for this Neon project.",
+						);
+					}
+				})(),
+		],
+	])("does not revoke a credential whose %s storage keys stay in the file", async (_, makeApi) => {
+		const api = makeApi();
 		api.credentials.push({
 			tokenId: "cred-fake-0001",
 			tokenIdShort: "credfake0001",

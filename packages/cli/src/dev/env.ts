@@ -450,9 +450,11 @@ export const resolveNeonEnvVars = async (
 						projectId: ctx.projectId,
 						branchId: ctx.branchId,
 						resolvedBranch,
-						// Withheld storage keys left in the file may name the credential a
+						// Storage keys this pull leaves unrefreshed may name the credential a
 						// refreshed gateway token replaces.
-						revokeSuperseded: !withheld.includes("object-storage"),
+						revokeSuperseded:
+							ctx.secretServices === undefined ||
+							config.preview?.buckets !== undefined,
 					})
 				: await fetchAndProject(config, ctx, { resolvedBranch });
 		return withheld.length > 0 ? { ...resolved, withheld } : resolved;
