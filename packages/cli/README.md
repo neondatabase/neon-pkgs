@@ -644,7 +644,7 @@ Console), or drop auth from --service.
 - **No Object Storage when the file holds a value for `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` without a Neon `AWS_ENDPOINT_URL_S3`.** Those keys are your own (AWS, R2, MinIO), and writing would overwrite them. The summary says so:
 
 ```text
-  Not pulled      Object Storage, to keep the AWS_* keys already in .env. `neon env pull -s object-storage` replaces them.
+  Not pulled      Object Storage, to keep the AWS_* keys already in .env. Use `neon env pull -s object-storage` to replace them.
 ```
 
 If you'd rather not keep env vars on disk, inject them at runtime instead with `neon-env run -- <your dev command>` (from `@neon/env`) or `neon dev`, and pass `--no-env-pull` to `link` / `checkout`.

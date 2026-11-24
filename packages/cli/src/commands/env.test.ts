@@ -2002,7 +2002,7 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 			withheld: ["object-storage"],
 		});
 		expect(stripAnsi(logged)).toContain(
-			"Not pulled      Object Storage, to keep the AWS_* keys already in .env. `neon env pull -s object-storage` replaces them.",
+			"Not pulled      Object Storage, to keep the AWS_* keys already in .env. Use `neon env pull -s object-storage` to replace them.",
 		);
 	});
 

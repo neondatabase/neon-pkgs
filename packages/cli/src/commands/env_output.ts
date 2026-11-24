@@ -110,7 +110,7 @@ export const formatPulledEnv = (
 			row(
 				"Not pulled",
 				`Object Storage, to keep the AWS_* keys already in ${displayPath(outcome.file, cwd)}. ` +
-					`\`${getCliName()} env pull -s object-storage\` replaces them.`,
+					`Use \`${getCliName()} env pull -s object-storage\` to replace them.`,
 			),
 		);
 	}

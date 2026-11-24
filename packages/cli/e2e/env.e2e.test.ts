@@ -101,7 +101,7 @@ describe.sequential("e2e — neon env pull against the real API", () => {
 			for (const line of own) expect(env).toContain(`${line}\n`);
 			expect(env).toMatch(/^DATABASE_URL=/m);
 			expect(linked.stderr).toMatch(
-				/Not pulled\s+Object Storage, to keep the AWS_\* keys already in \S*\.env\. `\S+ env pull -s object-storage` replaces them\./,
+				/Not pulled\s+Object Storage, to keep the AWS_\* keys already in \S*\.env\. Use `\S+ env pull -s object-storage` to replace them\./,
 			);
 		});
 
