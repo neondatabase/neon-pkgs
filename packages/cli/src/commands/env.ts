@@ -426,16 +426,16 @@ export const pull = async (
  * its variables, since nobody named it.
  */
 const bundledSecretServices = (env: Record<string, string>): NeonService[] => {
+	// An empty placeholder (`AWS_ACCESS_KEY_ID=` in Laravel's default .env) holds nothing.
+	const has = (key: string): boolean => (env[key] ?? "") !== "";
 	const endpoint = env[NEON_ENV_VAR_KEYS.storage.endpoint];
 	const ownStorageKeys =
-		(env[NEON_ENV_VAR_KEYS.storage.accessKeyId] !== undefined ||
-			env[NEON_ENV_VAR_KEYS.storage.secretAccessKey] !== undefined) &&
+		(has(NEON_ENV_VAR_KEYS.storage.accessKeyId) ||
+			has(NEON_ENV_VAR_KEYS.storage.secretAccessKey)) &&
 		!(endpoint !== undefined && isNeonStorageEndpoint(endpoint));
 	return [
 		...(ownStorageKeys ? [] : (["object-storage"] as const)),
-		...(Object.values(NEON_ENV_VAR_KEYS.aiGateway).some(
-			(key) => env[key] !== undefined,
-		)
+		...(Object.values(NEON_ENV_VAR_KEYS.aiGateway).some(has)
 			? (["ai-gateway"] as const)
 			: []),
 	];

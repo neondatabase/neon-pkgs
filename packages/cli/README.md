@@ -641,7 +641,7 @@ Console), or drop auth from --service.
 `link`, `checkout`, and `config apply` invoke `env pull` automatically (see above). Those bundled pulls follow rules 2 and 3 above, with two differences:
 
 - **The AI Gateway only when the file already has `NEON_AI_GATEWAY_*`.** Minting a credential for a service you never named isn't something a side effect of another command should do; once you run `neon env pull`, later bundled pulls keep the gateway current, so `checkout` moves it to the new branch.
-- **No Object Storage when the file holds `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` without a Neon `AWS_ENDPOINT_URL_S3`.** Those keys are your own (AWS, R2, MinIO), and writing would overwrite them. The summary says so:
+- **No Object Storage when the file holds a value for `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` without a Neon `AWS_ENDPOINT_URL_S3`.** Those keys are your own (AWS, R2, MinIO), and writing would overwrite them. The summary says so:
 
 ```text
   Not pulled      Object Storage, to keep the AWS_* keys already in .env. `neon env pull -s object-storage` replaces them.

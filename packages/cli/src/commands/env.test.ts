@@ -2006,6 +2006,28 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 		);
 	});
 
+	it("fills empty AWS_* placeholders with object storage", async () => {
+		writeFileSync(
+			join(cwd, ".env"),
+			"AWS_ACCESS_KEY_ID=\nAWS_SECRET_ACCESS_KEY=\nAWS_BUCKET=\n",
+		);
+		let result: AutoPullResult | undefined;
+		const logged = await captureLog(async () => {
+			result = await autoPullEnvAfterPin({
+				...baseProps(realtimeStorageApi(), cwd),
+				envPull: true,
+			});
+		});
+
+		const env = readEnvFile(join(cwd, ".env"));
+		expect(env.AWS_ACCESS_KEY_ID).not.toBe("");
+		expect(env.AWS_ENDPOINT_URL_S3).toBe(
+			`https://${BRANCH_ID}.storage.fake.neon.tech`,
+		);
+		expect(result).not.toHaveProperty("withheld");
+		expect(stripAnsi(logged)).not.toContain("Not pulled");
+	});
+
 	it("keeps object storage and Realtime an explicit pull wrote", async () => {
 		const api = realtimeStorageApi();
 		await captureLog(async () => {
