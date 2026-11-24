@@ -1,5 +1,11 @@
 # neon
 
+## 9.9.4
+
+### Patch Changes
+
+- 211c986: `--services` / `--service`, `env pull --env`, and `mcp --category` accept an unquoted comma list from PowerShell, such as `neon init --services postgres,auth`. npm's PowerShell shim passed it to the CLI as one space-separated value, which the CLI rejected as unknown.
+
 ## 9.9.3
 
 ### Patch Changes
