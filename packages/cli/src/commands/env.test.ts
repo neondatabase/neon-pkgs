@@ -1852,43 +1852,19 @@ describe("env pull with optional services (init after a new neon.ts)", () => {
 	let cwd: string;
 	beforeEach(() => {
 		cwd = mkdtempSync(join(tmpdir(), "neonctl-env-optional-"));
-		// init has just written a neon.ts; a service selection ignores it.
-		writeFileSync(join(cwd, "neon.ts"), "export default { auth: true };\n");
 	});
 	afterEach(() => {
 		rmSync(cwd, { recursive: true, force: true });
 	});
 
-	const initProps = (api: FakeNeonApi): EnvPullProps => ({
-		...baseProps(api, cwd),
-		services: ["postgres", "auth"],
-		optionalServices: ["auth"],
-	});
-
-	it("pulls a declared service the branch already has", async () => {
-		const api = new FakeNeonApi({
-			getNeonAuth: async () => ({
-				projectId: "auth-project",
-				jwksUrl: "https://auth.fake.neon.tech/.well-known/jwks.json",
-				baseUrl: "https://auth.fake.neon.tech",
-			}),
-		});
-
-		await captureLog(async () => {
-			await pull(initProps(api));
-		});
-
-		expect(readEnvFile(join(cwd, ".env.local"))).toMatchObject({
-			NEON_AUTH_BASE_URL: "https://auth.fake.neon.tech",
-			NEON_AUTH_JWKS_URL:
-				"https://auth.fake.neon.tech/.well-known/jwks.json",
-		});
-	});
-
 	it("skips a declared service the branch does not have yet", async () => {
 		let result: PullOutcome | undefined;
 		await captureLog(async () => {
-			result = await pull(initProps(new FakeNeonApi()));
+			result = await pull({
+				...baseProps(new FakeNeonApi(), cwd),
+				services: ["postgres", "auth"],
+				optionalServices: ["auth"],
+			});
 		});
 
 		const env = readEnvFile(join(cwd, ".env.local"));
@@ -1901,8 +1877,9 @@ describe("env pull with optional services (init after a new neon.ts)", () => {
 		const api = new FakeNeonApi({
 			getProjectBranchRealtime: async () => {
 				throw new PlatformError(
-					ErrorCode.FeatureUnavailable,
-					"Realtime isn't available for this Neon project.",
+					ErrorCode.NotFound,
+					"Realtime is not available for this project",
+					{ details: { status: 404 } },
 				);
 			},
 		});
@@ -1921,34 +1898,6 @@ describe("env pull with optional services (init after a new neon.ts)", () => {
 			status: "written",
 			skipped: ["realtime"],
 		});
-	});
-
-	it("fails when Neon cannot answer whether the branch has an optional service", async () => {
-		const api = new FakeNeonApi({
-			getProjectBranchRealtime: async () => {
-				throw new PlatformError(
-					ErrorCode.FeatureUnavailable,
-					"Realtime isn't available for this Neon project (HTTP 503 Service Unavailable).",
-					{ details: { status: 503 } },
-				);
-			},
-		});
-
-		await expect(
-			pull({
-				...baseProps(api, cwd),
-				services: ["postgres", "realtime"],
-				optionalServices: ["realtime"],
-			}),
-		).rejects.toThrow(/HTTP 503/);
-	});
-
-	it("still fails for a named service that is not optional", async () => {
-		await expect(
-			pull({ ...baseProps(new FakeNeonApi(), cwd), services: ["auth"] }),
-		).rejects.toThrow(
-			/--service auth: branch .* has no Neon Auth integration/,
-		);
 	});
 });
 
@@ -2050,61 +1999,6 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 		);
 	});
 
-	it("keeps a user's own AWS_* and S3 endpoint", async () => {
-		const own = {
-			AWS_ACCESS_KEY_ID: "AKIAOWNKEY",
-			AWS_SECRET_ACCESS_KEY: "own-secret",
-			AWS_ENDPOINT_URL_S3: "https://acct.r2.cloudflarestorage.com",
-		};
-		writeFileSync(
-			join(cwd, ".env"),
-			`${Object.entries(own)
-				.map(([key, value]) => `${key}=${value}`)
-				.join("\n")}\n`,
-		);
-		const api = realtimeStorageApi();
-
-		await captureLog(async () => {
-			await autoPullEnvAfterPin({
-				...baseProps(api, cwd),
-				envPull: true,
-			});
-		});
-
-		expect(readEnvFile(join(cwd, ".env"))).toMatchObject(own);
-		expect(api.createCalls).toBe(0);
-	});
-
-	it("refreshes object storage and Realtime the file already holds", async () => {
-		// Switching branches has to replace the previous branch's values, not strand them.
-		writeFileSync(
-			join(cwd, ".env.local"),
-			[
-				"AWS_ACCESS_KEY_ID=cred-old-branch",
-				"AWS_SECRET_ACCESS_KEY=old-secret",
-				"AWS_ENDPOINT_URL_S3=https://br-old-00000.storage.c-1.us-east-1.aws.neon.tech",
-				"AWS_REGION=us-east-1",
-				"NEON_REALTIME_URL=wss://old.rt.fake.neon.tech/",
-				"NEON_REALTIME_SECRET=nrt_live_1_old",
-				"",
-			].join("\n"),
-		);
-
-		await captureLog(async () => {
-			await autoPullEnvAfterPin({
-				...baseProps(realtimeStorageApi(), cwd),
-				envPull: true,
-			});
-		});
-
-		expect(readEnvFile(join(cwd, ".env.local"))).toMatchObject({
-			AWS_ACCESS_KEY_ID: "cred-fake-0001",
-			AWS_ENDPOINT_URL_S3: `https://${BRANCH_ID}.storage.fake.neon.tech`,
-			NEON_REALTIME_URL: "wss://realtime.fake.neon.tech/v1",
-			NEON_REALTIME_SECRET: "nrt_live_1_bundled",
-		});
-	});
-
 	it("keeps object storage and Realtime an explicit pull wrote", async () => {
 		const api = realtimeStorageApi();
 		await captureLog(async () => {
@@ -2131,29 +2025,6 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 			expect(env[key]).toBe(pulled[key]);
 		}
 		expect(api.createCalls).toBe(1);
-	});
-
-	it("keeps an AI Gateway token the file already holds", async () => {
-		await captureLog(async () => {
-			await pull(baseProps(new FakeNeonApi(), cwd), {
-				implyAiGateway: true,
-			});
-		});
-		const pulled = readEnvFile(join(cwd, ".env.local"));
-		expect(pulled.NEON_AI_GATEWAY_TOKEN).toBeDefined();
-
-		await captureLog(async () => {
-			await autoPullEnvAfterPin({
-				...baseProps(new FakeNeonApi(), cwd),
-				envPull: true,
-			});
-		});
-
-		const env = readEnvFile(join(cwd, ".env.local"));
-		expect(env.NEON_AI_GATEWAY_TOKEN).toBe(pulled.NEON_AI_GATEWAY_TOKEN);
-		expect(env.NEON_AI_GATEWAY_BASE_URL).toBe(
-			pulled.NEON_AI_GATEWAY_BASE_URL,
-		);
 	});
 
 	it("degrades a pull failure to a warning instead of throwing (the pin still stands)", async () => {

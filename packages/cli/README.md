@@ -638,7 +638,7 @@ auth env vars to pull. Provision it first (`neon deploy`, `neon config apply`, o
 Console), or drop auth from --service.
 ```
 
-`link`, `checkout`, and `config apply` invoke `env pull` automatically (see above). Those bundled pulls follow rules 2 and 3 above, except that without a `neon.ts` they pull Object Storage, Realtime, and the AI Gateway only when the target file already has their variables (`AWS_ENDPOINT_URL_S3` pointing at a Neon branch, `NEON_REALTIME_*`, `NEON_AI_GATEWAY_*`). Their values are secrets, and revealing or minting one for a service you never named isn't something a side effect of another command should do. The summary names what it left out:
+`link`, `checkout`, and `config apply` invoke `env pull` automatically (see above), following rules 2 and 3. Without a `neon.ts`, those bundled pulls write Object Storage, Realtime, and AI Gateway variables only when the target file already has them: `AWS_ENDPOINT_URL_S3` pointing at a Neon branch, `NEON_REALTIME_*`, or `NEON_AI_GATEWAY_*`. Their values are secrets. A bundled pull refreshes the ones you already use, which is how `checkout` moves them to the new branch, and names the ones it left out:
 
 ```text
 Pulled 7 Neon variables into .env.local
@@ -649,7 +649,7 @@ Pulled 7 Neon variables into .env.local
   Not pulled      Object Storage, Realtime (secrets). Add with `neon env pull -s object-storage -s realtime`
 ```
 
-Run `neon env pull`, or declare the services in `neon.ts`, to get them. Once the file has them, later bundled pulls refresh them, so `checkout` of another branch replaces the previous branch's values.
+Run that command once, or declare the services in `neon.ts`, and later bundled pulls keep them current.
 
 If you'd rather not keep env vars on disk, inject them at runtime instead with `neon-env run -- <your dev command>` (from `@neon/env`) or `neon dev`, and pass `--no-env-pull` to `link` / `checkout`.
 

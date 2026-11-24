@@ -147,11 +147,10 @@ export const builder = (argv: yargs.Argv) =>
 							"API. Naming unsupported services with --service / --env warns",
 							"and writes nothing for them.",
 							"",
-							"The pull bundled into link / checkout / config apply follows 2 and 3,",
-							"except that without a neon.ts it leaves out Object Storage, Realtime,",
-							"and the AI Gateway unless the file already has their variables:",
-							"their values are secrets you did not ask for. Run `env pull` to add",
-							"them.",
+							"The pull bundled into link / checkout / config apply follows 2 and 3.",
+							"Without a neon.ts it writes Object Storage, Realtime, and AI Gateway",
+							"secrets only when the file already has them, and names the services",
+							"it left out. Run `env pull` to add them.",
 						].join("\n"),
 					)
 					.example(
@@ -261,10 +260,7 @@ export type PullOutcome =
 			 * AI Gateway. Absent otherwise — nothing else is credential-backed.
 			 */
 			credential?: CredentialOutcome;
-			/**
-			 * Services an implicit resolve could not reach, or optional members of a selection the
-			 * branch lacks. A required selected service that is missing throws instead.
-			 */
+			/** Marks an incomplete implicit resolve without hiding an explicit selection failure. */
 			skipped?: readonly NeonService[];
 			/** Secret-bearing services the branch has that `onlyHeldSecrets` left out. */
 			withheld?: readonly NeonService[];

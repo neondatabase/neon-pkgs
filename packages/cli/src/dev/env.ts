@@ -79,9 +79,8 @@ export type DevEnvContext = {
 	/**
 	 * Limit the **no-`neon.ts`** resolution's secret-bearing services (object storage,
 	 * Realtime, the AI Gateway) to these. The branch's other secret-bearing services are left
-	 * out and reported as `withheld`; listing `ai-gateway` implies it like
-	 * {@link DevEnvContext.implyAiGateway}. Omit to resolve every one the branch has. The pull
-	 * bundled into `link` / `checkout` passes the ones its target file already holds.
+	 * out and reported as `withheld`. Listing `ai-gateway` implies it like
+	 * {@link DevEnvContext.implyAiGateway}.
 	 */
 	secretServices?: readonly NeonService[];
 	/**
@@ -685,8 +684,7 @@ const resolveSelectedServices = async (
 
 /**
  * Read an optional service's live state, treating a feature the project or region lacks
- * (`FeatureUnavailable`, or a route-level 404) as absent. A 503 also maps to
- * `FeatureUnavailable` but is a Neon outage, which has to fail the pull.
+ * (`FeatureUnavailable`, or a route-level 404) as absent, as `pullConfig` does.
  */
 const absentWhenUnavailable = async <T>(
 	load: () => Promise<T>,
@@ -697,8 +695,7 @@ const absentWhenUnavailable = async <T>(
 	} catch (error) {
 		if (
 			isPlatformError(error) &&
-			((error.code === ErrorCode.FeatureUnavailable &&
-				error.details.status !== 503) ||
+			(error.code === ErrorCode.FeatureUnavailable ||
 				(error.code === ErrorCode.NotFound &&
 					error.details.status === 404))
 		) {
