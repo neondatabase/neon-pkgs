@@ -218,8 +218,8 @@ export const handler = async (props: CheckoutProps) => {
 	const orgId = await (orgRead ?? resolveOrgId(props, projectId));
 
 	if (props.create && !created) {
-		log.info(
-			"Branch %s (%s) already exists; checking it out unchanged instead of creating it.",
+		log.warning(
+			"Branch %s (%s) already exists, so --create did not create a new one; checking out the existing branch unchanged. Pass a new name for a fresh branch.",
 			branchName,
 			branchId,
 		);

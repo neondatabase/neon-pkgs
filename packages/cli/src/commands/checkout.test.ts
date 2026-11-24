@@ -381,7 +381,7 @@ describe("checkout", () => {
 			],
 			{
 				stderr:
-					"Branch main (br-main-branch-123456) already exists; checking it out unchanged instead of creating it. " +
+					"WARNING: Branch main (br-main-branch-123456) already exists, so --create did not create a new one; checking out the existing branch unchanged. Pass a new name for a fresh branch. " +
 					`Checked out branch br-main-branch-123456 on project test. Updated ${ctx}. ` +
 					`${ENV_PULL_SKIPPED_HINT}`,
 			},
