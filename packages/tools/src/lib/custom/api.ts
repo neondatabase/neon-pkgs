@@ -1,5 +1,6 @@
 import { NeonClientError, parseApiPath } from "@neon/sdk";
 import {
+	type DescribedField,
 	describeEndpoint,
 	fetchOpenApiSpec,
 	NEON_OPENAPI_SPEC_URL,
@@ -64,6 +65,40 @@ const untilAborted = <T>(
 		);
 	});
 };
+
+// A period after these ends an abbreviation, not the sentence.
+const ABBREVIATION = /\b(?:e\.g|i\.e|etc|vs)\.$/i;
+
+/** The first sentence, the cut generated tool inputs get, so one endpoint stays a few KB. */
+const firstSentence = (text: string) => {
+	const normalized = text
+		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+		.replace(/\s+/g, " ")
+		.trim();
+	for (const match of normalized.matchAll(/[.!?](?=\s|$)/g)) {
+		const end = match.index + 1;
+		if (!ABBREVIATION.test(normalized.slice(0, end))) {
+			return normalized.slice(0, end);
+		}
+	}
+	return normalized;
+};
+
+const briefField = (field: DescribedField): DescribedField => ({
+	...field,
+	description: firstSentence(field.description),
+	...(field.items?.properties === undefined
+		? {}
+		: {
+				items: {
+					...field.items,
+					properties: field.items.properties.map((property) => ({
+						...property,
+						description: firstSentence(property.description),
+					})),
+				},
+			}),
+});
 
 export const searchApiInputSchema = z.strictObject({
 	query: z
@@ -154,7 +189,7 @@ export const searchApiTool = (options: ToolClientOptions) => {
 							operation_id: described.operationId,
 							body_required: described.bodyRequired,
 							content_type: described.contentType,
-							fields: described.fields,
+							fields: described.fields.map(briefField),
 						};
 					},
 				),
