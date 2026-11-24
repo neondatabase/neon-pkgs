@@ -498,6 +498,32 @@ the core retains unordered keyed semantics for those batches. Application
 callback side effects are outside SDK rollback; callbacks across independent
 adapters are not a transaction.
 
+### Partial refreshes
+
+Most changes reach a live query as exact row patches. When the server can't
+patch part of a result exactly, it recomputes just that part instead of the
+whole result: it marks the affected rows as pending, re-runs the query for
+them, and sends their new contents. Applications don't see this machinery,
+and no API changes.
+
+While a refresh is pending, the query keeps showing its last complete result,
+and its status stays `live`. Changes committed in the meantime wait with the
+refresh and become visible together when it lands, in one update, followed by
+any later changes as their own updates. `awaitTxId()` resolves for a
+transaction only once the result that includes it is visible. A full
+replacement of the result behaves the same way, as it always has.
+
+Raw subscriptions receive a landed refresh as an ordinary `changes` update,
+never as a `rows` replacement. Each update is atomic: apply it as a whole. Rows
+can exchange contents within one update, as when a refresh renumbers rows, so a
+consumer that keys rows by their contents (for example a collection keyed by an
+ID column) must check its keys against the update's final state rather than
+change by change. For an unordered result, a refresh removes every row it
+replaces before upserting the new contents, so even a change-by-change consumer
+never sees one key held by two rows. For an ordered result, a refresh removes
+only the rows that leave, upserts the rest, and moves each refreshed row into
+place.
+
 For SSR, pass server-executed rows as `initialData` when subscribing. They are
 available immediately with status `connecting` until the first authoritative
 result. Realtime does not transform those rows: the application is responsible
@@ -556,10 +582,13 @@ Custom raw consumers should follow the complete-batch staging and validation
 requirements above. TanStack collections retain unordered keyed semantics;
 their local queries must establish any desired order.
 
-The SDK requests only `neon.realtime.v2`, including on reconnect. Deploy a
-server that requires the one-time `client_info` message before releasing this
-SDK. Protocol v1 remains available for previously released clients. There is no
-client-side protocol fallback, subscription opt-in, or mode acknowledgment.
+The SDK requests only `neon.realtime.v3`, including on reconnect, so it needs an
+endpoint that serves protocol v3. Protocol v3 is protocol v2 plus partial
+refreshes. A custom WebSocket server used in tests must accept
+`neon.realtime.v3` and send a `scope` on every `baseline_sync_start`, which is
+`{ "kind": "all" }` for a full baseline. Protocols v1 and v2 remain available
+for previously released clients. There is no client-side protocol fallback,
+subscription opt-in, or mode acknowledgment.
 
 ## Protocol schemas
 
