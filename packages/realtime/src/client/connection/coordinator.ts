@@ -439,6 +439,7 @@ export class ConnectionCoordinator {
 			case "baseline_sync_end":
 			case "open":
 			case "keyed_results":
+			case "segments_pending":
 			case "reset_required":
 			case "commit":
 			case "progress":

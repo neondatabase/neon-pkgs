@@ -16,6 +16,7 @@ import {
 import type { ClientMessage } from "./messages.js";
 import orderedFixtures from "./schema/ordered-changes.fixtures.json";
 import fixtures from "./schema/realtime-protocol.fixtures.json";
+import segmentRoundFixtures from "./schema/segment-rounds.fixtures.json";
 
 const CLIENT_TYPES = new Set([
 	"client_info",
@@ -75,7 +76,7 @@ function decodesCleanly(frame: string): boolean {
 	}
 }
 
-describe("Realtime v2 JSON codec", () => {
+describe("Realtime v3 JSON codec", () => {
 	it("requires a canonical move predecessor and rejects unsupported rollout fields", () => {
 		for (const fixture of orderedFixtures.valid)
 			expect(decodeServerMessage(JSON.stringify(fixture))).toEqual(
@@ -108,6 +109,24 @@ describe("Realtime v2 JSON codec", () => {
 				decodeServerMessage(JSON.stringify(fixture)),
 			).not.toThrow();
 		}
+	});
+
+	it("decodes protocol v3 holes, scopes and segment tags", () => {
+		for (const fixture of segmentRoundFixtures.valid) {
+			expect(decodeServerMessage(JSON.stringify(fixture))).toEqual(
+				fixture,
+			);
+		}
+		for (const fixture of segmentRoundFixtures.invalid) {
+			rejectServerMessage(fixture);
+		}
+		// A v2 baseline start has no scope. An absent scope never means all.
+		const start = fixtures.valid.find(
+			({ type }) => type === "baseline_sync_start",
+		) as Record<string, unknown>;
+		const { scope: _scope, ...v2Start } = start;
+		expect(() => decodeServerMessage(JSON.stringify(start))).not.toThrow();
+		rejectServerMessage(v2Start);
 	});
 
 	it("rejects malformed and noncanonical server messages", () => {
@@ -212,6 +231,7 @@ describe("Realtime v2 JSON codec", () => {
 		};
 		const baselineSyncStart = {
 			type: "baseline_sync_start",
+			scope: { kind: "all" },
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
@@ -263,6 +283,7 @@ describe("Realtime v2 JSON codec", () => {
 			{ type: "progress" },
 			{
 				type: "baseline_sync_start",
+				scope: { kind: "all" },
 				live_id: "1",
 				epoch: "1",
 				baseline_sync_attempt: "1",
