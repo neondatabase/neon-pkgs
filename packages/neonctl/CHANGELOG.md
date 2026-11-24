@@ -1,5 +1,13 @@
 # neonctl
 
+## 9.9.6
+
+### Patch Changes
+
+- Updated dependencies [6e8d190]
+- Updated dependencies [2b82b4d]
+  - neon@9.9.6
+
 ## 9.9.5
 
 ### Patch Changes
