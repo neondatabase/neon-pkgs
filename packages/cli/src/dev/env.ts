@@ -77,9 +77,9 @@ export type DevEnvContext = {
 	 */
 	implyAiGateway?: boolean;
 	/**
-	 * Limit the **no-`neon.ts`** resolution's secret-bearing services (object storage,
-	 * Realtime, the AI Gateway) to these. The branch's other secret-bearing services are left
-	 * out and reported as `withheld`. Listing `ai-gateway` implies it like
+	 * Limit the **no-`neon.ts`** resolution's credential-backed services (object storage, the
+	 * AI Gateway) to these. Object storage the branch has but this omits is left out and
+	 * reported as `withheld`. Listing `ai-gateway` implies it like
 	 * {@link DevEnvContext.implyAiGateway}.
 	 */
 	secretServices?: readonly NeonService[];
@@ -382,7 +382,7 @@ const resolveClaimableNeonEnvVars = async (
  *      so a branch with a bucket gets its `AWS_*` storage vars pulled with no policy. With
  *      {@link DevEnvContext.implyAiGateway}, the AI Gateway is added on top, since
  *      `pullConfig` cannot read it back. {@link DevEnvContext.secretServices} narrows the
- *      secret-bearing services.
+ *      credential-backed services.
  *   3. otherwise -> throw {@link MissingBranchContextError}.
  *
  * {@link DevEnvContext.claimable} keeps the same precedence. Credentials are not
@@ -466,28 +466,20 @@ export const resolveNeonEnvVars = async (
 	);
 };
 
-/**
- * Drop the read-back object storage and Realtime that `keep` does not name. Their env is a
- * branch credential and a server-only key, so resolving them reveals (or mints) secrets.
- */
+/** Drop the read-back object storage when `keep` does not name it. */
 const withholdSecretServices = (
 	config: Config,
 	keep: readonly NeonService[] | undefined,
 ): { config: Config; withheld: NeonService[] } => {
-	if (keep === undefined || config.preview === undefined) {
+	if (
+		keep === undefined ||
+		keep.includes("object-storage") ||
+		config.preview?.buckets === undefined
+	) {
 		return { config, withheld: [] };
 	}
-	const preview = { ...config.preview };
-	const withheld: NeonService[] = [];
-	if (preview.buckets !== undefined && !keep.includes("object-storage")) {
-		delete preview.buckets;
-		withheld.push("object-storage");
-	}
-	if (preview.realtime !== undefined && !keep.includes("realtime")) {
-		delete preview.realtime;
-		withheld.push("realtime");
-	}
-	return { config: { ...config, preview }, withheld };
+	const { buckets: _, ...preview } = config.preview;
+	return { config: { ...config, preview }, withheld: ["object-storage"] };
 };
 
 /** The same config with the AI Gateway enabled, leaving any other `preview` entries intact. */

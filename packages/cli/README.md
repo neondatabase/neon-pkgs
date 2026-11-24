@@ -638,18 +638,14 @@ auth env vars to pull. Provision it first (`neon deploy`, `neon config apply`, o
 Console), or drop auth from --service.
 ```
 
-`link`, `checkout`, and `config apply` invoke `env pull` automatically (see above), following rules 2 and 3. Without a `neon.ts`, those bundled pulls write Object Storage, Realtime, and AI Gateway variables only when the target file already has them: `AWS_ENDPOINT_URL_S3` pointing at a Neon branch, `NEON_REALTIME_*`, or `NEON_AI_GATEWAY_*`. Their values are secrets. A bundled pull refreshes the ones you already use, which is how `checkout` moves them to the new branch, and names the ones it left out:
+`link`, `checkout`, and `config apply` invoke `env pull` automatically (see above). Those bundled pulls follow rules 2 and 3 above, with two differences:
+
+- **The AI Gateway only when the file already has `NEON_AI_GATEWAY_*`.** Minting a credential for a service you never named isn't something a side effect of another command should do; once you run `neon env pull`, later bundled pulls keep the gateway current, so `checkout` moves it to the new branch.
+- **No Object Storage when the file holds `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` without a Neon `AWS_ENDPOINT_URL_S3`.** Those keys are your own (AWS, R2, MinIO), and writing would overwrite them. The summary says so:
 
 ```text
-Pulled 7 Neon variables into .env.local
-  Postgres        DATABASE_URL, DATABASE_URL_UNPOOLED
-  Branch          NEON_BRANCH, NEON_BRANCH_ID
-  Neon Auth       NEON_AUTH_BASE_URL, NEON_AUTH_JWKS_URL
-  Functions       NEON_FUNCTION_HOST_SUFFIX
-  Not pulled      Object Storage, Realtime (secrets). Add with `neon env pull -s object-storage -s realtime`
+  Not pulled      Object Storage, to keep the AWS_* keys already in .env. `neon env pull -s object-storage` replaces them.
 ```
-
-Run that command once, or declare the services in `neon.ts`, and later bundled pulls keep them current.
 
 If you'd rather not keep env vars on disk, inject them at runtime instead with `neon-env run -- <your dev command>` (from `@neon/env`) or `neon dev`, and pass `--no-env-pull` to `link` / `checkout`.
 
@@ -662,7 +658,7 @@ neon dev                       # loads .env, then .env.local (overrides .env)
 neon dev --env .env.staging    # loads only .env.staging
 ```
 
-`dev` writes nothing. To reuse the branch credential behind the AI Gateway and object storage, it reads only the file `env pull` writes (`.env` when it exists, otherwise `.env.local`), so an override in the other file cannot pair one credential's key ID with another's secret. Without a file to read from it issues one on every start and leaves the last one live — it has nowhere to keep it, and so cannot name it to revoke it. It says so when it happens; run `env pull` once and restarts reuse the credential instead.
+`dev` writes nothing. To reuse the branch credential behind the AI Gateway and object storage, it reads only the file `env pull` writes (`.env` when it exists, otherwise `.env.local`), so an override in the other file cannot pair one credential's key ID with another's secret. Without a file to read from it issues one on every start and leaves the last one live — it has nowhere to keep it, and so cannot name it to revoke it. It says so when it happens; run `env pull` (or just `link` / `checkout`) once and restarts reuse the credential instead.
 
 **Where `.neon` lives**: `link` writes `.neon` into the **current working directory** by default. If an existing `.neon` is found in any parent directory, that file is reused — so commands run from a sub-directory of a linked project still pick up the project's context. To pin the location explicitly, pass `--context-file <path>`. `neon init` always writes `.neon` into the current directory.
 

@@ -147,10 +147,10 @@ export const builder = (argv: yargs.Argv) =>
 							"API. Naming unsupported services with --service / --env warns",
 							"and writes nothing for them.",
 							"",
-							"The pull bundled into link / checkout / config apply follows 2 and 3.",
-							"Without a neon.ts it writes Object Storage, Realtime, and AI Gateway",
-							"secrets only when the file already has them, and names the services",
-							"it left out. Run `env pull` to add them.",
+							"The pull bundled into link / checkout / config apply follows 2 and 3,",
+							"with the AI Gateway only when the file already has its variables. It",
+							"leaves Object Storage out when the file holds AWS_* keys that are not",
+							"Neon's, so it never overwrites them.",
 						].join("\n"),
 					)
 					.example(
@@ -262,7 +262,7 @@ export type PullOutcome =
 			credential?: CredentialOutcome;
 			/** Marks an incomplete implicit resolve without hiding an explicit selection failure. */
 			skipped?: readonly NeonService[];
-			/** Secret-bearing services the branch has that `onlyHeldSecrets` left out. */
+			/** Services the branch has that a bundled pull left out to keep the file's own keys. */
 			withheld?: readonly NeonService[];
 	  }
 	| { status: "empty" };
@@ -273,11 +273,8 @@ export const pull = async (
 		/** Names the branch in the summary; for callers that don't report it themselves. */
 		announce?: boolean;
 		implyAiGateway?: boolean;
-		/**
-		 * Without a neon.ts, pull object storage, Realtime, and the AI Gateway only when the
-		 * target file already holds their variables. For pulls bundled into another command.
-		 */
-		onlyHeldSecrets?: boolean;
+		/** Bundled into `link` / `checkout`; see {@link bundledSecretServices}. */
+		bundled?: boolean;
 		/** Skips the branch lookup when the caller resolved this same branch already. */
 		branch?: ResolvedBranchRef;
 	} = {},
@@ -329,8 +326,8 @@ export const pull = async (
 		...(props.optionalServices !== undefined
 			? { optionalServices: props.optionalServices }
 			: {}),
-		...(opts.onlyHeldSecrets
-			? { secretServices: heldSecretServices(existingEnv) }
+		...(opts.bundled
+			? { secretServices: bundledSecretServices(existingEnv) }
 			: {}),
 		...(props.envKeys !== undefined ? { envKeys: props.envKeys } : {}),
 		...(opts.implyAiGateway ? { implyAiGateway: true } : {}),
@@ -422,27 +419,26 @@ export const pull = async (
 };
 
 /**
- * The secret-bearing services whose variables the target file already holds, which a bundled
- * pull treats as requested. Any one of a service's variables counts, since the pull prunes
- * the variables of a service it leaves out. Object storage counts only when
- * `AWS_ENDPOINT_URL_S3` is a Neon branch storage host: the other `AWS_*` names, and an
- * endpoint of the user's own (R2, MinIO), say nothing about Neon.
+ * The credential-backed services a bundled pull may resolve for this file. Object storage
+ * is left out when the file holds `AWS_*` keys not paired with a Neon branch storage
+ * endpoint: those are the user's own (AWS, R2, MinIO), and `AWS_*` is never pruned, so
+ * writing would overwrite them. The AI Gateway is included only when the file already has
+ * its variables, since nobody named it.
  */
-const heldSecretServices = (env: Record<string, string>): NeonService[] => {
-	const holds = (keys: readonly string[]): boolean =>
-		keys.some((key) => env[key] !== undefined);
-	const held: NeonService[] = [];
+const bundledSecretServices = (env: Record<string, string>): NeonService[] => {
 	const endpoint = env[NEON_ENV_VAR_KEYS.storage.endpoint];
-	if (endpoint !== undefined && isNeonStorageEndpoint(endpoint)) {
-		held.push("object-storage");
-	}
-	if (holds(Object.values(NEON_ENV_VAR_KEYS.aiGateway))) {
-		held.push("ai-gateway");
-	}
-	if (holds(Object.values(NEON_ENV_VAR_KEYS.realtime))) {
-		held.push("realtime");
-	}
-	return held;
+	const ownStorageKeys =
+		(env[NEON_ENV_VAR_KEYS.storage.accessKeyId] !== undefined ||
+			env[NEON_ENV_VAR_KEYS.storage.secretAccessKey] !== undefined) &&
+		!(endpoint !== undefined && isNeonStorageEndpoint(endpoint));
+	return [
+		...(ownStorageKeys ? [] : (["object-storage"] as const)),
+		...(Object.values(NEON_ENV_VAR_KEYS.aiGateway).some(
+			(key) => env[key] !== undefined,
+		)
+			? (["ai-gateway"] as const)
+			: []),
+	];
 };
 
 /** `https://<branch id>.storage.<region host>`, the shape Neon's branch storage API returns. */
@@ -558,7 +554,7 @@ export const autoPullEnvAfterPin = async (
 	}
 	try {
 		return await pull(props, {
-			onlyHeldSecrets: true,
+			bundled: true,
 			...(branch ? { branch } : {}),
 		});
 	} catch (err) {

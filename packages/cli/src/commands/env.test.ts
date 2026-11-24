@@ -1972,7 +1972,15 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 		expect(existsSync(join(cwd, ".env"))).toBe(false);
 	});
 
-	it("leaves out object storage and Realtime nobody asked for, and names them", async () => {
+	it("leaves out object storage when the file has its own AWS_* keys, and says so", async () => {
+		const own = {
+			AWS_ACCESS_KEY_ID: "AKIAOWNKEY",
+			AWS_SECRET_ACCESS_KEY: "own-secret",
+		};
+		writeFileSync(
+			join(cwd, ".env"),
+			`AWS_ACCESS_KEY_ID=${own.AWS_ACCESS_KEY_ID}\nAWS_SECRET_ACCESS_KEY=${own.AWS_SECRET_ACCESS_KEY}\n`,
+		);
 		const api = realtimeStorageApi();
 		let result: AutoPullResult | undefined;
 		const logged = await captureLog(async () => {
@@ -1982,20 +1990,19 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 			});
 		});
 
-		const env = readEnvFile(join(cwd, ".env.local"));
-		expect(env.DATABASE_URL).toBeDefined();
-		expect(
-			Object.keys(env).filter((key) => key.startsWith("AWS_")),
-		).toEqual([]);
-		expect(env).not.toHaveProperty("NEON_REALTIME_URL");
-		expect(env).not.toHaveProperty("NEON_REALTIME_SECRET");
+		const env = readEnvFile(join(cwd, ".env"));
+		expect(env).toMatchObject({
+			...own,
+			NEON_REALTIME_SECRET: "nrt_live_1_bundled",
+		});
+		expect(env).not.toHaveProperty("AWS_ENDPOINT_URL_S3");
 		expect(api.createCalls).toBe(0);
 		expect(result).toMatchObject({
 			status: "written",
-			withheld: ["object-storage", "realtime"],
+			withheld: ["object-storage"],
 		});
 		expect(stripAnsi(logged)).toContain(
-			"Not pulled      Object Storage, Realtime (secrets). Add with `neon env pull -s object-storage -s realtime`",
+			"Not pulled      Object Storage, to keep the AWS_* keys already in .env. `neon env pull -s object-storage` replaces them.",
 		);
 	});
 
@@ -2028,7 +2035,7 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 	});
 
 	it.each([
-		["withheld", () => new DefaultCredsNeonApi()],
+		["withheld", () => new DefaultCredsNeonApi(), []],
 		[
 			"not discovered",
 			() =>
@@ -2042,8 +2049,9 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 						);
 					}
 				})(),
+			[`AWS_ENDPOINT_URL_S3=https://${BRANCH_ID}.storage.fake.neon.tech`],
 		],
-	])("does not revoke a credential whose %s storage keys stay in the file", async (_, makeApi) => {
+	])("does not revoke a credential whose %s storage keys stay in the file", async (_, makeApi, endpoint) => {
 		const api = makeApi();
 		api.credentials.push({
 			tokenId: "cred-fake-0001",
@@ -2059,6 +2067,7 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 			[
 				"AWS_ACCESS_KEY_ID=cred-fake-0001",
 				`AWS_SECRET_ACCESS_KEY=${"s3secret1".padEnd(64, "0")}`,
+				...endpoint,
 				"NEON_AI_GATEWAY_TOKEN=nt_live_credfake0001_secret",
 				"",
 			].join("\n"),

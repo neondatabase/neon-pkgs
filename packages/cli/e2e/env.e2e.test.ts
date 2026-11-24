@@ -82,7 +82,7 @@ describe.sequential("e2e — neon env pull against the real API", () => {
 			expect(created.code, created.stderr).toBe(0);
 		});
 
-		it("leaves a user's own AWS_* alone and names the services it left out", async () => {
+		it("leaves a user's own AWS_* alone and says so", async () => {
 			const dir = scratch();
 			const own = [
 				"AWS_ACCESS_KEY_ID=AKIAOWNKEY",
@@ -101,8 +101,25 @@ describe.sequential("e2e — neon env pull against the real API", () => {
 			for (const line of own) expect(env).toContain(`${line}\n`);
 			expect(env).toMatch(/^DATABASE_URL=/m);
 			expect(linked.stderr).toMatch(
-				/Not pulled\s+Object Storage \(secrets\)\. Add with `\S+ env pull -s object-storage`/,
+				/Not pulled\s+Object Storage, to keep the AWS_\* keys already in \S*\.env\. `\S+ env pull -s object-storage` replaces them\./,
 			);
+		});
+
+		it("link into a fresh directory still writes Object Storage", async () => {
+			const dir = scratch();
+
+			const linked = await runCli(
+				["link", "--project-id", projectId],
+				inDir(dir),
+			);
+
+			expect(linked.code, linked.stderr).toBe(0);
+			expect(linked.stderr).not.toMatch(/Not pulled/);
+			const env = readEnvFile(join(dir, ".env.local"));
+			expect(new URL(env.AWS_ENDPOINT_URL_S3 ?? "").hostname).toMatch(
+				new RegExp(`^${branchId}\\.`),
+			);
+			expect(env.AWS_ACCESS_KEY_ID).toBeDefined();
 		});
 
 		it("checkout moves the Object Storage and AI Gateway variables the file has to the new branch", async () => {

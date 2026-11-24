@@ -105,13 +105,12 @@ export const formatPulledEnv = (
 			row("", 'Use functionBaseUrl("<slug>") from @neon/env instead.'),
 		);
 	}
-	const withheld = outcome.withheld ?? [];
-	if (withheld.length > 0) {
+	if (outcome.withheld?.includes("object-storage")) {
 		lines.push(
 			row(
 				"Not pulled",
-				`${withheld.map((service) => NEON_SERVICE_LABELS[service]).join(", ")} (secrets). ` +
-					`Add with \`${getCliName()} env pull ${withheld.map((service) => `-s ${service}`).join(" ")}\``,
+				`Object Storage, to keep the AWS_* keys already in ${displayPath(outcome.file, cwd)}. ` +
+					`\`${getCliName()} env pull -s object-storage\` replaces them.`,
 			),
 		);
 	}
@@ -125,7 +124,7 @@ export const formatPulledEnv = (
 		);
 	} else if (credential?.issued && credential.superseded.length > 0) {
 		lines.push(
-			`Left the credential it replaced live (${credential.superseded.join(", ")}): an explicitly scoped pull can't tell which other variables still use it. Revoke it in the Neon Console if nothing does.`,
+			`Left the credential it replaced live (${credential.superseded.join(", ")}): this pull can't tell which other variables still use it. Revoke it in the Neon Console if nothing does.`,
 		);
 	}
 	return `${lines.join("\n")}\n`;
