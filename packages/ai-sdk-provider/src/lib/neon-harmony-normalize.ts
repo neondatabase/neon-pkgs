@@ -163,7 +163,6 @@ export function imageFilesFrom(messageOrDelta: unknown): LanguageModelV3File[] {
 	return files;
 }
 
-/** The first choice's `message` (non-streaming) or `delta` (streaming) of a response body. */
 export function firstChoiceField(
 	body: unknown,
 	field: "message" | "delta",
