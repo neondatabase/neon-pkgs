@@ -38,6 +38,11 @@
 			"types": "./dist/raw.d.ts",
 			"import": "./dist/raw.js",
 			"default": "./dist/raw.js"
+		},
+		"./openapi": {
+			"types": "./dist/openapi.d.ts",
+			"import": "./dist/openapi.js",
+			"default": "./dist/openapi.js"
 		}
 	},
 	"files": [

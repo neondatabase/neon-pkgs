@@ -83,6 +83,7 @@ const READ_ONLY_SAFE = [
 	"resources.fetch",
 	"docs.search",
 	"docs.get",
+	"api.search",
 	"feedback.send",
 ];
 
@@ -267,6 +268,7 @@ const SECRET_OUTPUT_FIELDS = {
 		"stored $.oauth_providers[*].client_secret",
 		"stored $.email_provider.password",
 	],
+	"api.call": ["setup $"],
 };
 
 const RETURNS_ONLY_SECRETS = [
@@ -276,6 +278,7 @@ const RETURNS_ONLY_SECRETS = [
 	"credentials.rotate",
 	"realtime.secret",
 	"auth.oauthClients.rotateSecret",
+	"api.call",
 ];
 
 const allTools = () =>

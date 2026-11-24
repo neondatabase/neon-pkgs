@@ -8,12 +8,6 @@ import type yargs from "yargs";
 import { codeFromBody, isNeonApiError, type RequestParams } from "../api.js";
 import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import type { CommonProps } from "../types.js";
-import {
-	DEFAULT_SPEC_URL,
-	describeOperation,
-	getEndpoints,
-	loadSpec,
-} from "../utils/openapi.js";
 import { writer } from "../writer.js";
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
@@ -206,22 +200,27 @@ type ApiArgs = CommonProps & {
 	list: boolean;
 	describe: boolean;
 	refresh: boolean;
-	specUrl: string;
+	specUrl?: string;
 	color?: boolean;
 };
 
 const toStrings = (values?: (string | number)[]): string[] =>
 	(values ?? []).map(String);
 
+// Loaded only for --list and --describe, so a plain request stays within its module budget.
+const openapi = () => import("../utils/openapi.js");
+
 async function listEndpoints(args: ApiArgs): Promise<void> {
+	const { DEFAULT_SPEC_URL, getEndpoints, loadSpec } = await openapi();
+	const specUrl = args.specUrl ?? DEFAULT_SPEC_URL;
 	const spec = await loadSpec({
 		configDir: args.configDir,
-		specUrl: args.specUrl,
+		specUrl,
 		refresh: args.refresh,
 	});
 	if (!spec) {
 		throw new Error(
-			`Could not load the Neon OpenAPI spec from ${args.specUrl}. ` +
+			`Could not load the Neon OpenAPI spec from ${specUrl}. ` +
 				"Check your network connection or pass --spec-url.",
 		);
 	}
@@ -302,14 +301,16 @@ async function describeRoute(args: ApiArgs): Promise<void> {
 				"Drop -F, -f, -d, -Q, -H, and -i.",
 		);
 	}
+	const { DEFAULT_SPEC_URL, describeOperation, loadSpec } = await openapi();
+	const specUrl = args.specUrl ?? DEFAULT_SPEC_URL;
 	const spec = await loadSpec({
 		configDir: args.configDir,
-		specUrl: args.specUrl,
+		specUrl,
 		refresh: args.refresh,
 	});
 	if (!spec) {
 		throw new Error(
-			`Could not load the Neon OpenAPI spec from ${args.specUrl}. ` +
+			`Could not load the Neon OpenAPI spec from ${specUrl}. ` +
 				"Check your network connection or pass --spec-url.",
 		);
 	}
@@ -564,9 +565,10 @@ export const builder = (argv: yargs.Argv) =>
 			},
 			"spec-url": {
 				type: "string",
-				default: process.env.NEON_API_SPEC_URL ?? DEFAULT_SPEC_URL,
+				default: process.env.NEON_API_SPEC_URL,
 				hidden: true,
-				describe: "OpenAPI spec URL used by --list and --describe.",
+				describe:
+					"OpenAPI spec URL used by --list and --describe. Defaults to the released spec on neon.com.",
 			},
 		})
 		.example("$0 api /projects", "List your projects")
