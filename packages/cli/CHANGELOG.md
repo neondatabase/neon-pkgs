@@ -1,5 +1,11 @@
 # neon
 
+## 9.9.7
+
+### Patch Changes
+
+- 3b2c879: Errors for a rejected flag value (such as `--services`, `--category`, `--agent`, `--skill`, `api -H`, or `--output`) now show `<redacted invalid value>` instead of what you typed, so a secret pasted into the wrong flag is not sent with error telemetry. They still list the valid values, and most suggest the closest one.
+
 ## 9.9.6
 
 ### Patch Changes
