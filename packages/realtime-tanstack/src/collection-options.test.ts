@@ -196,6 +196,72 @@ describe("Realtime TanStack DB collection", () => {
 		});
 	});
 
+	it("applies an update whose rows exchange collection keys as a whole", async () => {
+		const client = new TestClient<MessageRow>();
+		const collection = createTestCollection(client);
+		const preload = collection.preload();
+		client.latest().reset([
+			{ rowId: "a", row: { id: 1, title: "a" } },
+			{ rowId: "b", row: { id: 2, title: "b" } },
+			{ rowId: "c", row: { id: 3, title: "c" } },
+		]);
+		await preload;
+
+		// Row IDs a and b swap their IDs, and c takes the ID d gives up.
+		client.latest().batch(
+			[
+				{ type: "upsert", rowId: "a", row: { id: 2, title: "a" } },
+				{ type: "upsert", rowId: "b", row: { id: 1, title: "b" } },
+				{ type: "upsert", rowId: "d", row: { id: 4, title: "d" } },
+			],
+			["42"],
+		);
+		await expect(collection.utils.awaitTxId("42")).resolves.toBe(true);
+		client.latest().batch(
+			[
+				{ type: "remove", rowId: "d" },
+				{ type: "upsert", rowId: "c", row: { id: 4, title: "c" } },
+			],
+			["43"],
+		);
+		await expect(collection.utils.awaitTxId("43")).resolves.toBe(true);
+
+		await eventually(() => {
+			expect(collection.get(1)).toMatchObject({ title: "b" });
+			expect(collection.get(2)).toMatchObject({ title: "a" });
+			expect(collection.has(3)).toBe(false);
+			expect(collection.get(4)).toMatchObject({ title: "c" });
+		});
+		expect(collection.health.error).toBeNull();
+	});
+
+	it("stops without writing an update that leaves one key with two rows", async () => {
+		const client = new TestClient<MessageRow>();
+		const collection = createTestCollection(client);
+		const preload = collection.preload();
+		client.latest().reset([
+			{ rowId: "a", row: { id: 1, title: "a" } },
+			{ rowId: "b", row: { id: 2, title: "b" } },
+		]);
+		await preload;
+
+		client.latest().batch(
+			[
+				{ type: "upsert", rowId: "c", row: { id: 3, title: "c" } },
+				{ type: "upsert", rowId: "a", row: { id: 2, title: "a" } },
+			],
+			["42"],
+		);
+
+		expect(collection.health.error?.cause).toMatchObject({
+			message: "Realtime upserted an existing key: 2",
+		});
+		expect(collection.get(1)).toMatchObject({ title: "a" });
+		expect(collection.get(2)).toMatchObject({ title: "b" });
+		expect(collection.has(3)).toBe(false);
+		expect(client.latest().unsubscribed).toBe(true);
+	});
+
 	it("remembers transactions that arrive before awaitTxId", async () => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
