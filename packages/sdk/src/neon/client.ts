@@ -1,6 +1,7 @@
 import type { Client } from "../client/client/index.js";
 import { type NeonConfig, resolveConfig } from "./config.js";
-import { RequestContext } from "./context.js";
+import { type CallOptions, RequestContext } from "./context.js";
+import { type ApiRequest, apiRequest } from "./request.js";
 import { ApiKeys, Regions, User } from "./resources/account.js";
 import { AiGateway } from "./resources/ai-gateway.js";
 import { Auth } from "./resources/auth.js";
@@ -18,6 +19,7 @@ import { Realtime } from "./resources/realtime.js";
 import { Snapshots } from "./resources/snapshots.js";
 import { Storage } from "./resources/storage.js";
 import { Triggers } from "./resources/triggers.js";
+import type { Outcome } from "./result.js";
 
 /**
  * The ergonomic Neon client. Resource namespaces wrap the raw operations with auth-once,
@@ -53,6 +55,15 @@ export interface NeonClient<DThrow extends boolean = false> {
 	/** neonstatus.com. Reads a public status API and sends no API key. */
 	readonly incidents: Incidents<DThrow>;
 	/**
+	 * Any API route with this client's auth, deadline, retries, and typed errors. For
+	 * routes no namespace covers; it never polls operations.
+	 */
+	request(request: ApiRequest): Promise<Outcome<unknown, DThrow>>;
+	request<Throw extends boolean = DThrow>(
+		request: ApiRequest,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<unknown, Throw>>;
+	/**
 	 * The underlying configured raw client. Pass it to any raw function
 	 * (`import { raw } from "@neon/sdk"`) to reuse this client's auth + base URL.
 	 */
@@ -74,6 +85,17 @@ export function createNeonClient<Throw extends boolean = false>(
 	config: NeonConfig<Throw>,
 ): NeonClient<Throw> {
 	const ctx = new RequestContext(resolveConfig(config));
+	function request(request: ApiRequest): Promise<Outcome<unknown, Throw>>;
+	function request<T extends boolean = Throw>(
+		request: ApiRequest,
+		opts: CallOptions<T>,
+	): Promise<Outcome<unknown, T>>;
+	function request(
+		request: ApiRequest,
+		opts?: CallOptions,
+	): Promise<unknown> {
+		return apiRequest(ctx, request, opts);
+	}
 	return {
 		projects: new Projects<Throw>(ctx),
 		branches: new Branches<Throw>(ctx),
@@ -94,6 +116,7 @@ export function createNeonClient<Throw extends boolean = false>(
 		regions: new Regions<Throw>(ctx),
 		user: new User<Throw>(ctx),
 		incidents: new Incidents<Throw>(ctx),
+		request,
 		client: ctx.client,
 	};
 }
