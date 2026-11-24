@@ -653,7 +653,7 @@ describe("neon plugins", () => {
 		});
 		expect(stdout).toBe("");
 		expect(strip(stderr)).toContain(
-			'ERROR: Cannot install the Neon plugin: the plugins CLI downloads it with git, and "git" was not found on PATH. Install Git (https://git-scm.com/downloads) or add it to PATH, then retry.',
+			'ERROR: Installing the Neon plugin needs Git, and "git" was not found on PATH. Install Git (https://git-scm.com/downloads) or add it to PATH, then retry.',
 		);
 		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
@@ -672,7 +672,7 @@ describe("neon plugins", () => {
 			code: 1,
 		});
 		expect(strip(stderr)).toContain(
-			'ERROR: Cannot install the Neon plugin: the plugins CLI downloads it with git, and "git" did not run ("git --version" failed: xcrun: error: invalid active developer path). Install the Command Line Tools (xcode-select --install) or install Git, then retry.',
+			'ERROR: Installing the Neon plugin needs Git, and "git" did not run ("git --version" failed: xcrun: error: invalid active developer path). Install the Command Line Tools (xcode-select --install) or install Git, then retry.',
 		);
 		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
@@ -691,7 +691,7 @@ describe("neon plugins", () => {
 			code: 1,
 		});
 		expect(strip(stderr)).toContain(
-			'ERROR: Cannot install the Neon plugin: the plugins CLI downloads it with git, and "git" did not run ("git --version" failed: xcode-select: error: No developer tools were found and no install could be requested (possibly because there is no active GUI session)). Install the Command Line Tools (xcode-select --install) or install Git, then retry.',
+			'ERROR: Installing the Neon plugin needs Git, and "git" did not run ("git --version" failed: xcode-select: error: No developer tools were found and no install could be requested (possibly because there is no active GUI session)). Install the Command Line Tools (xcode-select --install) or install Git, then retry.',
 		);
 		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});

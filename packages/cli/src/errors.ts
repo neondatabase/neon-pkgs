@@ -50,10 +50,7 @@ const ERROR_MATCHERS = [
 	[/^neon skills needs Node\.js /, "NODE_VERSION_UNSUPPORTED"],
 	[/needs npx \(Node\.js\)/, "NPX_NOT_FOUND"],
 	[/spawn git ENOENT/, "GIT_NOT_FOUND"],
-	[
-		/^Cannot install the Neon plugin: the plugins CLI downloads it with git/,
-		"GIT_NOT_FOUND",
-	],
+	[/^Installing the Neon plugin needs Git, /, "GIT_NOT_FOUND"],
 	[
 		/^(Failed to install Neon agent skills|skills CLI failed)/,
 		"SKILLS_CLI_FAILED",

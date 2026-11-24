@@ -58,8 +58,7 @@ export const unusablePluginsCommandsError = (
 			.join("\n"),
 	);
 
-const gitErrorPrefix =
-	'Cannot install the Neon plugin: the plugins CLI downloads it with git, and "git"';
+const gitErrorPrefix = 'Installing the Neon plugin needs Git, and "git"';
 
 const gitFix = (problem: PluginsGitProblem): string => {
 	if (problem.kind === "missing") {
