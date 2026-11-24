@@ -110,7 +110,17 @@ export function parseHeaders(pairs: string[]): Record<string, string> {
 				`Invalid header ${REDACTED_INVALID_VALUE}. Expected "key:value".`,
 			);
 		}
-		headers[pair.slice(0, idx).trim()] = pair.slice(idx + 1).trim();
+		const name = pair.slice(0, idx).trim();
+		const value = pair.slice(idx + 1).trim();
+		// fetch would reject the same header later with an error that quotes it.
+		try {
+			new Headers().append(name, value);
+		} catch {
+			throw new Error(
+				`Invalid header ${REDACTED_INVALID_VALUE}. Header names must be HTTP tokens and values cannot contain line breaks.`,
+			);
+		}
+		headers[name] = value;
 	}
 	return headers;
 }

@@ -143,6 +143,21 @@ describe("rejected flag values in CLI Error telemetry", () => {
 		);
 	});
 
+	it("api --header redacts a header fetch would reject", () => {
+		const secret = SECRETS[0] ?? "";
+		for (const pair of [
+			`Authorization: Bearer ${secret}\nsecond`,
+			`Bearer ${secret}: value`,
+		]) {
+			const message = telemetryMessage(() => parseHeaders([pair]));
+			expectNoSecret(message, secret);
+			expect(message).toContain(REDACTED);
+		}
+		expect(parseHeaders([`Authorization: Bearer ${secret}`])).toEqual({
+			Authorization: `Bearer ${secret}`,
+		});
+	});
+
 	it("--services still names a real service the command cannot select", () => {
 		const message = telemetryMessage(() =>
 			parseServices(["realtime"], {
