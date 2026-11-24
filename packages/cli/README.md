@@ -638,7 +638,14 @@ auth env vars to pull. Provision it first (`neon deploy`, `neon config apply`, o
 Console), or drop auth from --service.
 ```
 
-`link`, `checkout`, and `config apply` invoke `env pull` automatically (see above). Those bundled pulls follow rules 2 and 3 above **without** the implied AI Gateway: minting a credential for a service you never named isn't something a side effect of another command should do. Run `neon env pull` to get it.
+`link`, `checkout`, and `config apply` invoke `env pull` automatically (see above). Those bundled pulls follow rules 2 and 3 above, with two differences:
+
+- **The AI Gateway only when the file already has `NEON_AI_GATEWAY_*`.** Minting a credential for a service you never named isn't something a side effect of another command should do; once you run `neon env pull`, later bundled pulls keep the gateway current, so `checkout` moves it to the new branch.
+- **No Object Storage when the file holds a value for `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` without a Neon `AWS_ENDPOINT_URL_S3`.** Those keys are your own (AWS, R2, MinIO), and writing would overwrite them. The summary says so:
+
+```text
+  Not pulled      Object Storage, to keep the AWS_* keys already in .env. Use `neon env pull -s object-storage` to replace them.
+```
 
 If you'd rather not keep env vars on disk, inject them at runtime instead with `neon-env run -- <your dev command>` (from `@neon/env`) or `neon dev`, and pass `--no-env-pull` to `link` / `checkout`.
 
@@ -925,7 +932,7 @@ Without a TTY, pass `-y` or enough flags to answer every question. `-y` alone is
 
 `--project-id`, `--org-id`, `--project-name`, `--region-id`, and `--branch` are forwarded to `link`. They select linking. A linked directory is not relinked unless you pass one of those flags.
 
-Init pulls the branch's env vars once, after the `neon.ts` step, so the pull includes what `neon.ts` declares. A `neon.ts` written from the branch declares only services the branch already runs, so all of them are pulled. The AI Gateway and Functions need no deploy and are pulled immediately. When `neon.ts` declares Auth, the Data API, Object Storage, or Realtime, init pulls Postgres, plus the AI Gateway and the scaffolded function's URL when declared. `neon deploy` provisions the rest and pulls their env vars. An existing `neon.ts` is pulled by `link` as usual.
+Init pulls the branch's env vars once, after the `neon.ts` step, so the pull includes what `neon.ts` declares. A `neon.ts` written from the branch declares only services the branch already runs, so all of them are pulled. The AI Gateway and Functions need no deploy and are pulled immediately. Auth, the Data API, Object Storage, and Realtime need a deploy unless the branch already has them: init pulls each one the branch has and skips the others. `neon deploy` provisions the rest and pulls their env vars. An existing `neon.ts` is pulled by `link` as usual.
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
