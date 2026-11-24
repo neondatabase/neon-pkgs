@@ -87,11 +87,20 @@ if (process.env.PLUGINS_CHILD_EXIT) {
 	return { home, cwd, bin, argvFile, envFile };
 }
 
-/** A PATH entry with only `node`, so an agent CLI installed next to it cannot leak in. */
-function nodeOnlyBin(): string {
+/** Never link the host git here: it can be a wrapper that execs the next git on PATH, and these tests restrict PATH. */
+function writeGit(dir: string, script = 'echo "git version 2.47.0"\n'): void {
+	writeFileSync(join(dir, "git"), `#!/bin/sh\n${script}`);
+	chmodSync(join(dir, "git"), 0o755);
+}
+
+/** A PATH entry with only `node` and `git`, so an agent CLI installed next to them cannot leak in. */
+function nodeOnlyBin(opts: { git?: boolean } = {}): string {
 	const dir = mkdtempSync(join(tmpdir(), "neon-plugins-node-"));
 	dirs.push(dir);
 	symlinkSync(process.execPath, join(dir, "node"));
+	if (opts.git !== false) {
+		writeGit(dir);
+	}
 	return dir;
 }
 
@@ -620,14 +629,71 @@ describe("neon plugins", () => {
 
 	test("names a missing npx", async ({ testCliCommand }) => {
 		const { home, cwd } = scratch();
-		const empty = mkdtempSync(join(tmpdir(), "neon-plugins-empty-"));
-		dirs.push(empty);
+		const noNpx = mkdtempSync(join(tmpdir(), "neon-plugins-no-npx-"));
+		dirs.push(noNpx);
+		writeGit(noNpx);
 		const { stderr } = await testCliCommand(["plugins", "-y"], {
-			...runOptions(home, cwd, empty, { PATH: empty }),
+			...runOptions(home, cwd, noNpx, { PATH: noNpx }),
 			code: 1,
 		});
 		expect(stderr).toMatch(/needs npx \(Node\.js\) to run the plugins CLI/);
 		expect(stderr).not.toMatch(/neondatabase\/agent-skills/);
+	});
+
+	test("names a missing git before running the plugins CLI", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		mkdirSync(join(cwd, ".claude"));
+		const { stdout, stderr } = await testCliCommand(["plugins", "-y"], {
+			...runOptions(home, cwd, bin, {
+				PATH: `${bin}:${nodeOnlyBin({ git: false })}`,
+			}),
+			code: 1,
+		});
+		expect(stdout).toBe("");
+		expect(strip(stderr)).toContain(
+			'ERROR: Installing the Neon plugin needs Git, and "git" was not found on PATH. Install Git (https://git-scm.com/downloads) or add it to PATH, then retry.',
+		);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
+	});
+
+	test("names a git that does not run before running the plugins CLI", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		const gitBin = nodeOnlyBin({ git: false });
+		writeGit(
+			gitBin,
+			'echo "xcrun: error: invalid active developer path" >&2\nexit 1\n',
+		);
+		const { stderr } = await testCliCommand(["plugins", "-y"], {
+			...runOptions(home, cwd, bin, { PATH: `${bin}:${gitBin}` }),
+			code: 1,
+		});
+		expect(strip(stderr)).toContain(
+			'ERROR: Installing the Neon plugin needs Git, and "git" did not run ("git --version" failed: xcrun: error: invalid active developer path). Install the Command Line Tools (xcode-select --install) or install Git, then retry.',
+		);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
+	});
+
+	test("names the Command Line Tools when the macOS git shim cannot request them", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		const gitBin = nodeOnlyBin({ git: false });
+		writeGit(
+			gitBin,
+			'echo "xcode-select: error: No developer tools were found and no install could be requested (possibly because there is no active GUI session)" >&2\nexit 1\n',
+		);
+		const { stderr } = await testCliCommand(["plugins", "-y"], {
+			...runOptions(home, cwd, bin, { PATH: `${bin}:${gitBin}` }),
+			code: 1,
+		});
+		expect(strip(stderr)).toContain(
+			'ERROR: Installing the Neon plugin needs Git, and "git" did not run ("git --version" failed: xcode-select: error: No developer tools were found and no install could be requested (possibly because there is no active GUI session)). Install the Command Line Tools (xcode-select --install) or install Git, then retry.',
+		);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
 
 	test("help lists the plugin, its contents, and supported agents", async ({
