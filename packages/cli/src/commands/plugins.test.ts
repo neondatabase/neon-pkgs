@@ -749,7 +749,7 @@ describe("neon plugins", () => {
 			["plugins", "-y", "--agent", "eve"],
 			{ ...runOptions(home, cwd, bin), code: 1 },
 		);
-		expect(unknownAgent).toMatch(/Unknown agent: "eve"/);
+		expect(unknownAgent).toMatch(/Unknown agent: <redacted invalid value>/);
 		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 		const { stderr: star } = await testCliCommand(
 			["plugins", "-y", "--agent", "*"],

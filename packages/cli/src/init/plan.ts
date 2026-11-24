@@ -2,6 +2,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import type { SetupNeonMcpOptions } from "../commands/mcp.js";
 import type { InstallPluginsOptions } from "../commands/plugins.js";
 import type { InstallSkillsOptions } from "../commands/skills.js";
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import type { AgentType } from "../mcp/agents.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
 import {
@@ -578,7 +579,7 @@ export const resolveNamedAgents = (raw: readonly string[]): AgentType[] => {
 		const id = tryResolveAddMcpAgentId(item);
 		if (!id) {
 			throw new Error(
-				`Unknown agent: "${item}". Supported agents: ${available.join(", ")}`,
+				`Unknown agent: ${REDACTED_INVALID_VALUE}.${didYouMean([item], available)} Supported agents: ${available.join(", ")}`,
 			);
 		}
 		resolved.push(id);

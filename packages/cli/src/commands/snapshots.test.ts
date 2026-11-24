@@ -358,7 +358,9 @@ describe("snapshots", () => {
 			],
 			{
 				code: 1,
-				stderr: expect.stringContaining('unsupported "frequency"'),
+				stderr: expect.stringContaining(
+					'unsupported "frequency": <redacted invalid value>. Use one of: daily, weekly, monthly.',
+				),
 			},
 		);
 	});

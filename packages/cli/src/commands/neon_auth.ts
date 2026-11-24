@@ -8,6 +8,7 @@ import type {
 import chalk from "chalk";
 import type yargs from "yargs";
 import { codeFromBody, isNeonApiError, retryOnLock } from "../api.js";
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import { stripAnsi } from "../human_table.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
@@ -2592,9 +2593,9 @@ const pluginsGet = async (props: AuthBranchProps & { pluginName: string }) => {
 	);
 	const plugin = (data as any)[props.pluginName];
 	if (plugin === undefined) {
-		const available = Object.keys(data).join(", ");
+		const available = Object.keys(data);
 		throw new Error(
-			`Unknown plugin "${props.pluginName}". Available plugins: ${available}`,
+			`Unknown plugin ${REDACTED_INVALID_VALUE}.${didYouMean([props.pluginName], available)} Available plugins: ${available.join(", ")}`,
 		);
 	}
 	if (props.output === "json" || props.output === "yaml") {

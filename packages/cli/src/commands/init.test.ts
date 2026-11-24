@@ -2967,7 +2967,7 @@ describe("init CLI", () => {
 			["init", "-y", "--agent", "not-an-agent"],
 			{ snapshot: false, code: 1, outputTable: true },
 		);
-		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
+		expect(stderr).toMatch(/Unknown agent: <redacted invalid value>/);
 		expect(stderr).not.toMatch(/Unknown argument: agent/);
 	});
 

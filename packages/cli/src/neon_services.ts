@@ -1,5 +1,7 @@
 import type { Options } from "yargs";
 
+import { didYouMean, REDACTED_INVALID_VALUE } from "./errors.js";
+
 /**
  * Every Neon service a `--service` flag can name, spelled the way a user types it — one
  * vocabulary for the whole CLI.
@@ -117,7 +119,7 @@ export const parseServices = <const Selection extends NeonService>(
 	);
 	if (unsupported.length > 0) {
 		throw new Error(
-			`${unsupportedMessage(unsupported, flag)} ${supported}`,
+			`${unsupportedMessage(unsupported, allowed, flag)} ${supported}`,
 		);
 	}
 
@@ -131,10 +133,12 @@ export const parseServices = <const Selection extends NeonService>(
 /**
  * The sentences explaining why a selection was refused. A real Neon service this command
  * cannot act on is a different mistake from a typo — different cause, different fix — so the
- * two are never answered with the same word.
+ * two are never answered with the same word. Only a real service is named; anything else is
+ * redacted, since it could be a secret pasted into the wrong flag.
  */
 const unsupportedMessage = (
 	unsupported: readonly string[],
+	allowed: readonly NeonService[],
 	flag: string,
 ): string => {
 	const known = unsupported.filter((name): name is NeonService =>
@@ -145,7 +149,7 @@ const unsupportedMessage = (
 	);
 	return [
 		unknown.length > 0
-			? `Unknown service${unknown.length === 1 ? "" : "s"} ${unknown.join(", ")}.`
+			? `Unknown service${unknown.length === 1 ? "" : "s"} ${unknown.map(() => REDACTED_INVALID_VALUE).join(", ")}.${didYouMean(unknown, allowed)}`
 			: undefined,
 		...known.map(
 			(service) => `${service} is not something ${flag} can select.`,

@@ -658,7 +658,7 @@ describe("resolveNamedAgents", () => {
 
 	test("unknown agent names supported agents", () => {
 		expect(() => resolveNamedAgents(["not-an-agent"])).toThrow(
-			/Unknown agent: "not-an-agent"/,
+			/Unknown agent: <redacted invalid value>/,
 		);
 	});
 

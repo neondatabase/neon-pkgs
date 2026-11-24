@@ -1,3 +1,4 @@
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import {
 	getAgentDisplayName,
 	tryResolveAddMcpAgentId,
@@ -168,7 +169,7 @@ export async function resolvePluginsPlan(
 			const id = tryResolveAddMcpAgentId(raw);
 			if (!id) {
 				throw new Error(
-					`Unknown agent: "${raw}". Supported agents: ${available.join(", ")}`,
+					`Unknown agent: ${REDACTED_INVALID_VALUE}.${didYouMean([raw], available)} Supported agents: ${available.join(", ")}`,
 				);
 			}
 			return id;
