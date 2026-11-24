@@ -192,7 +192,7 @@ describe("initEnvPullAfterConfig", () => {
 		).toEqual({ kind: "policy" });
 	});
 
-	test("pulls only deploy-free services while others await a deploy", () => {
+	test("pulls every declared service, leaving those that need a deploy optional", () => {
 		expect(
 			initEnvPullAfterConfig({
 				linkDeferredPull: true,
@@ -203,8 +203,9 @@ describe("initEnvPullAfterConfig", () => {
 			}),
 		).toEqual({
 			kind: "services",
-			services: ["postgres", "ai-gateway", "functions"],
+			services: ["postgres", "auth", "ai-gateway", "functions"],
 			envKeys: [],
+			optionalServices: ["auth"],
 		});
 		expect(
 			initEnvPullAfterConfig({
@@ -214,7 +215,12 @@ describe("initEnvPullAfterConfig", () => {
 				claimable: false,
 				...pinned,
 			}),
-		).toEqual({ kind: "services", services: ["postgres"], envKeys: [] });
+		).toEqual({
+			kind: "services",
+			services: ["postgres", "object-storage"],
+			envKeys: [],
+			optionalServices: ["object-storage"],
+		});
 	});
 
 	test("skips when nothing changed since an earlier pull", () => {

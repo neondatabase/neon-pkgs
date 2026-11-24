@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseEnvPullKeys } from "./env_services.js";
 import { isNetworkError, matchErrorCode } from "./errors.js";
+import { pluginsGitError } from "./plugins/plan.js";
 import { missingNpxMessage } from "./utils/package_manager.js";
 
 describe("matchErrorCode", () => {
@@ -51,6 +52,12 @@ describe("matchErrorCode", () => {
 			[missingNpxMessage("neon plugins", "plugins CLI"), "NPX_NOT_FOUND"],
 			[
 				"skills CLI failed:\nFailed to clone https://github.com/neondatabase/agent-skills.git: Error: spawn git ENOENT",
+				"GIT_NOT_FOUND",
+			],
+			[pluginsGitError({ kind: "missing" }).message, "GIT_NOT_FOUND"],
+			[
+				pluginsGitError({ kind: "broken", detail: "exit code 1" })
+					.message,
 				"GIT_NOT_FOUND",
 			],
 			["skills CLI failed:\nboom", "SKILLS_CLI_FAILED"],
