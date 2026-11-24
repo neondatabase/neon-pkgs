@@ -10,6 +10,18 @@ import orderedFixtures from "../ordered-changes.fixtures.json";
 import protocolFixtures from "../realtime-protocol.fixtures.json";
 
 describe("Legacy Realtime protocol compatibility", () => {
+	it("keeps the exact v2 schema", () => {
+		const source = readFileSync(
+			new URL(
+				"../../../../../schema/legacy/realtime-protocol-v2.schema.json",
+				import.meta.url,
+			),
+		);
+		expect(createHash("sha256").update(source).digest("hex")).toBe(
+			"0449246115ee8d7552343404a40635118269f6d12dae89f6897fdcec9d4be1b9",
+		);
+	});
+
 	it("keeps the exact v1 schema pinned by the transition proxy", () => {
 		const source = readFileSync(
 			new URL(

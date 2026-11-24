@@ -6,8 +6,10 @@ import Ajv2020 from "ajv/dist/2020.js";
 import standaloneCode from "ajv/dist/standalone/index.js";
 import { compile } from "json-schema-to-typescript";
 
+// The SDK still speaks protocol v2, whose frozen bytes now live under legacy/.
+// The active schema is protocol v3; the generator moves to it when the client does.
 const schemaUrl = new URL(
-  "../schema/realtime-protocol.schema.json",
+  "../schema/legacy/realtime-protocol-v2.schema.json",
   import.meta.url,
 );
 const validatorOutputUrl = new URL(

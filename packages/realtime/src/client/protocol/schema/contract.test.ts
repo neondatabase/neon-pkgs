@@ -1,7 +1,8 @@
 import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
-import protocolSchema from "../../../../schema/realtime-protocol.schema.json";
+// The client still speaks protocol v2, from its frozen snapshot.
+import protocolSchema from "../../../../schema/legacy/realtime-protocol-v2.schema.json";
 import capabilitySchema from "../../../../schema/realtime-query-capability.schema.json";
 import capabilityFixtures from "../../../server/capability/schema/realtime-query-capability-v2.fixtures.json";
 import orderedFixtures from "./ordered-changes.fixtures.json";
