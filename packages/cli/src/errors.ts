@@ -33,6 +33,7 @@ export type ErrorCode =
 	| "DEPENDENCY_INSTALL_FAILED"
 	| "LEGACY_FUNCTION_ENV_KEY"
 	| "PROJECT_NOT_LINKED"
+	| "AMBIGUOUS_BRANCH_ROLE"
 	| "UNKNOWN_ERROR";
 
 // First match wins: a skills CLI failure caused by a missing git is GIT_NOT_FOUND.
@@ -68,6 +69,10 @@ const ERROR_MATCHERS = [
 		"LEGACY_FUNCTION_ENV_KEY",
 	],
 	[/^No Neon project is linked here/, "PROJECT_NOT_LINKED"],
+	[
+		/ roles and none is "neondb_owner"; cannot auto-pick\./,
+		"AMBIGUOUS_BRANCH_ROLE",
+	],
 ] as const;
 
 export const matchErrorCode = (message?: string): ErrorCode => {

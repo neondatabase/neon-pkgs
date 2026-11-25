@@ -39,6 +39,7 @@ import yargs from "yargs/yargs";
 import { clearAuthContext, setAuthContext } from "../auth_context.js";
 import { writeClaimableCredentials } from "../claimable/state.js";
 import { readEnvFile } from "../env_file.js";
+import { matchErrorCode } from "../errors.js";
 import {
 	type AutoPullResult,
 	autoPullEnvAfterPin,
@@ -2163,9 +2164,17 @@ describe("env pull --role-name", () => {
 		).parseAsync(["pull", ...argv], baseProps(api, cwd));
 
 	it("names the flag when the branch's role cannot be auto-picked", async () => {
-		await expect(runPull([], new TwoRoleNeonApi())).rejects.toThrow(
+		const error = await runPull([], new TwoRoleNeonApi()).then(
+			() => undefined,
+			(err: unknown) => err,
+		);
+		if (!(error instanceof Error)) {
+			throw new Error("env pull picked a role on an ambiguous branch");
+		}
+		expect(error.message).toMatch(
 			/has 2 roles and none is "neondb_owner".*`--role-name` to the Neon CLI's `neon env pull`/,
 		);
+		expect(matchErrorCode(error.message)).toBe("AMBIGUOUS_BRANCH_ROLE");
 		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
 	});
 
