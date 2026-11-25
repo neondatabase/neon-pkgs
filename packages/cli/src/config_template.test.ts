@@ -52,7 +52,7 @@ export default defineConfig({
   },
   buckets: {
     // "private" is the default; use "public_read" for anonymous reads
-    assets: { access: "private" },
+    uploads: { access: "private" },
   },
   // Branch policy: per-branch tuning
   branch: (branch) => {
@@ -147,7 +147,7 @@ export default defineConfig({
 		expect(rendered).toContain("auth: false,");
 		expect(rendered).not.toContain("preview");
 		expect(rendered).toContain("buckets: {");
-		expect(rendered).toContain('assets: { access: "private" },');
+		expect(rendered).toContain('uploads: { access: "private" },');
 		expect(rendered).not.toContain("aiGateway");
 		expect(rendered).not.toContain("functions");
 	});

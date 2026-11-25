@@ -77,7 +77,8 @@ export type BootstrapProps = CommonProps & {
 	listTemplates: boolean;
 	agent?: string[];
 	default: boolean;
-	install: boolean;
+	/** Undefined when omitted, which a non-interactive run without `--default` treats as no install. */
+	install?: boolean;
 	git: boolean;
 	link: boolean;
 	agentSetup?: boolean;
@@ -178,9 +179,8 @@ export const builder = (argv: yargs.Argv) =>
 			},
 			install: {
 				describe:
-					"Install dependencies after scaffolding. In interactive mode this is offered as a prompt; use --no-install to skip without being asked.",
+					"Install dependencies after scaffolding. In interactive mode this is offered as a prompt; use --no-install to skip without being asked. Without a terminal, --install or --default installs.",
 				type: "boolean",
-				default: true,
 			},
 			git: {
 				describe:
@@ -488,17 +488,17 @@ const runPostScaffoldSteps = async (
 	}
 
 	if (!interactive) {
-		const outcome = {
-			installed: false,
-			installFailed: false,
-			gitFailed: false,
+		const outcome = await executePostScaffold(props, targetDir, {
+			yes: true,
+			lockAgentSetup: false,
+			pm: defaultPm,
 			git: false,
-			agentSetup: "skip" as const,
-			linked: false,
-			skippedLinkForDeps: false,
-			agentsRan: false,
-			deployed: false,
-		};
+			agentSetup: "skip",
+			install: props.install === true,
+			link: false,
+			hasNeonConfig: neonConfig,
+			named,
+		});
 		finishPostScaffold({
 			heading: "Project scaffolded.",
 			template,
@@ -514,7 +514,7 @@ const runPostScaffoldSteps = async (
 
 	let pm: PackageManager = defaultPm;
 	const wantInstall =
-		props.install &&
+		props.install !== false &&
 		(props.deploy === true || (await confirm(installPrompt(inferred))));
 	if (wantInstall) {
 		pm = inferred ?? (await selectPackageManager());
@@ -590,7 +590,7 @@ const runDefaultSteps = async (
 		pm,
 		git: wantGit,
 		agentSetup,
-		install: props.install,
+		install: props.install !== false,
 		link: props.link,
 		hasNeonConfig: neonConfig,
 		named,
@@ -773,7 +773,7 @@ const executePostScaffold = async (
 
 /**
  * `--deploy` installs and links without asking, so flags that skip those steps contradict
- * it. Outside a terminal, only `-y` runs the post-scaffold steps at all.
+ * it. Outside a terminal, only `-y` runs the link step.
  */
 const assertDeployable = (
 	props: BootstrapProps,
