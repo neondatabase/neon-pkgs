@@ -9,6 +9,7 @@ import {
 	deleteProject,
 	runCli,
 	uniqueProjectName,
+	waitForProjectReady,
 } from "./helpers.js";
 
 describe.sequential("e2e — neon env pull against the real API", () => {
@@ -56,6 +57,36 @@ describe.sequential("e2e — neon env pull against the real API", () => {
 		expect(env).toEqual({
 			DATABASE_URL: expect.stringMatching(/^postgresql:\/\//),
 		});
+	});
+
+	it("connects DATABASE_URL as the role named with --role-name", async () => {
+		await apiRequest(`/projects/${projectId}/branches/${branchId}/roles`, {
+			method: "POST",
+			body: { role: { name: "cli_e2e_app" } },
+		});
+		await waitForProjectReady(projectId);
+
+		const result = await runCli(
+			[
+				"env",
+				"pull",
+				"--project-id",
+				projectId,
+				"--branch",
+				branchId,
+				"--file",
+				".env.role",
+				"-e",
+				"DATABASE_URL",
+				"--role-name",
+				"cli_e2e_app",
+			],
+			{ cwd, json: false },
+		);
+
+		expect(result.code, result.stderr).toBe(0);
+		const env = readEnvFile(join(cwd, ".env.role"));
+		expect(new URL(env.DATABASE_URL).username).toBe("cli_e2e_app");
 	});
 
 	describe.sequential("the pull bundled into link and checkout", () => {

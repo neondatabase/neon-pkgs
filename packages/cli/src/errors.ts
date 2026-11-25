@@ -33,6 +33,7 @@ export type ErrorCode =
 	| "DEPENDENCY_INSTALL_FAILED"
 	| "LEGACY_FUNCTION_ENV_KEY"
 	| "PROJECT_NOT_LINKED"
+	| "AMBIGUOUS_BRANCH_ROLE"
 	| "FUNCTION_BUILD_UNFINISHED"
 	| "UNKNOWN_ERROR";
 
@@ -69,6 +70,10 @@ const ERROR_MATCHERS = [
 		"LEGACY_FUNCTION_ENV_KEY",
 	],
 	[/^No Neon project is linked here/, "PROJECT_NOT_LINKED"],
+	[
+		/ roles and none is "neondb_owner"; cannot auto-pick\./,
+		"AMBIGUOUS_BRANCH_ROLE",
+	],
 	// Unanchored: checkout wraps the apply error in its own sentence.
 	[
 		/function deployments were not confirmed complete/,

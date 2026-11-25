@@ -1626,7 +1626,7 @@ function pickRoleName(
 		ErrorCode.AmbiguousBranchAuth,
 		[
 			`fetchEnv: branch ${branch.name} (${branch.id}) has ${roles.length} roles and none is "${NEON_DEFAULT_OWNER_ROLE}"; cannot auto-pick.`,
-			`Pass \`roleName\` explicitly. Available: ${roles.map((r) => r.name).join(", ")}.`,
+			`Pass \`roleName\` to fetchEnv, or \`--role-name\` to the Neon CLI's \`neon env pull\`. Available: ${roles.map((r) => r.name).join(", ")}.`,
 		].join(" "),
 		{
 			details: {
