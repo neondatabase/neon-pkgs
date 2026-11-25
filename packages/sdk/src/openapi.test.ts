@@ -4,7 +4,12 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { describeOperation, type OpenApiSpec } from "./openapi";
+import {
+	describeEndpoint,
+	EndpointNotFoundError,
+	type OpenApiSpec,
+	searchEndpoints,
+} from "./openapi.js";
 
 const miniSpec = {
 	paths: {
@@ -325,9 +330,9 @@ const miniSpec = {
 
 const spec: OpenApiSpec = miniSpec;
 
-describe("describeOperation", () => {
+describe("describeEndpoint", () => {
 	it("lists query params, resolving parameter and schema $refs", () => {
-		const result = describeOperation(spec, "/projects", "GET");
+		const result = describeEndpoint(spec, "/projects", "GET");
 		expect(result).toMatchObject({
 			method: "GET",
 			path: "/projects",
@@ -369,7 +374,7 @@ describe("describeOperation", () => {
 	});
 
 	it("keeps required on a parameter $ref", () => {
-		const orgId = describeOperation(spec, "/need-org", "GET").fields.find(
+		const orgId = describeEndpoint(spec, "/need-org", "GET").fields.find(
 			(field) => field.name === "org_id",
 		);
 		expect(orgId).toMatchObject({
@@ -380,14 +385,14 @@ describe("describeOperation", () => {
 	});
 
 	it("overrides path-item parameters with the same name and in", () => {
-		const orgId = describeOperation(spec, "/projects", "GET").fields.find(
+		const orgId = describeEndpoint(spec, "/projects", "GET").fields.find(
 			(field) => field.name === "org_id",
 		);
 		expect(orgId?.description).toBe("operation org_id");
 	});
 
 	it("flattens nested body keys and keeps $ref sibling descriptions", () => {
-		const result = describeOperation(spec, "/projects", "POST");
+		const result = describeEndpoint(spec, "/projects", "POST");
 		expect(result.bodyRequired).toBe(true);
 		expect(result.fields.map((field) => field.name)).toEqual([
 			"org_id",
@@ -442,7 +447,7 @@ describe("describeOperation", () => {
 	});
 
 	it("keeps arrays as -F leaves and exposes item properties", () => {
-		const result = describeOperation(
+		const result = describeEndpoint(
 			spec,
 			"/projects/{project_id}/branches",
 			"POST",
@@ -491,7 +496,7 @@ describe("describeOperation", () => {
 	});
 
 	it("matches a concrete id against a path template", () => {
-		const result = describeOperation(
+		const result = describeEndpoint(
 			spec,
 			"/projects/foo-bar-123/branches",
 			"POST",
@@ -501,19 +506,29 @@ describe("describeOperation", () => {
 	});
 
 	it("errors when GET is missing and names the methods that exist", () => {
-		expect(() => describeOperation(spec, "/only-post", "GET")).toThrow(
-			"No GET /only-post in the spec. Available: POST. Pass -X POST.",
-		);
+		const error = (() => {
+			try {
+				describeEndpoint(spec, "/only-post", "GET");
+			} catch (thrown) {
+				return thrown;
+			}
+		})();
+		expect(error).toBeInstanceOf(EndpointNotFoundError);
+		expect(error).toMatchObject({
+			message: "No GET /only-post in the spec. Available: POST.",
+			method: "GET",
+			available: ["POST"],
+		});
 	});
 
 	it("errors for an unknown path", () => {
-		expect(() => describeOperation(spec, "/nope", "GET")).toThrow(
-			'No route matches "/nope". Run `neon api --list` to see available routes.',
+		expect(() => describeEndpoint(spec, "/nope", "GET")).toThrow(
+			'No route matches "/nope".',
 		);
 	});
 
 	it("flattens oneOf bodies and injects the discriminator", () => {
-		const result = describeOperation(spec, "/email", "PATCH");
+		const result = describeEndpoint(spec, "/email", "PATCH");
 		expect(result.bodyRequired).toBe(true);
 		expect(result.fields.map((field) => field.name)).toEqual([
 			"type",
@@ -542,7 +557,7 @@ describe("describeOperation", () => {
 	});
 
 	it("describes a multipart JSON-shaped body when application/json is absent", () => {
-		const result = describeOperation(spec, "/deploy", "POST");
+		const result = describeEndpoint(spec, "/deploy", "POST");
 		expect(result.contentType).toBe("multipart/form-data");
 		expect(result.fields.map((field) => field.name)).toEqual([
 			"zip",
@@ -557,16 +572,16 @@ describe("describeOperation", () => {
 	});
 
 	it("prefers the template with more static segments", () => {
-		expect(describeOperation(spec, "/items/me", "GET").operationId).toBe(
+		expect(describeEndpoint(spec, "/items/me", "GET").operationId).toBe(
 			"getMe",
 		);
-		expect(describeOperation(spec, "/items/other", "GET").operationId).toBe(
+		expect(describeEndpoint(spec, "/items/other", "GET").operationId).toBe(
 			"getItem",
 		);
 	});
 
 	it("stops a circular $ref at an object leaf", () => {
-		const result = describeOperation(spec, "/cycle", "POST");
+		const result = describeEndpoint(spec, "/cycle", "POST");
 		expect(result.fields.map((field) => field.name)).toEqual([
 			"name",
 			"child",
@@ -581,19 +596,19 @@ describe("describeOperation", () => {
 	});
 });
 
-describe("describeOperation against the vendored Neon spec", () => {
+describe("describeEndpoint against the vendored Neon spec", () => {
 	const neonSpec = JSON.parse(
 		readFileSync(
 			join(
 				dirname(fileURLToPath(import.meta.url)),
-				"../../../sdk/spec/neon-openapi.json",
+				"../spec/neon-openapi.json",
 			),
 			"utf8",
 		),
 	) as OpenApiSpec;
 
 	it("describes GET /projects query params including TimeoutParam", () => {
-		const result = describeOperation(neonSpec, "/projects", "GET");
+		const result = describeEndpoint(neonSpec, "/projects", "GET");
 		const names = result.fields.map((field) => field.name);
 		expect(names).toEqual(
 			expect.arrayContaining([
@@ -608,7 +623,7 @@ describe("describeOperation against the vendored Neon spec", () => {
 	});
 
 	it("describes POST /projects as a required body of dotted project fields", () => {
-		const result = describeOperation(neonSpec, "/projects", "POST");
+		const result = describeEndpoint(neonSpec, "/projects", "POST");
 		expect(result.bodyRequired).toBe(true);
 		expect(result.operationId).toBe("createProject");
 		const names = result.fields.map((field) => field.name);
@@ -622,7 +637,7 @@ describe("describeOperation against the vendored Neon spec", () => {
 	});
 
 	it("describes POST .../branches array items for -F endpoints=", () => {
-		const result = describeOperation(
+		const result = describeEndpoint(
 			neonSpec,
 			"/projects/proj-1/branches",
 			"POST",
@@ -643,7 +658,7 @@ describe("describeOperation against the vendored Neon spec", () => {
 	});
 
 	it("resolves query enum $refs", () => {
-		const result = describeOperation(
+		const result = describeEndpoint(
 			neonSpec,
 			"/projects/{project_id}/advisors",
 			"GET",
@@ -658,7 +673,7 @@ describe("describeOperation against the vendored Neon spec", () => {
 	});
 
 	it("flattens the email-provider oneOf body", () => {
-		const result = describeOperation(
+		const result = describeEndpoint(
 			neonSpec,
 			"/projects/p/branches/b/auth/email_provider",
 			"PATCH",
@@ -680,7 +695,7 @@ describe("describeOperation against the vendored Neon spec", () => {
 	});
 
 	it("keeps primitive array item enums", () => {
-		const webhooks = describeOperation(
+		const webhooks = describeEndpoint(
 			neonSpec,
 			"/projects/p/branches/b/auth/webhooks",
 			"PUT",
@@ -694,7 +709,7 @@ describe("describeOperation against the vendored Neon spec", () => {
 				enum: expect.arrayContaining(["user.created", "send.otp"]),
 			},
 		});
-		const credentials = describeOperation(
+		const credentials = describeEndpoint(
 			neonSpec,
 			"/projects/p/branches/b/credentials",
 			"POST",
@@ -709,5 +724,29 @@ describe("describeOperation against the vendored Neon spec", () => {
 			credentials.fields.find((field) => field.name === "scopes")?.items
 				?.enum,
 		).toEqual(expect.arrayContaining(["storage:read", "functions:invoke"]));
+	});
+
+	it("ranks the endpoint whose summary has every query word first", () => {
+		const [first] = searchEndpoints(neonSpec, "create branch");
+		expect(first).toMatchObject({
+			method: "POST",
+			path: "/projects/{project_id}/branches",
+		});
+	});
+
+	it("matches operationId words, plurals, and path segments", () => {
+		const paths = searchEndpoints(neonSpec, "vpc endpoints", {
+			limit: 5,
+		}).map((endpoint) => endpoint.path);
+		expect(paths).toHaveLength(5);
+		expect(paths.every((path) => path.includes("/vpc"))).toBe(true);
+	});
+
+	it("honours limit and returns nothing for a query with no words", () => {
+		expect(searchEndpoints(neonSpec, "project", { limit: 3 })).toHaveLength(
+			3,
+		);
+		expect(searchEndpoints(neonSpec, "  ?! ")).toEqual([]);
+		expect(searchEndpoints(neonSpec, "zzzunmatched")).toEqual([]);
 	});
 });

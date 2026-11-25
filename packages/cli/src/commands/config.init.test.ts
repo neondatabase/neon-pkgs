@@ -413,7 +413,7 @@ describe("config init", () => {
 				install: false,
 				services: ["auth,vectors"],
 			}),
-		).rejects.toThrow(/Unknown service vectors/);
+		).rejects.toThrow(/Unknown service <redacted invalid value>/);
 
 		expect(existsSync(join(workspace, "neon.ts"))).toBe(false);
 	});
@@ -608,6 +608,30 @@ describe("config init", () => {
 				"ai-gateway,storage",
 			],
 			{ unreachableHost: true, code: 0, cwd: workspace },
+		);
+
+		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
+		expect(content).toContain("aiGateway: true");
+		expect(content).toContain('assets: { access: "private" }');
+	});
+
+	test("--services accepts the space-joined list PowerShell passes for an unquoted a,b", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"config",
+				"init",
+				"--no-install",
+				"--services",
+				"ai-gateway storage",
+			],
+			{
+				unreachableHost: true,
+				code: 0,
+				cwd: workspace,
+				snapshot: false,
+			},
 		);
 
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");

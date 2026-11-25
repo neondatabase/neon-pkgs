@@ -9,7 +9,7 @@ import {
 import { basename, dirname, join, relative } from "node:path";
 import { type AgentType, agents, upsertServer } from "add-mcp";
 import { type ParseError, parse as parseJsonc } from "jsonc-parser";
-
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import { getCliName } from "../utils/cli_name.js";
 
 export const NEON_MCP_URL = "https://mcp.neon.tech/mcp";
@@ -50,7 +50,7 @@ export function parseMcpCategories(raw: readonly string[]): NeonMcpCategory[] {
 	for (const value of raw) {
 		if (!isMcpCategory(value)) {
 			throw new Error(
-				`Unknown MCP category: "${value}". Supported categories: ${NEON_MCP_CATEGORIES.join(", ")}`,
+				`Unknown MCP category: ${REDACTED_INVALID_VALUE}.${didYouMean([value], NEON_MCP_CATEGORIES)} Supported categories: ${NEON_MCP_CATEGORIES.join(", ")}`,
 			);
 		}
 		out.push(value);

@@ -79,6 +79,8 @@ describe("generated operation coverage", () => {
 			"incidents.list",
 			"docs.search",
 			"docs.get",
+			"api.search",
+			"api.call",
 			"feedback.send",
 		]);
 		for (const id of toolIds) {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://neon.tech/schemas/realtime/realtime-protocol-v2.schema.json",
-  "title": "Neon Realtime protocol v2",
+  "$id": "https://neon.tech/schemas/realtime/realtime-protocol-v3.schema.json",
+  "title": "Neon Realtime protocol v3",
   "type": "object",
   "$defs": {
     "u64": {
@@ -24,6 +24,64 @@
       "pattern": "^(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?$"
     },
     "rowKey": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "segmentTag": {
+      "type": "string",
+      "$comment": "The 32-byte digest that names a multi-row segment, as lowercase hex. Opaque to applications. A row or upsert carries it exactly when the row belongs to a multi-row segment, and an upsert's tag replaces the row's earlier one. Within an epoch, a row key never changes between carrying a tag and carrying none; a frame that would is a protocol error.",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "selector": {
+      "type": "object",
+      "$comment": "One segment a selected round replaces: a multi-row segment by the segment_tag its rows carry, or a one-row segment by its row key, which names a row without a segment_tag. A repeated selector changes nothing.",
+      "oneOf": [
+        {
+          "required": ["segment_tag"],
+          "properties": { "segment_tag": { "$ref": "#/$defs/segmentTag" } },
+          "additionalProperties": false
+        },
+        {
+          "required": ["row_key"],
+          "properties": { "row_key": { "$ref": "#/$defs/rowKey" } },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "$comment": "What a baseline replaces. 'all' replaces the whole result and is the scope of an epoch's first baseline. 'selected' is a round: it replaces the named segments, including those that turn out empty, and resolves the holes in covered. Every row of a round belongs to a selector, by its segment_tag or, for a row without one, its row_key, and its row keys do not repeat. A returned row that, after the covered ticks, is shown under a segment_tag the scope does not name is a protocol error. A round installs at its baseline_sync_end: the client applies the covered ticks in order, removes the scope's rows (every row whose segment_tag a selector names, after those ticks, and every row a row_key selector names), inserts the round's rows, and applies the later held ticks up to the next unresolved hole. It shows the result in one step: the visible snapshot becomes the round's mvcc, then any held progress the install releases. An absent scope never means 'all'.",
+      "discriminator": { "propertyName": "kind" },
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "properties": { "kind": { "const": "all" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "selectors", "covered"],
+          "properties": {
+            "kind": { "const": "selected" },
+            "selectors": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/selector" } },
+            "covered": { "$ref": "#/$defs/covered" },
+            "ordered": {
+              "const": true,
+              "$comment": "Present on every round of an ordered result, including one that returns no rows. Every selected round of a live ID has the same value, and a retry keeps it. Its rows say where they go with after_row_key. No tick it covers contains a move, and none upserts a row key that is not shown at that point unless the upsert puts the row in the scope. Every row the install shows that was not shown before the round, or that a covered tick added, is a row of the round. Ticks after its covered range may contain moves."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "covered": {
+      "type": "object",
+      "$comment": "The change sequences a round resolves: from the live ID's first unresolved hole through the tick of the round's snapshot. Every tick through through_sequence precedes the round's baseline_sync_start. Semantic validation requires from_sequence <= through_sequence.",
+      "required": ["from_sequence", "through_sequence"],
+      "properties": {
+        "from_sequence": { "$ref": "#/$defs/u64" },
+        "through_sequence": { "$ref": "#/$defs/u64" }
+      },
+      "additionalProperties": false
+    },
     "base64Cell": {
       "type": "object",
       "required": ["base64"],
@@ -48,7 +106,12 @@
       "required": ["row_key", "values"],
       "properties": {
         "row_key": { "$ref": "#/$defs/rowKey" },
-        "values": { "type": "array", "items": { "$ref": "#/$defs/cell" } }
+        "values": { "type": "array", "items": { "$ref": "#/$defs/cell" } },
+        "segment_tag": { "$ref": "#/$defs/segmentTag" },
+        "after_row_key": {
+          "$comment": "Places a row of an ordered round (a selected scope with ordered) in its result: right after the row with this key. A row without it goes right after the round's previous row, or first when it is the round's first row. Rows of an unordered round and of an 'all' baseline never carry it. The client places rows after applying the covered ticks and removing the scope, so each anchor is a row shown at that point or an earlier row of the round. No row is its own anchor, and no two rows have the same anchor, counting the implicit ones.",
+          "$ref": "#/$defs/rowKey"
+        }
       },
       "additionalProperties": false
     },
@@ -104,7 +167,8 @@
           "properties": {
             "op": { "const": "upsert" },
             "row_key": { "$ref": "#/$defs/rowKey" },
-            "values": { "type": "array", "items": { "$ref": "#/$defs/cell" } }
+            "values": { "type": "array", "items": { "$ref": "#/$defs/cell" } },
+            "segment_tag": { "$ref": "#/$defs/segmentTag" }
           },
           "additionalProperties": false
         },
@@ -119,7 +183,7 @@
         },
         {
           "type": "object",
-          "$comment": "Sequentially splice row_key immediately after after_row_key; null means head. Contents precede moves. Every ordered patch entrant must have its own move, including a new tail row. Materialized programs containing moves validate entrants against prior membership; content-only programs do not reveal whether the query is ordered. Raw receivers validate structure without retaining membership. Each moved key and final predecessor occurs at most once; a moved anchor must be placed earlier. Both keys must exist in the final result. Expose only at Commit.",
+          "$comment": "Sequentially splice row_key immediately after after_row_key; null means head. Contents precede moves. Every ordered patch entrant must have its own move, including a new tail row, except in a tick an ordered round covers, which contains no move and whose entrants the round's scope replaces. Materialized programs containing moves validate entrants against prior membership; content-only programs do not reveal whether the query is ordered. Raw receivers validate structure without retaining membership. Each moved key and final predecessor occurs at most once; a moved anchor must be placed earlier. Both keys must exist in the final result. Expose only at Commit, or, while a hole is unresolved, when the round that resolves it installs.",
           "required": ["op", "row_key", "after_row_key"],
           "properties": {
             "op": { "const": "move" },
@@ -141,7 +205,7 @@
       "oneOf": [
         {
           "type": "object",
-          "$comment": "Bounded, extensible connection metadata encoded as JSON. A v2 client must send this exactly once after Ready and before any subscription command.",
+          "$comment": "Bounded, extensible connection metadata encoded as JSON. A client must send this exactly once after Ready and before any subscription command.",
           "required": ["type", "metadata"],
           "properties": {
             "type": { "const": "client_info" },
@@ -238,18 +302,21 @@
         },
         {
           "type": "object",
-          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "mvcc"],
+          "$comment": "Starts one baseline attempt. It precedes the attempt's first batch, or its baseline_sync_end when the attempt returns no rows. Within an epoch of a live ID, each attempt has a greater baseline_sync_attempt than the one before. A start before the current attempt's baseline_sync_end retries that baseline: it supersedes the earlier attempt and repeats its scope exactly and, for a selected round, its mvcc. A start after baseline_sync_end, in the same epoch, begins a selected round; an 'all' start there is a protocol error, because a full replacement arrives as reset_required and a new epoch.",
+          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "scope", "mvcc"],
           "properties": {
             "type": { "const": "baseline_sync_start" },
             "live_id": { "$ref": "#/$defs/u64" },
             "epoch": { "$ref": "#/$defs/u64" },
             "baseline_sync_attempt": { "$ref": "#/$defs/u64" },
+            "scope": { "$ref": "#/$defs/scope" },
             "mvcc": { "$ref": "#/$defs/mvcc" }
           },
           "additionalProperties": false
         },
         {
           "type": "object",
+          "$comment": "Batch indices start at 0 in each attempt and increase by one.",
           "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "index", "rows"],
           "properties": {
             "type": { "const": "baseline_sync_batch" },
@@ -292,6 +359,19 @@
             "txids": { "type": "array", "items": { "$ref": "#/$defs/u64" } },
             "targets": { "type": "array", "items": { "$ref": "#/$defs/changeTarget" } },
             "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "$comment": "A publication body that commits a hole: some of each target's rows for this tick arrive later, in a round. From a target's first unresolved hole on, the client holds this tick and every later one for that target and shows none of them until a selected round covering the hole installs, or a reset_required discards them; a first baseline replays held ticks only up to the first hole. It lists no segments, does not change the epoch, and counts in commit's body_count. Every keyed_results and segments_pending body for one live ID in one publication carries the same sequence and the same txids, and a target has at most one hole body per publication. The sequence advances once, at commit. segments_pending and reset_required never target the same live ID in one publication.",
+          "required": ["type", "publication_id", "index", "txids", "targets"],
+          "properties": {
+            "type": { "const": "segments_pending" },
+            "publication_id": { "$ref": "#/$defs/publicationId" },
+            "index": { "$ref": "#/$defs/u32" },
+            "txids": { "type": "array", "items": { "$ref": "#/$defs/u64" } },
+            "targets": { "type": "array", "items": { "$ref": "#/$defs/changeTarget" } }
           },
           "additionalProperties": false
         },
@@ -377,7 +457,7 @@
         },
         {
           "type": "object",
-          "$comment": "Ordered installed-processing progress, shared by the connection's subscriptions. Covered changes must precede this message; subscriptions may apply the proof only after their baseline and covered changes are installed.",
+          "$comment": "Ordered installed-processing progress, shared by the connection's subscriptions. The changes it accounts for precede this message. A subscription applies the proof only after its baseline and those changes are installed; one with an unresolved hole holds the proof until the round that resolves the hole installs.",
           "required": ["type", "mvcc"],
           "properties": {
             "type": { "const": "progress" },

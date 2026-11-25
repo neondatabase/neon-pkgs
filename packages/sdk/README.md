@@ -1207,6 +1207,49 @@ if (grant?.credential_rotation_recommended) { /* rotate database credentials */ 
 if (grant?.org_api_key_rotation_recommended) { /* rotate project-scoped org keys */ }
 ```
 
+### `neon.request`
+
+Any API route by method and path, with the client's auth, deadline, retries, and typed errors. Use it for routes no namespace above wraps, or when the route is only known at runtime. It never polls operations.
+
+| Method | Returns |
+| --- | --- |
+| `request({ method, path, query?, body? })` | The response body: parsed JSON, the text of a non-JSON body, or `null` when empty |
+
+```ts
+const { data, error } = await neon.request({
+  method: "POST",
+  path: "/projects/old-flower-123/branches",
+  body: { branch: { name: "dev" } },
+});
+```
+
+`path` is relative to `baseUrl` with every placeholder filled in; query parameters go in `query`, and `body` is sent as JSON. A path that does not start with `/`, keeps a `{placeholder}`, carries `?` or `#`, or has an empty, `.`, `..`, or encoded-slash segment (after percent-decoding) is refused with a `NeonClientError` before anything is sent. `parseApiPath(path)` returns `{ data, error }` with the decoded segments the same check produces, for callers that apply their own rules to a path.
+
+### `@neon/sdk/openapi`
+
+The released Neon OpenAPI spec as data, for listing, searching, and describing endpoints. `neon api --list` and `neon api --describe` use it.
+
+```ts
+import {
+  describeEndpoint,
+  fetchOpenApiSpec,
+  searchEndpoints,
+} from "@neon/sdk/openapi";
+
+const spec = await fetchOpenApiSpec(); // https://neon.com/api_spec/release/v2.json
+const [hit] = searchEndpoints(spec, "create branch", { limit: 5 });
+// { method: "POST", path: "/projects/{project_id}/branches", summary: "Create branch", operationId: "createProjectBranch", tags: [...] }
+const { fields } = describeEndpoint(spec, "/projects/old-flower-123/branches", "POST");
+// [{ in: "path", name: "project_id", ... }, { in: "body", name: "branch.name", type: "string", ... }, ...]
+```
+
+| Export | Returns |
+| --- | --- |
+| `fetchOpenApiSpec({ url?, fetch?, signal? })` | The spec. Throws on a network error, a 10-second timeout, a non-2xx status, or a body without `paths` |
+| `listEndpoints(spec)` | Every route, sorted by path, then method |
+| `searchEndpoints(spec, query, { limit? })` | Routes ranked by how many words of `query` their method, path, summary, operationId, and tags contain; `limit` defaults to 10 |
+| `describeEndpoint(spec, path, method)` | The route's path, query, header, and body fields; body fields are dotted paths into the JSON body. `path` may be concrete. Throws `EndpointNotFoundError` (with `available` methods) when nothing matches |
+
 ---
 
 ## Raw layer (every endpoint, 1:1)

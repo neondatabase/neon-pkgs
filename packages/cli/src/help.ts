@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import cliui from "cliui";
 import type yargs from "yargs";
-
+import { REDACTED_INVALID_VALUE } from "./errors.js";
 import {
 	globalOptionsTrailer,
 	helpWidth,
@@ -316,8 +316,20 @@ export const failOnUsageError = (
 	if (typeof help !== "string") {
 		throw new Error("yargs usage.help() did not return a string");
 	}
-	throw new UsageError(msg ?? "Invalid usage", help);
+	throw new UsageError(redactRejectedChoices(msg ?? "Invalid usage"), help);
 };
+
+/**
+ * yargs answers a value outside `choices` with `Argument: <key>, Given: <values>, Choices:
+ * <choices>`, one line per flag, in English because `index.ts` pins `.locale("en")`. Each
+ * given value is JSON-quoted, which leaves U+2028/U+2029 unescaped, hence `[^\n]` over `.`;
+ * the match runs to the last `, Choices: ` so a value containing that text is still covered.
+ */
+const redactRejectedChoices = (msg: string): string =>
+	msg.replace(
+		/^(\s*Argument: [^,\n]+, Given: )[^\n]*(, Choices: )/gm,
+		`$1${REDACTED_INVALID_VALUE}$2`,
+	);
 
 type YargsInternals = {
 	getInternalMethods(): {

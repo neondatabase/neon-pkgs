@@ -1,6 +1,6 @@
 {
 	"name": "@neon/sdk",
-	"version": "7.15.0",
+	"version": "7.16.0",
 	"description": "The official TypeScript SDK for the Neon API, generated from Neon's OpenAPI specification. A modern, fetch-based replacement for @neondatabase/api-client.",
 	"keywords": [
 		"neon",
@@ -38,6 +38,11 @@
 			"types": "./dist/raw.d.ts",
 			"import": "./dist/raw.js",
 			"default": "./dist/raw.js"
+		},
+		"./openapi": {
+			"types": "./dist/openapi.d.ts",
+			"import": "./dist/openapi.js",
+			"default": "./dist/openapi.js"
 		}
 	},
 	"files": [

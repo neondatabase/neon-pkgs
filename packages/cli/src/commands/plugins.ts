@@ -4,7 +4,7 @@ import { getAgentDisplayName } from "../init/agents.js";
 import { AGENT_PLUGIN_SKIP_MESSAGE } from "../init/copy.js";
 import { log } from "../log.js";
 import { NEON_MCP_URL } from "../mcp/install.js";
-import { resolvePluginsPlan } from "../plugins/plan.js";
+import { pluginsGitError, resolvePluginsPlan } from "../plugins/plan.js";
 import {
 	NEON_PLUGIN_NAME,
 	neonPluginsRetryCommand,
@@ -15,6 +15,7 @@ import {
 } from "../plugins/run.js";
 import {
 	pluginsCommandProblemText,
+	pluginsGitProblem,
 	pluginsInstallableAgents,
 } from "../plugins/targets.js";
 import type { CommonProps } from "../types.js";
@@ -159,6 +160,12 @@ export const installPlugins = async (
 			row.command.name,
 			pluginsCommandProblemText(row),
 		);
+	}
+	if (plan.targets.length > 0) {
+		const git = pluginsGitProblem({ cwd });
+		if (git !== undefined) {
+			throw pluginsGitError(git);
+		}
 	}
 
 	const rows: PluginsInstallRow[] = [];

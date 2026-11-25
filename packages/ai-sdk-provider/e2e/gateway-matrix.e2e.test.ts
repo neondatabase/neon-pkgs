@@ -267,6 +267,46 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 		}, 180_000);
 	});
 
+	describe("Gemini image model — image output on chat completions", () => {
+		const IMAGE_MODEL = "gemini-3-1-flash-image";
+		const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47];
+
+		it("generateText returns the image in result.files", async () => {
+			const result = await withRateLimitRetry(() =>
+				generateText({
+					model: neon(IMAGE_MODEL),
+					prompt: "Generate an image of a red circle on a white background.",
+				}),
+			);
+			expect(
+				result.files,
+				`finishReason=${result.finishReason} text=${JSON.stringify(result.text)} usage=${JSON.stringify(result.usage.raw)}`,
+			).toHaveLength(1);
+			expect(result.files[0].mediaType).toBe("image/png");
+			expect([...result.files[0].uint8Array.subarray(0, 4)]).toEqual(
+				PNG_MAGIC,
+			);
+		}, 180_000);
+
+		it("streamText emits the image as a file part", async () => {
+			const files = await withRateLimitRetry(async () => {
+				const result = streamText({
+					model: neon(IMAGE_MODEL),
+					prompt: "Generate an image of a red circle on a white background.",
+				});
+				const streamed = [];
+				for await (const part of result.fullStream) {
+					if (part.type === "file") streamed.push(part.file);
+				}
+				expect(await result.files).toHaveLength(streamed.length);
+				return streamed;
+			});
+			expect(files).toHaveLength(1);
+			expect(files[0].mediaType).toBe("image/png");
+			expect([...files[0].uint8Array.subarray(0, 4)]).toEqual(PNG_MAGIC);
+		}, 180_000);
+	});
+
 	// Every one of these returns 400 if the provider forwards the parameter,
 	// so the capability table is the only thing keeping the call alive. A
 	// unit test proves the table says the right thing; only a live call

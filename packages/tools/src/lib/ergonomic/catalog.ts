@@ -6,6 +6,7 @@ import {
 import * as z from "zod";
 import * as output from "../../generated/output.gen.js";
 import { decodeBase64 } from "../binary.js";
+import { callApiTool, searchApiTool } from "../custom/api.js";
 import { getAuthConfigTool } from "../custom/auth-config.js";
 import { getDocTool, searchDocsTool } from "../custom/docs.js";
 import { sendFeedbackTool } from "../custom/feedback.js";
@@ -2437,5 +2438,7 @@ export const toolFactories = {
 	"resources.fetch": fetchResourceTool,
 	"docs.search": searchDocsTool,
 	"docs.get": getDocTool,
+	"api.search": searchApiTool,
+	"api.call": callApiTool,
 	"feedback.send": sendFeedbackTool,
 } satisfies Record<NeonToolId, (options: ToolClientOptions) => unknown>;

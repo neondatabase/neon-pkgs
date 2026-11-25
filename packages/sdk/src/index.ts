@@ -43,6 +43,8 @@ export {
 	NeonWaitTimeoutError,
 } from "./neon/errors.js";
 export type { Page, Paginated } from "./neon/paginate.js";
+export type { ApiRequest, ApiRequestMethod } from "./neon/request.js";
+export { parseApiPath } from "./neon/request.js";
 // Named operation parameter types.
 export type {
 	ApiKeysCreateParams,

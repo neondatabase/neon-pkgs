@@ -5,11 +5,74 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
 import legacySchema from "../../../../../schema/legacy/realtime-protocol-v1.schema.json";
+import legacyV2Schema from "../../../../../schema/legacy/realtime-protocol-v2.schema.json";
 import legacyCapabilitySchema from "../../../../../schema/legacy/realtime-query-capability-v1.schema.json";
 import orderedFixtures from "../ordered-changes.fixtures.json";
-import protocolFixtures from "../realtime-protocol.fixtures.json";
+import rawProtocolFixtures from "../realtime-protocol.fixtures.json";
+import segmentRoundFixtures from "../segment-rounds.fixtures.json";
+
+type Fixture = Readonly<Record<string, unknown>>;
+
+/** A shared fixture as protocols before v3 send it: a start without a scope. */
+function beforeV3({ scope: _scope, ...fixture }: Fixture): Fixture {
+	return fixture;
+}
+
+const protocolFixtures = {
+	valid: (rawProtocolFixtures.valid as readonly Fixture[]).map(beforeV3),
+	invalid: (rawProtocolFixtures.invalid as readonly Fixture[]).map(beforeV3),
+};
 
 describe("Legacy Realtime protocol compatibility", () => {
+	it("keeps the exact v2 schema", () => {
+		const source = readFileSync(
+			new URL(
+				"../../../../../schema/legacy/realtime-protocol-v2.schema.json",
+				import.meta.url,
+			),
+		);
+		expect(createHash("sha256").update(source).digest("hex")).toBe(
+			"0449246115ee8d7552343404a40635118269f6d12dae89f6897fdcec9d4be1b9",
+		);
+	});
+
+	it("preserves the v2 contract, which has no holes, scopes or segment tags", () => {
+		const validate = new Ajv2020({
+			discriminator: true,
+			strict: true,
+			validateFormats: false,
+		}).compile(legacyV2Schema);
+		for (const fixture of [
+			...protocolFixtures.valid,
+			...orderedFixtures.valid,
+		]) {
+			expect(validate(fixture), JSON.stringify(validate.errors)).toBe(
+				true,
+			);
+		}
+		for (const fixture of [
+			...protocolFixtures.invalid,
+			...orderedFixtures.invalid,
+			...rawProtocolFixtures.valid.filter(
+				({ type }) => type === "baseline_sync_start",
+			),
+		]) {
+			expect(validate(fixture), JSON.stringify(fixture)).toBe(false);
+		}
+		// Only v3 end frames and untagged batches share v2's shape.
+		for (const fixture of segmentRoundFixtures.valid) {
+			const shared =
+				fixture.type === "baseline_sync_end" ||
+				(fixture.type === "baseline_sync_batch" &&
+					Array.isArray(fixture.rows) &&
+					fixture.rows.every(
+						(row) =>
+							!("segment_tag" in row || "after_row_key" in row),
+					));
+			expect(validate(fixture), JSON.stringify(fixture)).toBe(shared);
+		}
+	});
+
 	it("keeps the exact v1 schema pinned by the transition proxy", () => {
 		const source = readFileSync(
 			new URL(

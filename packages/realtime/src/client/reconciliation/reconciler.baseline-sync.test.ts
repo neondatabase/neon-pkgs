@@ -25,6 +25,7 @@ describe("baseline-sync reconciliation", () => {
 
 		accept(reconciler, {
 			type: "baseline_sync_start",
+			scope: { kind: "all" },
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
@@ -198,6 +199,7 @@ describe("baseline-sync reconciliation", () => {
 		const reconciler = subscribed(target());
 		accept(reconciler, {
 			type: "baseline_sync_start",
+			scope: { kind: "all" },
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
