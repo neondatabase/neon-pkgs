@@ -1273,9 +1273,9 @@ $ neon logs query --since 24h --output json
 }
 ```
 
-Two combinations are rejected before the request: `--since` with `--start-time`, and `--logql` with any of `--source`, `--service-name`, `--scope-name`, `--minimum-severity`, `--severity-text`, `--body-contains` or `--trace-id`. `--minimum-severity` and `--severity-text` are independent filters and combine with AND. If Neon reports that `--minimum-severity` is unsupported, use `--severity-text` instead; `neon logs field-values severity_text` lists the exact values present on a branch.
+Two combinations are rejected before the request: `--since` with `--start-time`, and `--logql` with any of `--source`, `--service-name`, `--scope-name`, `--minimum-severity`, `--severity-text`, `--body-contains` (or its `--search` alias) or `--trace-id`. `--minimum-severity` and `--severity-text` are independent filters and combine with AND. If Neon reports that `--minimum-severity` is unsupported, use `--severity-text` instead; `neon logs field-values severity_text` lists the exact values present on a branch. `--source` accepts `functions` as an alias for the API value `function`.
 
-`--body-contains` compares a case-sensitive substring against the rendered message. Structured bodies, including object storage records, are rendered as compact JSON, so match the JSON form (for example, `"http_status":200`).
+`--body-contains` (alias `--search`) compares a case-sensitive substring against the rendered message. Structured bodies, including object storage records, are rendered as compact JSON, so match the JSON form (for example, `"http_status":200`).
 
 ### Loki API (`logs loki`)
 

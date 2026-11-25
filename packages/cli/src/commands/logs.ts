@@ -35,6 +35,26 @@ const LOG_SOURCES = Object.keys({
 	true
 >) as readonly ProjectBranchLogSource[];
 
+// CLI-only plurals / spellings agents try first. Values stay in the SDK union
+// (and therefore in LOG_SOURCES) so the wire form never drifts.
+const LOG_SOURCE_ALIASES = {
+	functions: "function",
+} as const satisfies Record<string, ProjectBranchLogSource>;
+
+const LOG_SOURCE_CHOICES = [
+	...LOG_SOURCES,
+	...(Object.keys(LOG_SOURCE_ALIASES) as (keyof typeof LOG_SOURCE_ALIASES)[]),
+] as const;
+
+const parseLogSource = (raw: unknown): ProjectBranchLogSource | undefined => {
+	const value = single("source")(raw);
+	if (value === undefined) return undefined;
+	if (Object.prototype.hasOwnProperty.call(LOG_SOURCE_ALIASES, value)) {
+		return LOG_SOURCE_ALIASES[value as keyof typeof LOG_SOURCE_ALIASES];
+	}
+	return value as ProjectBranchLogSource;
+};
+
 const LOG_SORT_ORDERS = ["asc", "desc"] as const satisfies readonly NonNullable<
 	ProjectBranchLogsQueryRequest["sort_order"]
 >[];
@@ -197,8 +217,8 @@ export const builder = (argv: yargs.Argv) =>
 						source: {
 							describe: "Only records emitted by this service",
 							type: "string",
-							choices: LOG_SOURCES,
-							coerce: single("source"),
+							choices: LOG_SOURCE_CHOICES,
+							coerce: parseLogSource,
 						},
 						"service-name": {
 							describe:
@@ -229,6 +249,7 @@ export const builder = (argv: yargs.Argv) =>
 							describe:
 								"Match the case-sensitive rendered message. Structured bodies are rendered as compact JSON.",
 							type: "string",
+							alias: "search",
 							coerce: single("body-contains"),
 						},
 						"trace-id": {
@@ -292,8 +313,8 @@ export const builder = (argv: yargs.Argv) =>
 							describe:
 								"Only consider records emitted by this service",
 							type: "string",
-							choices: LOG_SOURCES,
-							coerce: single("source"),
+							choices: LOG_SOURCE_CHOICES,
+							coerce: parseLogSource,
 						},
 						limit: {
 							describe:
