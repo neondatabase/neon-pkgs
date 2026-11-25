@@ -1,5 +1,13 @@
 # neon
 
+## 9.9.10
+
+### Patch Changes
+
+- Updated dependencies [13adb7a]
+- Updated dependencies [2596459]
+  - @neon/realtime@0.2.2
+
 ## 9.9.9
 
 ### Patch Changes
