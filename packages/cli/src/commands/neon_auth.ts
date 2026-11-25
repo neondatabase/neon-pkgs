@@ -81,6 +81,14 @@ const OAUTH_PROVIDER_FIELDS = [
 
 const ALLOW_LOCALHOST_FIELDS = ["allow_localhost"] as const;
 
+const LOGS_EXPORT_FIELDS = ["enabled"] as const;
+
+const LOGS_EXPORT_UNAVAILABLE =
+	"Neon Auth logs export isn't available for this project. During the beta it requires Managed Better Auth in a supported region.";
+
+const LOGS_EXPORT_EPILOGUE =
+	"Read the exported events with neon logs query --source neon_auth. A query covers at most the last 7 days.";
+
 const SUPPORTED_OAUTH_PROVIDERS = [
 	NeonAuthOauthProviderId.Google,
 	NeonAuthOauthProviderId.Github,
@@ -945,7 +953,41 @@ export const builder = (argv: yargs.Argv) => {
 								await webhookUpdate(args as any);
 							},
 						);
-				});
+				})
+				.command(
+					"logs-export",
+					"Manage export of Neon Auth events to Neon logs (beta)",
+					(yargs) =>
+						yargs
+							.usage(
+								"$0 neon-auth config logs-export <sub-command> [options]",
+							)
+							.command(
+								"get",
+								"Get the logs export setting",
+								(yargs) => yargs,
+								async (args) => {
+									await logsExportGet(args as any);
+								},
+							)
+							.command(
+								"enable",
+								"Export Neon Auth events to Neon logs",
+								(yargs) => yargs,
+								async (args) => {
+									await logsExportEnable(args as any);
+								},
+							)
+							.command(
+								"disable",
+								"Stop exporting Neon Auth events to Neon logs",
+								(yargs) => yargs,
+								async (args) => {
+									await logsExportDisable(args as any);
+								},
+							)
+							.epilogue(LOGS_EXPORT_EPILOGUE),
+				);
 		})
 		.command("plugins", "View Neon Auth plugin configurations", (yargs) => {
 			return yargs
@@ -1572,6 +1614,70 @@ const allowLocalhostDisable = async (props: AuthBranchProps) => {
 		}),
 	);
 	printMessage("Localhost connections restricted");
+};
+
+// --- Logs export ---
+
+const logsExportGet = async (props: AuthBranchProps) => {
+	const branchId = await resolveBranch(props);
+	const data = await authSdk(props, (auth) =>
+		auth.plugins.get({ projectId: props.projectId, branchId }),
+	);
+	// The API omits logs_export when the project can't export Neon Auth logs.
+	if (!data.logs_export) {
+		printMessage(LOGS_EXPORT_UNAVAILABLE);
+		return;
+	}
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end(data.logs_export, { fields: LOGS_EXPORT_FIELDS });
+		return;
+	}
+	printKvBlock("Neon Auth logs export", [
+		["Enabled:", String(data.logs_export.enabled)],
+	]);
+};
+
+const logsExportEnable = async (props: AuthBranchProps) => {
+	const branchId = await resolveBranch(props);
+	try {
+		await authSdk(props, (auth) =>
+			auth.logsExport.update({
+				projectId: props.projectId,
+				branchId,
+				enabled: true,
+			}),
+		);
+	} catch (err) {
+		if (isNeonApiError(err)) {
+			if (err.status === 404) throw new Error(LOGS_EXPORT_UNAVAILABLE);
+			if (err.status === 409 || err.status === 423) {
+				throw new Error(
+					"Neon Auth is busy with another change on this branch. Try again in a moment.",
+				);
+			}
+			if (err.status === 429 || err.status === 503) {
+				throw new Error(
+					"Neon Auth logs export is temporarily unavailable. Try again in a moment.",
+				);
+			}
+		}
+		throw err;
+	}
+	printMessage(
+		"Neon Auth logs export enabled. Read the events with neon logs query --source neon_auth",
+	);
+};
+
+const logsExportDisable = async (props: AuthBranchProps) => {
+	const branchId = await resolveBranch(props);
+	await authSdk(props, (auth) =>
+		auth.logsExport.update({
+			projectId: props.projectId,
+			branchId,
+			enabled: false,
+		}),
+	);
+	printMessage("Neon Auth logs export disabled");
 };
 
 // --- Email and password ---

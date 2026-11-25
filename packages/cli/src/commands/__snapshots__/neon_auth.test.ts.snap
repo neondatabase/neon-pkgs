@@ -1,5 +1,41 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`neon-auth > config logs-export > disable 1`] = `
+"
+Neon Auth logs export disabled
+
+"
+`;
+
+exports[`neon-auth > config logs-export > enable 1`] = `
+"
+Neon Auth logs export enabled. Read the events with neon logs query --source neon_auth
+
+"
+`;
+
+exports[`neon-auth > config logs-export > enable reports 404 as not available 1`] = `""`;
+
+exports[`neon-auth > config logs-export > get when disabled 1`] = `
+"
+Neon Auth logs export
+  Enabled:  false
+
+"
+`;
+
+exports[`neon-auth > config logs-export > get when enabled 1`] = `
+"enabled: true
+"
+`;
+
+exports[`neon-auth > config logs-export > get when the project has no logs export 1`] = `
+"
+Neon Auth logs export isn't available for this project. During the beta it requires Managed Better Auth in a supported region.
+
+"
+`;
+
 exports[`neon-auth > disable 1`] = `
 "
 Neon Auth has been disabled

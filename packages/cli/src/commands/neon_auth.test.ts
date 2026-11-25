@@ -2594,6 +2594,74 @@ describe("neon-auth", () => {
 		]);
 	});
 
+	// --- Config: Logs export ---
+
+	describe("config logs-export", () => {
+		const logsExportArgs = (sub: string) => [
+			"neon-auth",
+			"config",
+			"logs-export",
+			sub,
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		];
+		const logsExportBodies = (requests: RecordedRequest[]) =>
+			requests
+				.filter(
+					(r) =>
+						r.method === "PATCH" &&
+						r.path.endsWith("/auth/logs_export"),
+				)
+				.map((r) => r.body);
+
+		test("get when enabled", async ({ testCliCommand }) => {
+			await testCliCommand(logsExportArgs("get"), {
+				mockDir: "neon-auth-logs-export-enabled",
+			});
+		});
+
+		test("get when disabled", async ({ testCliCommand }) => {
+			await testCliCommand(logsExportArgs("get"), {
+				mockDir: "neon-auth-logs-export-disabled",
+				output: "table",
+			});
+		});
+
+		test("get when the project has no logs export", async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(logsExportArgs("get"));
+		});
+
+		test("enable", async ({ testCliCommand }) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(logsExportArgs("enable"), {
+				onRequest: (r) => requests.push(r),
+			});
+			expect(logsExportBodies(requests)).toEqual([{ enabled: true }]);
+		});
+
+		test("disable", async ({ testCliCommand }) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(logsExportArgs("disable"), {
+				onRequest: (r) => requests.push(r),
+			});
+			expect(logsExportBodies(requests)).toEqual([{ enabled: false }]);
+		});
+
+		test("enable reports 404 as not available", async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(logsExportArgs("enable"), {
+				mockDir: "neon-auth-logs-export-unavailable",
+				code: 1,
+				stderr: "ERROR: Neon Auth logs export isn't available for this project. During the beta it requires Managed Better Auth in a supported region.",
+			});
+		});
+	});
+
 	// --- Plugins ---
 
 	test("plugins list", async ({ testCliCommand }) => {
