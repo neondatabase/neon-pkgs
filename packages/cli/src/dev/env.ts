@@ -1,4 +1,5 @@
 import {
+	authoredBuckets,
 	type Config,
 	createNeonApiFromOptions,
 	ErrorCode,
@@ -107,6 +108,14 @@ export type DevEnvContext = {
 	 * Without a neon.ts, resolve provisioned Postgres / Auth / Data API.
 	 */
 	claimable?: boolean;
+	/**
+	 * When neon.ts declares resources the branch does not have yet, resolve the declared
+	 * services the branch does have and report the rest in
+	 * {@link ResolvedNeonEnvVars.undeployed}, instead of throwing {@link DevEnvMismatchError}.
+	 * For `env pull` and the pull bundled into `link` / `checkout`, where writing nothing would
+	 * leave the previously pinned branch's env in place. `dev` leaves it unset.
+	 */
+	skipUndeployed?: boolean;
 };
 
 /** The API-targeting options every runtime call forwards from the context. */
@@ -146,6 +155,8 @@ export type ResolvedNeonEnvVars = ReusedBranchEnv & {
 	skipped?: readonly NeonService[];
 	/** Services the branch has that {@link DevEnvContext.secretServices} left out. */
 	withheld?: readonly NeonService[];
+	/** Plan identifiers neon.ts declares that the branch lacks; see {@link DevEnvContext.skipUndeployed}. */
+	undeployed?: readonly string[];
 };
 
 const CLAIMABLE_UNSUPPORTED_SERVICES: ReadonlySet<NeonService> = new Set([
@@ -375,9 +386,10 @@ const resolveClaimableNeonEnvVars = async (
  *   1. a `neon.ts` policy is found -> the policy is the source of truth. We first
  *      check it against the branch's live state (`plan`); if it declares a resource
  *      the branch is missing, we stop with a {@link DevEnvMismatchError} pointing at
- *      `neonctl deploy`. Function declarations are excluded from that check: local env
- *      does not depend on whether a function is deployed. Otherwise `fetchEnv` evaluates
- *      the policy.
+ *      `neonctl deploy`, or with {@link DevEnvContext.skipUndeployed} resolve the rest.
+ *      Function and trigger declarations are excluded from that check: local env does
+ *      not depend on whether either is deployed. Otherwise `fetchEnv` evaluates the
+ *      policy.
  *   2. no `neon.ts`, but a project + branch are known -> `pullConfig` reads the
  *      branch's live state (Auth / Data API / Realtime enablement plus any object-storage
  *      buckets) into a config, then `fetchEnv` resolves what is actually enabled —
@@ -419,8 +431,26 @@ export const resolveNeonEnvVars = async (
 					"--project-id / --branch.",
 			);
 		}
-		await assertPolicyMatchesBranch(withoutDeclaredFunctions(config), ctx);
-		return await fetchAndProject(config, ctx);
+		const undeployed = await undeployedResources(
+			withoutFunctionsAndTriggers(config),
+			ctx,
+		);
+		if (undeployed.length === 0) return await fetchAndProject(config, ctx);
+		if (!ctx.skipUndeployed) {
+			throwPolicyMissingOnBranch(undeployed.join(", "), ctx.branchId);
+		}
+		// Functions are always selected because the full policy pull always writes the
+		// function host suffix, and the caller prunes what this resolve does not return.
+		const resolved = await resolveSelectedServices(
+			ctx,
+			[
+				"postgres",
+				"functions",
+				...deployedDeclaredServices(config, undeployed),
+			],
+			[],
+		);
+		return { ...resolved, undeployed };
 	}
 
 	if (ctx.projectId && ctx.branchId) {
@@ -964,10 +994,14 @@ export const resolveDevEnv = async (
 	}
 };
 
-/** Functions are omitted because `plan` treats undeployed functions as resources to create. */
-const withoutDeclaredFunctions = (config: Config): Config => {
+/**
+ * Functions and triggers are omitted because `plan` treats undeployed ones as resources to
+ * create, and local env does not depend on whether either is deployed.
+ */
+const withoutFunctionsAndTriggers = (config: Config): Config => {
 	const next: Config = { ...config };
 	if (next.functions !== undefined) delete next.functions;
+	if (next.triggers !== undefined) delete next.triggers;
 	if (next.preview?.functions) {
 		const previewWithoutFunctions = { ...next.preview };
 		delete previewWithoutFunctions.functions;
@@ -977,35 +1011,60 @@ const withoutDeclaredFunctions = (config: Config): Config => {
 };
 
 /**
- * Tier-1 guard. Dry-run the policy against the branch's live state and stop if
- * it declares a branch-level resource the branch is missing. Built on `plan` so
- * it covers every present and future provisionable resource for free: any
- * `create` action is a resource `neonctl deploy` would provision.
+ * Tier-1 guard. Dry-run the policy against the branch's live state and return
+ * the plan identifiers of the branch-level resources it declares that the branch
+ * is missing. Built on `plan` so it covers every present and future provisionable
+ * resource for free: any `create` action is a resource `neonctl deploy` would
+ * provision.
  */
-const assertPolicyMatchesBranch = async (
+const undeployedResources = async (
 	config: Config,
 	ctx: DevEnvContext,
-): Promise<void> => {
+): Promise<string[]> => {
 	const result = await plan(config, {
 		projectId: ctx.projectId as string,
 		branchId: ctx.branchId as string,
 		...apiOptions(ctx),
 	});
+	return result.applied
+		.filter(isMissingResource)
+		.map((change) => change.identifier);
+};
 
-	const missing = result.applied.filter(isMissingResource);
-	if (missing.length === 0) return;
-
-	throwPolicyMissingOnBranch(
-		missing.map((change) => change.identifier).join(", "),
-		ctx.branchId as string,
+/**
+ * The services neon.ts declares minus those {@link undeployedResources} reported. Object
+ * storage stays while any declared bucket exists, because the branch's storage credential
+ * works for every bucket on it.
+ */
+const deployedDeclaredServices = (
+	config: Config,
+	undeployed: readonly string[],
+): NeonService[] => {
+	const declaredBuckets = Object.keys(authoredBuckets(config) ?? {});
+	const undeployedBuckets = undeployed.filter((id) =>
+		id.startsWith("bucket:"),
 	);
+	return declaredNeonServices(config).filter((service) => {
+		switch (service) {
+			case "auth":
+				return !undeployed.includes("auth");
+			case "data-api":
+				return !undeployed.includes("dataApi");
+			case "realtime":
+				return !undeployed.includes("realtime");
+			case "object-storage":
+				return undeployedBuckets.length < declaredBuckets.length;
+			default:
+				return true;
+		}
+	});
 };
 
 /**
  * A planned change that provisions a branch-level resource the branch lacks: a
- * `create` on a service (Neon Auth, Data API, a bucket, the AI Gateway). Branch
- * setting drift (`update`) and `noop`s are ignored — they don't block local dev
- * — and functions are excluded (see {@link assertPolicyMatchesBranch}).
+ * `create` on a service (Neon Auth, Data API, Realtime, a bucket). Branch setting
+ * drift (`update`) and `noop`s are ignored — they don't block local dev — and
+ * functions are excluded (see {@link withoutFunctionsAndTriggers}).
  */
 const isMissingResource = (change: AppliedChange): boolean =>
 	change.kind === "service" &&

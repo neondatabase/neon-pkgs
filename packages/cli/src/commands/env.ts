@@ -155,6 +155,9 @@ export const builder = (argv: yargs.Argv) =>
 							"API. Naming unsupported services with --service / --env warns",
 							"and writes nothing for them.",
 							"",
+							"When neon.ts declares a service the branch does not have yet, the",
+							"pull writes the rest and names what `deploy` still has to provision.",
+							"",
 							"The pull bundled into link / checkout / config apply follows 2 and 3,",
 							"with the AI Gateway only when the file already has its variables. It",
 							"leaves Object Storage out when the file holds AWS_* keys that are not",
@@ -281,6 +284,10 @@ export type PullOutcome =
 			skipped?: readonly NeonService[];
 			/** Services the branch has that a bundled pull left out to keep the file's own keys. */
 			withheld?: readonly NeonService[];
+			/** neon.ts resources the branch lacks, whose env vars were not pulled. */
+			undeployed?: readonly string[];
+			/** The file's `AWS_*` values name a Neon bucket credential this pull did not refresh. */
+			staleStorage?: boolean;
 	  }
 	| { status: "empty" };
 
@@ -334,28 +341,32 @@ export const pull = async (
 	// Reuse `neon dev`'s tiered resolver (neon.ts policy -> plan gate -> fetchEnv, else
 	// pullConfig -> fetchEnv). Unlike dev, an unresolved context or failure is surfaced —
 	// `env pull` is an explicit action, so it should error rather than write nothing.
-	const { vars, credential, skipped, withheld } = await resolveNeonEnvVars({
-		...location,
-		projectId: props.projectId,
-		branchId,
-		env: { ...process.env, ...existingEnv },
-		...(props.services !== undefined ? { services: props.services } : {}),
-		...(props.optionalServices !== undefined
-			? { optionalServices: props.optionalServices }
-			: {}),
-		...(opts.bundled
-			? { secretServices: bundledSecretServices(existingEnv) }
-			: {}),
-		...(props.envKeys !== undefined ? { envKeys: props.envKeys } : {}),
-		...(opts.implyAiGateway ? { implyAiGateway: true } : {}),
-		omitUnsetFunctionEnv: true,
-		...(claimable ? { claimable: true } : {}),
-		...(props.config ? { config: props.config } : {}),
-		...(props.roleName ? { roleName: props.roleName } : {}),
-		...(props.apiKey ? { apiKey: props.apiKey } : {}),
-		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
-	});
+	const { vars, credential, skipped, withheld, undeployed } =
+		await resolveNeonEnvVars({
+			...location,
+			projectId: props.projectId,
+			branchId,
+			env: { ...process.env, ...existingEnv },
+			...(props.services !== undefined
+				? { services: props.services }
+				: {}),
+			...(props.optionalServices !== undefined
+				? { optionalServices: props.optionalServices }
+				: {}),
+			...(opts.bundled
+				? { secretServices: bundledSecretServices(existingEnv) }
+				: {}),
+			...(props.envKeys !== undefined ? { envKeys: props.envKeys } : {}),
+			...(opts.implyAiGateway ? { implyAiGateway: true } : {}),
+			skipUndeployed: true,
+			omitUnsetFunctionEnv: true,
+			...(claimable ? { claimable: true } : {}),
+			...(props.config ? { config: props.config } : {}),
+			...(props.roleName ? { roleName: props.roleName } : {}),
+			...(props.apiKey ? { apiKey: props.apiKey } : {}),
+			...(props.apiHost ? { apiHost: props.apiHost } : {}),
+			...(props.runtimeApi ? { api: props.runtimeApi } : {}),
+		});
 
 	const neonVars = pickSelectedVars(pickNeonVars(vars), selectedKeys);
 	if (Object.keys(neonVars).length === 0) {
@@ -384,24 +395,25 @@ export const pull = async (
 			props.services !== undefined ? selectionServices : undefined,
 		),
 	});
+	const storageKeys = NEON_ENV_VAR_KEYS.storage;
+	const staleStorage =
+		(undeployed ?? []).some((id) => id.startsWith("bucket:")) &&
+		neonVars[storageKeys.accessKeyId] === undefined &&
+		isNeonStorageEndpoint(existingEnv[storageKeys.endpoint] ?? "");
+	const outcome: Extract<PullOutcome, { status: "written" }> = {
+		status: "written",
+		written,
+		removed,
+		file: targetPath,
+		...(credential && credential.keys.length > 0 ? { credential } : {}),
+		...(skipped && skipped.length > 0 ? { skipped } : {}),
+		...(withheld && withheld.length > 0 ? { withheld } : {}),
+		...(undeployed && undeployed.length > 0 ? { undeployed } : {}),
+		...(staleStorage ? { staleStorage } : {}),
+	};
 	// stderr, like the log lines it replaces: commands that bundle a pull (`config apply -o json`,
 	// `claim create -o yaml`) print machine-readable output on stdout.
-	process.stderr.write(
-		formatPulledEnv(
-			{
-				status: "written",
-				written,
-				removed,
-				file: targetPath,
-				...(credential && credential.keys.length > 0
-					? { credential }
-					: {}),
-				...(withheld && withheld.length > 0 ? { withheld } : {}),
-			},
-			cwd,
-			namedBranch,
-		),
-	);
+	process.stderr.write(formatPulledEnv(outcome, cwd, namedBranch));
 
 	// A dotenv file *we* create holds live branch credentials (DATABASE_URL, Auth keys, service
 	// tokens), so ignore it the same way the `.neon` context file is — otherwise a fresh repo is
@@ -425,15 +437,7 @@ export const pull = async (
 		});
 	}
 
-	return {
-		status: "written",
-		written,
-		removed,
-		file: targetPath,
-		...(credential && credential.keys.length > 0 ? { credential } : {}),
-		...(skipped && skipped.length > 0 ? { skipped } : {}),
-		...(withheld && withheld.length > 0 ? { withheld } : {}),
-	};
+	return outcome;
 };
 
 /**
