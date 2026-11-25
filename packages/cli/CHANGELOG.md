@@ -1,5 +1,33 @@
 # neon
 
+## 9.9.8
+
+### Patch Changes
+
+- Updated dependencies [6222fd0]
+  - @neon/sdk@7.16.0
+  - @neon/config@1.14.7
+  - @neon/config-runtime@1.12.10
+
+## 9.9.7
+
+### Patch Changes
+
+- 3b2c879: Errors for a rejected flag value (such as `--services`, `--category`, `--agent`, `--skill`, `api -H`, or `--output`) now show `<redacted invalid value>` instead of what you typed, so a secret pasted into the wrong flag is not sent with error telemetry. They still list the valid values, and most suggest the closest one.
+
+## 9.9.6
+
+### Patch Changes
+
+- 6e8d190: `neon checkout <name> --create` now prints a `WARNING:` line when the branch already exists and is checked out unchanged instead of created; the exit code stays 0. `--help` for `--create` names the parent a new branch starts from: the `parent` in `neon.ts`, else the project's default branch.
+- 2b82b4d: `neon plugins` and the plugin step of `neon init` and `neon bootstrap` now stop with one error that names git when `git` is missing or does not run, instead of failing every agent with an error such as "Repository not found".
+
+## 9.9.5
+
+### Patch Changes
+
+- 42480cf: `neon link` and `neon checkout` no longer overwrite `AWS_*` keys in your env file that belong to another storage provider, and keep an AI Gateway token you pulled with `neon env pull` instead of removing it. `neon init --services` now pulls the declared services the branch already has, such as Neon Auth, instead of only Postgres.
+
 ## 9.9.4
 
 ### Patch Changes

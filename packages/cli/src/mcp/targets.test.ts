@@ -21,7 +21,7 @@ describe("resolveInstallTargets", () => {
 				agents: ["not-an-agent"],
 				scope: "global",
 			}),
-		).toThrow(/Unknown agent: "not-an-agent"/);
+		).toThrow(/Unknown agent: <redacted invalid value>/);
 	});
 
 	test("throws when every selected agent is unsupported for the scope", () => {

@@ -2621,6 +2621,28 @@ describe("neon-auth", () => {
 		]);
 	});
 
+	test("plugins get redacts an unknown plugin name", async ({
+		testCliCommand,
+	}) => {
+		const { stderr } = await testCliCommand(
+			[
+				"neon-auth",
+				"plugins",
+				"get",
+				"napi_0123456789abcdef",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ code: 1, snapshot: false },
+		);
+		expect(stderr).not.toContain("napi_0123456789abcdef");
+		expect(stderr).toMatch(
+			/Unknown plugin <redacted invalid value>\. Available plugins: \S/,
+		);
+	});
+
 	// --- User ---
 
 	test("user create", async ({ testCliCommand }) => {

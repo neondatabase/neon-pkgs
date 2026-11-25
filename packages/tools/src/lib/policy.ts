@@ -104,14 +104,13 @@ export const applyToolPolicy = <Tool extends NeonTool>(
 		execute: async (input, context) => {
 			guard(context);
 			const readOnly = context?.readOnly ?? options.readOnly;
-			const result = await execute(
-				input,
-				readOnly === undefined ? context : { ...context, readOnly },
-			);
-			const hidden = hiddenSecretFields(
-				tool.metadata,
-				secretsMode(options, context),
-			);
+			const secrets = secretsMode(options, context);
+			const result = await execute(input, {
+				...context,
+				...(readOnly === undefined ? {} : { readOnly }),
+				secrets,
+			});
+			const hidden = hiddenSecretFields(tool.metadata, secrets);
 			if (hidden.length === 0) {
 				return result;
 			}

@@ -38,6 +38,8 @@ export interface ToolClientOptions {
 	siteSearchUrl?: string;
 	/** Where `docs.get` reads `<docsBaseUrl>/<slug>.md`. */
 	docsBaseUrl?: string;
+	/** The OpenAPI spec `api.search` reads. Defaults to the released Neon spec on neon.com. */
+	apiSpecUrl?: string;
 	/** Where `feedback.send` posts. */
 	feedbackUrl?: string;
 	/** The `source` `feedback.send` reports. */

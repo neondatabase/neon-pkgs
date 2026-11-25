@@ -1,5 +1,11 @@
 # @neondatabase/env
 
+## 2.1.10
+
+### Patch Changes
+
+- @neon/config@1.14.7
+
 ## 2.1.9
 
 ### Patch Changes

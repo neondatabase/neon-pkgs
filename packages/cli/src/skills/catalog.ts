@@ -1,3 +1,4 @@
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import { helpCsv } from "../utils/help_text.js";
 
 export const AGENT_SKILLS_SOURCE = "neondatabase/agent-skills";
@@ -76,7 +77,7 @@ export function resolveSkillId(raw: string): SkillEntry {
 	const entry = CATALOG_BY_SKILL.get(raw);
 	if (entry === undefined) {
 		throw new Error(
-			`Unknown skill: "${raw}". Supported skills: ${listSkillIds().join(", ")}`,
+			`Unknown skill: ${REDACTED_INVALID_VALUE}.${didYouMean([raw], listSkillIds())} Supported skills: ${listSkillIds().join(", ")}`,
 		);
 	}
 	return entry;

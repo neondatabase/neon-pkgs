@@ -476,7 +476,7 @@ describe("config init", () => {
 				install: false,
 				services: ["auth,vectors"],
 			}),
-		).rejects.toThrow(/Unknown service vectors/);
+		).rejects.toThrow(/Unknown service <redacted invalid value>/);
 
 		expect(existsSync(join(workspace, "neon.ts"))).toBe(false);
 	});

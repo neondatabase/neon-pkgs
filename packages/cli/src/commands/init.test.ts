@@ -2146,7 +2146,7 @@ describe("init handler", () => {
 		);
 	});
 
-	test("services awaiting a deploy pull only Postgres after writing neon.ts", async () => {
+	test("services that may await a deploy are pulled when the branch has them", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-extra-svc-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const contextFile = join(cwd, ".neon");
@@ -2173,7 +2173,10 @@ describe("init handler", () => {
 
 		expect(envPull).toHaveBeenCalledTimes(1);
 		expect(envPull).toHaveBeenCalledWith(
-			expect.objectContaining({ services: ["postgres"] }),
+			expect.objectContaining({
+				services: ["postgres", "auth"],
+				optionalServices: ["auth"],
+			}),
 		);
 		const out = stdoutText(stdout);
 		expect(out).toContain("neon checkout dev --create");
@@ -2210,8 +2213,9 @@ describe("init handler", () => {
 
 		expect(envPull).toHaveBeenCalledWith(
 			expect.objectContaining({
-				services: ["postgres", "functions"],
+				services: ["postgres", "auth", "functions"],
 				envKeys: [],
+				optionalServices: ["auth"],
 			}),
 		);
 		const out = stdoutText(stdout);
@@ -2975,7 +2979,7 @@ describe("init CLI", () => {
 			["init", "-y", "--agent", "not-an-agent"],
 			{ snapshot: false, code: 1, outputTable: true },
 		);
-		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
+		expect(stderr).toMatch(/Unknown agent: <redacted invalid value>/);
 		expect(stderr).not.toMatch(/Unknown argument: agent/);
 	});
 

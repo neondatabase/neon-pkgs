@@ -11,6 +11,7 @@ export default defineConfig({
 	entry: [
 		"src/index.ts",
 		"src/raw.ts",
+		"src/openapi.ts",
 		"src/neon/**/*.ts",
 		"src/client/**/*.ts",
 		"!src/**/*.test.*",

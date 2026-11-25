@@ -277,7 +277,7 @@ describe("neonMcpUrl", () => {
 describe("parseMcpCategories", () => {
 	test("rejects unknown names", () => {
 		expect(() => parseMcpCategories(["querying", "nope"])).toThrow(
-			/Unknown MCP category: "nope"/,
+			/Unknown MCP category: <redacted invalid value>/,
 		);
 	});
 });
