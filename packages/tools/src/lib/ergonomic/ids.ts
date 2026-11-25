@@ -182,6 +182,8 @@ export const toolIds = [
 	"resources.fetch",
 	"docs.search",
 	"docs.get",
+	"api.search",
+	"api.call",
 	"feedback.send",
 ] as const;
 
@@ -204,6 +206,8 @@ export const customToolIds = [
 	"resources.fetch",
 	"docs.search",
 	"docs.get",
+	"api.search",
+	"api.call",
 	"feedback.send",
 ] as const satisfies readonly (typeof toolIds)[number][];
 

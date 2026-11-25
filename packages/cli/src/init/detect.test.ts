@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { NeonApiError } from "../api.js";
 import { AuthRefreshError } from "../auth.js";
 import { ConfigInstallFailed } from "../commands/config.js";
+import { pluginsGitError } from "../plugins/plan.js";
 import { collectDetectedAgents } from "./detect.js";
 import {
 	initEndProperties,
@@ -321,6 +322,16 @@ describe("initErrorCode", () => {
 			"a plugins CLI failure",
 			new Error("plugins CLI failed."),
 			"PLUGINS_CLI_FAILED",
+		],
+		[
+			"a plugins step without git",
+			pluginsGitError({ kind: "missing" }),
+			"GIT_NOT_FOUND",
+		],
+		[
+			"a plugins step with a git that does not run",
+			pluginsGitError({ kind: "broken", detail: "exit code 1" }),
+			"GIT_NOT_FOUND",
 		],
 		[
 			"a dependency install failure",

@@ -82,15 +82,28 @@ describe("parseServices", () => {
 		]);
 	});
 
+	it("accepts the space-joined value PowerShell passes for an unquoted comma list", () => {
+		expect(parseServices(["postgres auth"], envPull)).toEqual([
+			"postgres",
+			"auth",
+		]);
+	});
+
+	it("rejects only the unknown part of a space-joined value", () => {
+		expect(() => parseServices(["postgres nope"], envPull)).toThrow(
+			"Unknown service <redacted invalid value>. Supported values:",
+		);
+	});
+
 	it("rejects an unknown service rather than acting on everything but it", () => {
 		expect(() => parseServices(["postgres", "nope"], envPull)).toThrow(
-			/Unknown service nope\..*Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway, realtime\./s,
+			/Unknown service <redacted invalid value>\..*Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway, realtime\./s,
 		);
 	});
 
 	it("rejects a numeric-looking value, which yargs can hand over as a string", () => {
 		expect(() => parseServices(["5"], envPull)).toThrow(
-			/Unknown service 5\./,
+			/Unknown service <redacted invalid value>\./,
 		);
 	});
 
@@ -108,7 +121,7 @@ describe("parseServices", () => {
 
 	it("reports a typo and an unselectable service separately in one message", () => {
 		expect(() => parseServices(["nope", "postgres"], addOnsOnly)).toThrow(
-			/Unknown service nope\. postgres is not something --services can select\./,
+			/Unknown service <redacted invalid value>\. postgres is not something --services can select\./,
 		);
 	});
 
@@ -167,7 +180,7 @@ describe("parseServices", () => {
 					...addOnsOnly,
 					onDeprecated,
 				}),
-			).toThrow(/Unknown service vectors/);
+			).toThrow(/Unknown service <redacted invalid value>/);
 			expect(onDeprecated).not.toHaveBeenCalled();
 		});
 	});
@@ -186,7 +199,7 @@ describe("parseConfigInitServices", () => {
 
 	it("rejects none, which is not a service", () => {
 		expect(() => parseConfigInitServices(["none"])).toThrow(
-			"Unknown service none. Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway, realtime.",
+			"Unknown service <redacted invalid value>. Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway, realtime.",
 		);
 	});
 

@@ -8,6 +8,7 @@ import {
 	serviceForEnvKey,
 } from "../env_services.js";
 import { NEON_SERVICE_LABELS, NEON_SERVICES } from "../neon_services.js";
+import { getCliName } from "../utils/cli_name.js";
 import type { ResolvedBranchRef } from "../utils/enrichers.js";
 import type { PullOutcome } from "./env.js";
 
@@ -104,6 +105,15 @@ export const formatPulledEnv = (
 			row("", 'Use functionBaseUrl("<slug>") from @neon/env instead.'),
 		);
 	}
+	if (outcome.withheld?.includes("object-storage")) {
+		lines.push(
+			row(
+				"Not pulled",
+				`Object Storage, to keep the AWS_* keys already in ${displayPath(outcome.file, cwd)}. ` +
+					`Use \`${getCliName()} env pull -s object-storage\` to replace them.`,
+			),
+		);
+	}
 	if (fresh.size > 0) {
 		lines.push("  * new credential value");
 	}
@@ -114,7 +124,7 @@ export const formatPulledEnv = (
 		);
 	} else if (credential?.issued && credential.superseded.length > 0) {
 		lines.push(
-			`Left the credential it replaced live (${credential.superseded.join(", ")}): an explicitly scoped pull can't tell which other variables still use it. Revoke it in the Neon Console if nothing does.`,
+			`Left the credential it replaced live (${credential.superseded.join(", ")}): this pull can't tell which other variables still use it. Revoke it in the Neon Console if nothing does.`,
 		);
 	}
 	return `${lines.join("\n")}\n`;
