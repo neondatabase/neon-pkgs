@@ -300,6 +300,8 @@ Timestamp                 Source          Service Name  Severity Text  Message
 "
 `;
 
+exports[`logs > query rejects --logql together with --search 1`] = `""`;
+
 exports[`logs > query rejects --logql together with a structured filter 1`] = `""`;
 
 exports[`logs > query rejects --since together with --start-time 1`] = `""`;

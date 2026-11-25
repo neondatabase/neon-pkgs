@@ -1,0 +1,6 @@
+{
+  "allow_localhost": true,
+  "logs_export": {
+    "enabled": false
+  }
+}

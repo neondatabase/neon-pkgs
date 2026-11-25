@@ -1,5 +1,17 @@
 # @neon/realtime
 
+## 0.2.2
+
+### Patch Changes
+
+- 13adb7a: Speak Realtime protocol v3, in which the server can refresh part of a live result instead of replacing all of it. There is no API change. While a refresh is pending, a query keeps showing its last complete result with status `live`; changes committed meanwhile, and their `awaitTxId()` confirmations, land together with it. Raw subscriptions receive a refresh as an ordinary atomic `changes` update: an unordered refresh removes every row it replaces before upserting, and an ordered one places its rows with moves.
+
+  The client now offers only `neon.realtime.v3`, so it needs an endpoint that serves protocol v3. A custom WebSocket server used in tests must update: accept `neon.realtime.v3`, and send `scope: { "kind": "all" }` on every full `baseline_sync_start`.
+
+  The unversioned `@neon/realtime/schema/realtime-protocol.schema.json` export now describes protocol v3, and a new `realtime-protocol-v3.schema.json` export aliases it. The versioned `realtime-protocol-v2.schema.json` export keeps its exact bytes, now from a frozen copy under `schema/legacy/`.
+
+- 2596459: Declare a 128 KiB SQL limit for live-query capabilities, up from 32 KiB, to match the Realtime server once it raises its own limit. The SDK never checked SQL length at runtime: a capability is still refused locally only when its token exceeds 256 KiB, which leaves room for 128 KiB of SQL plus about 45 KiB of parameters. The frozen v1 capability schema is unchanged.
+
 ## 0.2.1
 
 ### Patch Changes

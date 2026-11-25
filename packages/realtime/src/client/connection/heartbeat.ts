@@ -13,7 +13,8 @@ export interface HeartbeatOptions {
 }
 
 export interface HeartbeatCallbacks {
-	sendPing(token: string): boolean;
+	/** Sends a probe, if the transport is still open. */
+	sendPing(token: string): void;
 	timedOut(): void;
 }
 
@@ -76,10 +77,14 @@ export class ConnectionHeartbeat {
 		this.idleTimer = this.setTimer(() => {
 			if (!this.active || generation !== this.generation) return;
 			this.idleTimer = undefined;
-			const sent = this.callbacks.sendPing(`c${this.nextToken++}`);
+			// A ping that can't be sent goes unanswered like any other, so the
+			// timeout is armed either way. The transport has stopped being open
+			// without reporting close, and may never report it: Node's WebSocket
+			// stays CLOSING until the peer ends the TCP connection.
+			this.callbacks.sendPing(`c${this.nextToken++}`);
 			// A test socket, or an in-process transport, may deliver a response
 			// synchronously from sendPing(). Do not arm its now-obsolete timeout.
-			if (!sent || !this.active || generation !== this.generation) return;
+			if (!this.active || generation !== this.generation) return;
 			this.timeoutTimer = this.setTimer(() => {
 				if (!this.active || generation !== this.generation) return;
 				this.timeoutTimer = undefined;

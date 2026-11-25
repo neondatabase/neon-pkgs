@@ -754,6 +754,182 @@ describe("ConnectionCoordinator", () => {
 		expect(callbacks.connecting).toHaveBeenCalledOnce();
 	});
 
+	it("reconnects when a socket stays closing without a close event", async () => {
+		vi.useFakeTimers();
+		const callbacks = target();
+		const coordinator = createCoordinator({
+			heartbeat: { idleMs: 20, timeoutMs: 10 },
+		});
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = admit();
+		expect(callbacks.admitted).toHaveBeenCalledOnce();
+
+		// Something other than the client closes the transport, and the peer
+		// never ends the TCP connection, so no close event follows. Node's
+		// WebSocket then stays CLOSING.
+		socket.emitCloseOnClose = false;
+		socket.close();
+		expect(socket.readyState).toBe(FakeWebSocket.CLOSING);
+
+		// The probe can't be sent, and the heartbeat times it out like an
+		// unanswered one.
+		await vi.advanceTimersByTimeAsync(20);
+		expect(
+			socket.sent.filter((message) => message.type === "ping"),
+		).toEqual([]);
+		expect(callbacks.connecting).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(10);
+		expect(callbacks.connecting).toHaveBeenCalledOnce();
+
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		const replacement = defined(FakeWebSocket.instances[1]);
+		replacement.open();
+		replacement.receive({ type: "ready" });
+		expect(
+			replacement.sent.filter((message) => message.type === "subscribe"),
+		).toHaveLength(1);
+	});
+
+	it.each([
+		["before", 5],
+		["after", 25],
+	])("retires a socket stuck closing when a subscription connects %s the failed probe", async (_when, subscribeAt) => {
+		vi.useFakeTimers();
+		const first = target();
+		const coordinator = createCoordinator({
+			heartbeat: { idleMs: 20, timeoutMs: 10 },
+		});
+		coordinator.subscribe({ capability: "token" }, first);
+		const stuck = admit();
+		stuck.emitCloseOnClose = false;
+		stuck.close();
+
+		await vi.advanceTimersByTimeAsync(subscribeAt);
+		const second = target();
+		coordinator.subscribe({ capability: "second" }, second);
+		// The stuck socket is retired, not replaced in place: the first
+		// subscription goes back to connecting too.
+		expect(first.connecting).toHaveBeenCalledOnce();
+
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		const replacement = defined(FakeWebSocket.instances[1]);
+		replacement.open();
+		replacement.receive({ type: "ready" });
+		expect(
+			replacement.sent.filter((message) => message.type === "subscribe"),
+		).toHaveLength(2);
+
+		// The stuck socket's heartbeat is gone and can't close the replacement.
+		await vi.advanceTimersByTimeAsync(19);
+		expect(replacement.readyState).toBe(FakeWebSocket.OPEN);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+	});
+
+	it("keeps a replacement when the stuck socket's last ping was sent", async () => {
+		vi.useFakeTimers();
+		const coordinator = createCoordinator({
+			heartbeat: { idleMs: 20, timeoutMs: 10 },
+		});
+		coordinator.subscribe({ capability: "token" }, target());
+		const stuck = admit();
+		await vi.advanceTimersByTimeAsync(20);
+		expect(stuck.sent.at(-1)).toEqual({ type: "ping", token: "c1" });
+		stuck.emitCloseOnClose = false;
+		stuck.close();
+
+		coordinator.subscribe({ capability: "second" }, target());
+		await vi.advanceTimersByTimeAsync(1);
+		const replacement = defined(FakeWebSocket.instances[1]);
+
+		// The replacement is still connecting when the probe sent on the stuck
+		// socket would have timed out.
+		await vi.advanceTimersByTimeAsync(10);
+		expect(replacement.readyState).toBe(FakeWebSocket.CONNECTING);
+		replacement.open();
+		replacement.receive({ type: "ready" });
+		expect(
+			replacement.sent.filter((message) => message.type === "subscribe"),
+		).toHaveLength(2);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+	});
+
+	it("opens no socket from a connecting callback while a socket is retired", async () => {
+		vi.useFakeTimers();
+		let factoryCalls = 0;
+		const coordinator = createCoordinator({
+			webSocketFactory: (url, protocols) => {
+				factoryCalls += 1;
+				return new FakeWebSocket(url, protocols);
+			},
+		});
+		const first = target();
+		let subscribedThird = false;
+		first.connecting.mockImplementation(() => {
+			if (subscribedThird) return;
+			subscribedThird = true;
+			coordinator.subscribe({ capability: "third" }, target());
+		});
+		coordinator.subscribe({ capability: "token" }, first);
+		const stuck = admit();
+		stuck.emitCloseOnClose = false;
+		stuck.close();
+
+		// Retiring the stuck socket tells the first subscription it is
+		// connecting, and its listener subscribes a third query. That waits for
+		// the reconnect the retirement schedules, rather than opening a socket.
+		coordinator.subscribe({ capability: "second" }, target());
+		expect(subscribedThird).toBe(true);
+		expect(factoryCalls).toBe(1);
+
+		await vi.advanceTimersByTimeAsync(1);
+		expect(factoryCalls).toBe(2);
+		const replacement = defined(FakeWebSocket.instances[1]);
+		replacement.open();
+		replacement.receive({ type: "ready" });
+		expect(
+			replacement.sent.filter((message) => message.type === "subscribe"),
+		).toHaveLength(3);
+		coordinator.close();
+		// Only the retired socket's force-close grace timer is left, and it
+		// terminates that socket.
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(stuck.readyState).toBe(FakeWebSocket.CLOSED);
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("doesn't treat a socket that stopped being open as stable", async () => {
+		vi.useFakeTimers();
+		const coordinator = createCoordinator({
+			reconnect: {
+				baseMs: 100,
+				capMs: 1_000,
+				stabilityMs: 1_000,
+				maxElapsedMs: 10_000,
+				random: () => 0,
+			},
+		});
+		coordinator.subscribe({ capability: "token" }, target());
+		admit().disconnect();
+		await vi.advanceTimersByTimeAsync(50);
+		const second = defined(FakeWebSocket.instances[1]);
+		second.open();
+		second.receive({ type: "ready" });
+		// It stops being open at once, and reports close only after the
+		// stability period has passed.
+		second.emitCloseOnClose = false;
+		second.close();
+		await vi.advanceTimersByTimeAsync(1_000);
+		second.disconnect();
+
+		// The reconnect episode wasn't reset, so backoff keeps growing.
+		await vi.advanceTimersByTimeAsync(99);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(3);
+	});
+
 	it("handles an inbound response delivered synchronously from ping", async () => {
 		vi.useFakeTimers();
 		const coordinator = createCoordinator({

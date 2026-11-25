@@ -7,7 +7,12 @@ import type {
 } from "@neon/sdk";
 import chalk from "chalk";
 import type yargs from "yargs";
-import { codeFromBody, isNeonApiError, retryOnLock } from "../api.js";
+import {
+	codeFromBody,
+	isNeonApiError,
+	messageFromBody,
+	retryOnLock,
+} from "../api.js";
 import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import { stripAnsi } from "../human_table.js";
 import { log } from "../log.js";
@@ -80,6 +85,17 @@ const OAUTH_PROVIDER_FIELDS = [
 ] as const;
 
 const ALLOW_LOCALHOST_FIELDS = ["allow_localhost"] as const;
+
+const LOGS_EXPORT_FIELDS = ["enabled"] as const;
+
+const LOGS_EXPORT_UNAVAILABLE =
+	"Neon Auth logs export isn't available for this project. During the beta it requires Managed Better Auth in a supported region.";
+
+const LOGS_EXPORT_NOT_BETTER_AUTH =
+	"Logs export is only available for Managed Better Auth branches.";
+
+const LOGS_EXPORT_QUERY_HINT =
+	"Read the exported events with neon logs query --source neon_auth. A query covers at most the last 7 days.";
 
 const SUPPORTED_OAUTH_PROVIDERS = [
 	NeonAuthOauthProviderId.Google,
@@ -945,7 +961,43 @@ export const builder = (argv: yargs.Argv) => {
 								await webhookUpdate(args as any);
 							},
 						);
-				});
+				})
+				.command(
+					"logs-export",
+					"Manage export of Neon Auth events to Neon logs (beta)",
+					(yargs) =>
+						yargs
+							.usage(
+								"$0 neon-auth config logs-export <sub-command> [options]",
+							)
+							.command(
+								"get",
+								"Get the logs export setting",
+								(yargs) =>
+									yargs.epilogue(LOGS_EXPORT_QUERY_HINT),
+								async (args) => {
+									await logsExportGet(args as any);
+								},
+							)
+							.command(
+								"enable",
+								"Export Neon Auth events to Neon logs",
+								(yargs) =>
+									yargs.epilogue(LOGS_EXPORT_QUERY_HINT),
+								async (args) => {
+									await logsExportEnable(args as any);
+								},
+							)
+							.command(
+								"disable",
+								"Stop exporting Neon Auth events to Neon logs",
+								(yargs) => yargs,
+								async (args) => {
+									await logsExportDisable(args as any);
+								},
+							)
+							.epilogue(LOGS_EXPORT_QUERY_HINT),
+				);
 		})
 		.command("plugins", "View Neon Auth plugin configurations", (yargs) => {
 			return yargs
@@ -1572,6 +1624,85 @@ const allowLocalhostDisable = async (props: AuthBranchProps) => {
 		}),
 	);
 	printMessage("Localhost connections restricted");
+};
+
+// --- Logs export ---
+
+const logsExportGet = async (props: AuthBranchProps) => {
+	const branchId = await resolveBranch(props);
+	const data = await authSdk(props, (auth) =>
+		auth.plugins.get({ projectId: props.projectId, branchId }),
+	);
+	// The API omits logs_export when the project can't export Neon Auth logs.
+	if (!data.logs_export) {
+		if (props.output === "json" || props.output === "yaml") {
+			writer(props).end({ available: false }, { fields: ["available"] });
+			return;
+		}
+		printMessage(LOGS_EXPORT_UNAVAILABLE);
+		return;
+	}
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end(data.logs_export, { fields: LOGS_EXPORT_FIELDS });
+		return;
+	}
+	printKvBlock("Neon Auth logs export", [
+		["Enabled:", String(data.logs_export.enabled)],
+	]);
+};
+
+// The console rejects a non-Better-Auth integration with this 400 message, on enable and disable.
+const isNotBetterAuthError = (err: unknown): boolean =>
+	isNeonApiError(err) &&
+	err.status === 400 &&
+	/logs export is only supported for Neon Auth \(better_auth\)/i.test(
+		messageFromBody(err.data) ?? "",
+	);
+
+const updateLogsExport = async (props: AuthBranchProps, enabled: boolean) => {
+	const branchId = await resolveBranch(props);
+	try {
+		await authSdk(props, (auth) =>
+			auth.logsExport.update({
+				projectId: props.projectId,
+				branchId,
+				enabled,
+			}),
+		);
+	} catch (err) {
+		if (isNotBetterAuthError(err)) {
+			throw new Error(LOGS_EXPORT_NOT_BETTER_AUTH);
+		}
+		if (!enabled || !isNeonApiError(err)) throw err;
+		if (err.status === 404) throw new Error(LOGS_EXPORT_UNAVAILABLE);
+		if (err.status === 409) {
+			throw new Error(
+				"Neon Auth is busy with another change on this branch. Try again in a moment.",
+			);
+		}
+		// The SDK already retried these statuses before the error reached the CLI.
+		if (err.status === 423) {
+			throw new Error(
+				"Neon Auth is still busy with another change on this branch after retrying. Try again later.",
+			);
+		}
+		if (err.status === 429 || err.status === 503) {
+			throw new Error(
+				"Neon Auth logs export is still unavailable after retrying. Try again later.",
+			);
+		}
+		throw err;
+	}
+};
+
+const logsExportEnable = async (props: AuthBranchProps) => {
+	await updateLogsExport(props, true);
+	printMessage(`Neon Auth logs export enabled. ${LOGS_EXPORT_QUERY_HINT}`);
+};
+
+const logsExportDisable = async (props: AuthBranchProps) => {
+	await updateLogsExport(props, false);
+	printMessage("Neon Auth logs export disabled");
 };
 
 // --- Email and password ---

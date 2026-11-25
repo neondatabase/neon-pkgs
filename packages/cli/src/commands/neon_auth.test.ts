@@ -2594,6 +2594,137 @@ describe("neon-auth", () => {
 		]);
 	});
 
+	// --- Config: Logs export ---
+
+	describe("config logs-export", () => {
+		const logsExportArgs = (sub: string) => [
+			"neon-auth",
+			"config",
+			"logs-export",
+			sub,
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		];
+		const logsExportBodies = (requests: RecordedRequest[]) =>
+			requests
+				.filter(
+					(r) =>
+						r.method === "PATCH" &&
+						r.path.endsWith("/auth/logs_export"),
+				)
+				.map((r) => r.body);
+
+		test("get when enabled", async ({ testCliCommand }) => {
+			await testCliCommand(logsExportArgs("get"), {
+				mockDir: "neon-auth-logs-export-enabled",
+			});
+		});
+
+		test("get when disabled", async ({ testCliCommand }) => {
+			await testCliCommand(logsExportArgs("get"), {
+				mockDir: "neon-auth-logs-export-disabled",
+				output: "table",
+			});
+		});
+
+		test("get when the project has no logs export", async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(logsExportArgs("get"), { output: "table" });
+		});
+
+		test("enable", async ({ testCliCommand }) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(logsExportArgs("enable"), {
+				onRequest: (r) => requests.push(r),
+			});
+			expect(logsExportBodies(requests)).toEqual([{ enabled: true }]);
+		});
+
+		test("disable", async ({ testCliCommand }) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(logsExportArgs("disable"), {
+				onRequest: (r) => requests.push(r),
+			});
+			expect(logsExportBodies(requests)).toEqual([{ enabled: false }]);
+		});
+
+		test("get when the project has no logs export, as json", async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(logsExportArgs("get"), { output: "json" });
+		});
+
+		test("get when enabled, as json", async ({ testCliCommand }) => {
+			await testCliCommand(logsExportArgs("get"), {
+				mockDir: "neon-auth-logs-export-enabled",
+				output: "json",
+			});
+		});
+
+		test.for([
+			[
+				"409",
+				"ERROR: Neon Auth is busy with another change on this branch. Try again in a moment.",
+			],
+			[
+				"423",
+				"ERROR: Neon Auth is still busy with another change on this branch after retrying. Try again later.",
+			],
+			[
+				"429",
+				"ERROR: Neon Auth logs export is still unavailable after retrying. Try again later.",
+			],
+			[
+				"503",
+				"ERROR: Neon Auth logs export is still unavailable after retrying. Try again later.",
+			],
+		])("enable reports %s", async ([status, stderr], {
+			testCliCommand,
+		}) => {
+			await testCliCommand(logsExportArgs("enable"), {
+				mockDir: `neon-auth-logs-export-${status}`,
+				code: 1,
+				stderr,
+			});
+		});
+
+		test.for([
+			"enable",
+			"disable",
+		])("%s reports a branch that isn't on Better Auth", async (sub, {
+			testCliCommand,
+		}) => {
+			await testCliCommand(logsExportArgs(sub), {
+				mockDir: "neon-auth-logs-export-not-better-auth",
+				code: 1,
+				stderr: "ERROR: Logs export is only available for Managed Better Auth branches.",
+			});
+		});
+
+		test("enable passes any other 400 through", async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(logsExportArgs("enable"), {
+				mockDir: "neon-auth-logs-export-bad-request",
+				code: 1,
+				stderr: "ERROR: invalid request body",
+			});
+		});
+
+		test("enable reports 404 as not available", async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(logsExportArgs("enable"), {
+				mockDir: "neon-auth-logs-export-unavailable",
+				code: 1,
+				stderr: "ERROR: Neon Auth logs export isn't available for this project. During the beta it requires Managed Better Auth in a supported region.",
+			});
+		});
+	});
+
 	// --- Plugins ---
 
 	test("plugins list", async ({ testCliCommand }) => {
