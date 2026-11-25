@@ -78,7 +78,7 @@ export const toolDescriptions: Readonly<Partial<Record<NeonToolId, string>>> = {
 	"realtime.disable": "Disables Realtime on a branch, discarding its secret, and waits until it is applied.",
 	"realtime.secret": "Gets the secret the application backend issues Realtime tokens with; 404 until {{realtime.enable}} has run.",
 	"realtime.rotateSecret": "Replaces a branch's Realtime secret and waits until the old one stops working. NEVER run autonomously: run it only when the user's own message asks for it and unambiguously identifies its target; otherwise ask first. Then update the application backend from {{realtime.secret}}.",
-	"logs.query": "Returns a branch's log records. Filters combine with AND; pass logql or structured filters, not both. Pass since or start_time, not both; default last hour, max seven days. Private beta: a branch without logs returns 404 telemetry_not_enabled. Stream labels: {{logs.loki.queryRange}}.",
+	"logs.query": "Returns a branch's log records. Filters combine with AND; pass logql or structured filters, not both. Pass since or start_time, not both; window: default last hour, max seven days. Private beta: a branch without logs 404s telemetry_not_enabled. neon_auth records include end users' IPs, user agents, and user IDs; don't echo them unasked. Stream labels: {{logs.loki.queryRange}}.",
 	"logs.fields": "Lists the low-cardinality log fields seen on a branch, for {{logs.fieldValues}}.",
 	"logs.fieldValues": "Lists the distinct values of one log field; a field the branch never emitted returns unknown_field. Pass since or start_time, not both; default last six hours, max seven days.",
 	"snapshots.list": "Lists a project's snapshots.",
@@ -144,7 +144,7 @@ export const toolDescriptions: Readonly<Partial<Record<NeonToolId, string>>> = {
 	"organizations.apiKeys.create": "Creates an organization API key, optionally limited to one project. The key is returned once: show it to the user and tell them to store it.",
 	"organizations.apiKeys.revoke": "Revokes an organization API key. Irreversible.",
 	"user.me": "Gets the authenticated Neon user: ids, plan, and linked login accounts. An organization API key gets 404.",
-	"auth.logsExport.update": "Turns the export of a branch's Neon Auth events to Neon Platform logs on or off. A project without logs export accepts only enabled: false; enabling there returns 404 feature not available. {{auth.getConfig}} reports the current value as logs_export, or null where logs export is not available."
+	"auth.logsExport.update": "Turns a branch's Neon Auth export to Neon Platform logs on or off. Managed Better Auth only; beta in some regions. Enabling 404s where unavailable; disabling still works. On 409/423/429/503, wait and retry once. {{auth.getConfig}} reports logs_export, null where unavailable."
 };
 
 /** Descriptions every operation gives these path parameters. */
