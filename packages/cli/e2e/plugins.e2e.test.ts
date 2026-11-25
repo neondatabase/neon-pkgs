@@ -28,6 +28,38 @@ const agentlessMachine = (): { home: string; cwd: string; path: string } => {
 };
 
 describe("plugins CLI install requirements", () => {
+	// `neon plugins` refuses to start without git; this fails when a plugins CLI bump stops needing it.
+	it('cloning the plugin source needs "git"', () => {
+		const machine = agentlessMachine();
+		const bin = join(machine.home, "..", "bin-without-git");
+		mkdirSync(bin);
+		for (const name of ["node", "npm", "npx", "sh"]) {
+			symlinkSync(which.sync(name), join(bin, name));
+		}
+		expect(
+			which.sync("git", { nothrow: true, path: bin }),
+			'"git" must be absent from the test PATH',
+		).toBeNull();
+		const result = spawnSync("npx", pluginsAddArgs({ target: "cursor" }), {
+			cwd: machine.cwd,
+			encoding: "utf8",
+			timeout: 150_000,
+			env: {
+				...npmEnvForIsolatedHome(),
+				HOME: machine.home,
+				PATH: bin,
+				DISABLE_TELEMETRY: "1",
+				DO_NOT_TRACK: "1",
+			},
+		});
+		const output = `${result.stdout}${result.stderr}`;
+		expect(result.status, output).not.toBe(0);
+		expect(output).toContain(
+			"Source: https://github.com/neondatabase/agent-skills",
+		);
+		expect(output).not.toContain("Repository cloned");
+	});
+
 	for (const { target, command: agentCommand } of pluginsTargets()) {
 		const command = agentCommand?.name;
 		it(`${target} ${command === undefined ? "installs without an agent CLI" : `needs "${command}"`}`, () => {

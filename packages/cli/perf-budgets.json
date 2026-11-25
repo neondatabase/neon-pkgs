@@ -197,7 +197,7 @@
 			}
 		},
 		"api /projects/test": {
-			"modules": 451,
+			"modules": 450,
 			"requests": {
 				"GET /projects/test": 1
 			},
@@ -269,7 +269,6 @@
 				"dist/utils/help_text.js": 1,
 				"dist/utils/json_file.js": 1,
 				"dist/utils/middlewares.js": 1,
-				"dist/utils/openapi.js": 1,
 				"dist/utils/package_manager.js": 1,
 				"dist/utils/repeated_flags.js": 1,
 				"dist/utils/staging.js": 1,

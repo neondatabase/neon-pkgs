@@ -443,7 +443,8 @@ describe("bootstrap", () => {
 			"--force",
 		]);
 		expect(code).toBe(1);
-		expect(stderr).toContain("Unknown template");
+		expect(stderr).toContain("Unknown template <redacted invalid value>.");
+		expect(stderr).not.toContain("does-not-exist");
 	});
 
 	test("--list prints available templates to stdout from the remote manifest", async () => {
@@ -553,7 +554,7 @@ describe("bootstrap", () => {
 			"--no-link",
 		]);
 		expect(code).toBe(1);
-		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
+		expect(stderr).toMatch(/Unknown agent: <redacted invalid value>/);
 		expect(existsSync(join(dest, "package.json"))).toBe(false);
 	});
 

@@ -60,7 +60,7 @@ describe("resolveAgentSelection", () => {
 				nonInteractiveMessage: "pass -y",
 				pick: async () => ["cursor"],
 			}),
-		).rejects.toThrow(/Unknown agent: "not-an-agent"/);
+		).rejects.toThrow(/Unknown agent: <redacted invalid value>/);
 	});
 
 	test("uses resolveSpecified for specified values", async () => {

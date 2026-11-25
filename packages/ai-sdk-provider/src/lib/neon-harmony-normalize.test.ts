@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
 	extractHarmonyContent,
+	firstChoiceField,
+	imageFilesFrom,
 	normalizeChunkBody,
 	normalizeCompletionBody,
 } from "./neon-harmony-normalize.js";
+
+const PNG_DATA_URL = "data:image/png;base64,iVBORw0KGgo=";
 
 describe("extractHarmonyContent", () => {
 	it("returns null for a compliant string content (no rewrite needed)", () => {
@@ -25,6 +29,7 @@ describe("extractHarmonyContent", () => {
 		expect(extractHarmonyContent(content)).toEqual({
 			text: "Hi! 👋",
 			reasoning: "Think about the greeting.",
+			images: [],
 		});
 	});
 
@@ -45,6 +50,7 @@ describe("extractHarmonyContent", () => {
 		expect(extractHarmonyContent(content)).toEqual({
 			text: "Hello world",
 			reasoning: "raw cot\nsummary cot\nmore cot",
+			images: [],
 		});
 	});
 });
@@ -175,5 +181,102 @@ describe("normalizeChunkBody", () => {
 		);
 		expect(changed).toBe(false);
 		expect(out).toEqual(chunk);
+	});
+});
+
+describe("generated images", () => {
+	it("moves image_url parts of a completion to message.images and keeps reasoning", () => {
+		const body = {
+			choices: [
+				{
+					message: {
+						role: "assistant",
+						content: [
+							{
+								type: "reasoning",
+								summary: [
+									{
+										type: "summary_text",
+										text: "Plan the scene.",
+									},
+								],
+							},
+							{
+								type: "image_url",
+								image_url: { url: PNG_DATA_URL },
+							},
+						],
+					},
+				},
+			],
+		};
+		const { body: out, changed } = normalizeCompletionBody(body);
+		expect(changed).toBe(true);
+		expect(firstChoiceField(out, "message")).toEqual({
+			role: "assistant",
+			content: "",
+			reasoning_content: "Plan the scene.",
+			images: [{ type: "image_url", image_url: { url: PNG_DATA_URL } }],
+		});
+	});
+
+	it("moves image_url parts of a streamed delta to delta.images", () => {
+		const chunk = {
+			choices: [
+				{
+					delta: {
+						content: [
+							{
+								type: "image_url",
+								image_url: { url: PNG_DATA_URL },
+							},
+						],
+					},
+				},
+			],
+		};
+		const { body: out, changed } = normalizeChunkBody(chunk);
+		expect(changed).toBe(true);
+		expect(firstChoiceField(out, "delta")).toEqual({
+			content: undefined,
+			images: [{ type: "image_url", image_url: { url: PNG_DATA_URL } }],
+		});
+	});
+
+	it("turns images into AI SDK file parts with the data URL's media type", () => {
+		expect(
+			imageFilesFrom({
+				images: [
+					{ type: "image_url", image_url: { url: PNG_DATA_URL } },
+					{
+						type: "image_url",
+						image_url: { url: "data:image/jpeg;base64,/9j/4AAQ" },
+					},
+				],
+			}),
+		).toEqual([
+			{ type: "file", mediaType: "image/png", data: "iVBORw0KGgo=" },
+			{ type: "file", mediaType: "image/jpeg", data: "/9j/4AAQ" },
+		]);
+	});
+
+	it("returns no files for a message without images", () => {
+		expect(imageFilesFrom({ role: "assistant", content: "Hi" })).toEqual(
+			[],
+		);
+		expect(imageFilesFrom(undefined)).toEqual([]);
+	});
+
+	it("throws on an image that is not a base64 data URL", () => {
+		expect(() =>
+			imageFilesFrom({
+				images: [
+					{
+						type: "image_url",
+						image_url: { url: "https://example.com/a.png" },
+					},
+				],
+			}),
+		).toThrow(/only reads base64 data URLs/);
 	});
 });

@@ -91,6 +91,125 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
+	it.each([
+		["a partial refresh", true, false],
+		["a partial refresh", true, true],
+		["an ordinary tick", false, false],
+		["an ordinary tick", false, true],
+	])("abandons %s whose parser closes the transport (round: %s, then throws: %s)", (_name, round, throws) => {
+		useFakeWebSocket();
+		const tag = "1".repeat(64);
+		let socket: FakeWebSocket | undefined;
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			parsers: defineParsers({
+				90000: (value: string) => {
+					if (value === "disconnect") {
+						socket?.close();
+						if (throws)
+							throw new Error("after the transport closed");
+					}
+					return value;
+				},
+			}),
+		});
+		const subscription = client.subscribe(query("closing parser"));
+		socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		const request = defined(
+			socket.sent.find((message) => message.type === "subscribe"),
+		);
+		socket.receive({
+			type: "subscribed",
+			request_id: request.request_id,
+			live_id: "41",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [
+				{
+					name: "value",
+					type_oid: 90000,
+					typmod: -1,
+					codec: "pg_text",
+				},
+			],
+		});
+		const version = { live_id: "41", epoch: "1" };
+		const sync = (attempt: string, scope: object, values: string) => {
+			socket?.receive({
+				type: "baseline_sync_start",
+				...version,
+				baseline_sync_attempt: attempt,
+				scope,
+				mvcc: { xmin: "1", xmax: "1", xip: [] },
+			});
+			socket?.receive({
+				type: "baseline_sync_batch",
+				...version,
+				baseline_sync_attempt: attempt,
+				index: 0,
+				rows: [
+					{ row_key: ROW_KEY, values: [values], segment_tag: tag },
+				],
+			});
+			socket?.receive({
+				type: "baseline_sync_end",
+				...version,
+				baseline_sync_attempt: attempt,
+				batch_count: 1,
+			});
+		};
+		sync("1", { kind: "all" }, "old");
+		const updates: unknown[] = [];
+		subscription.onUpdate((update) => updates.push(update));
+
+		socket.receive({ type: "open", publication_id: "7" });
+		socket.receive({
+			type: round ? "segments_pending" : "keyed_results",
+			publication_id: "7",
+			index: 0,
+			txids: ["10"],
+			targets: [{ ...version, sequence: "1" }],
+			...(round
+				? {}
+				: {
+						changes: [
+							{
+								op: "upsert",
+								row_key: ROW_KEY,
+								values: ["disconnect"],
+								segment_tag: tag,
+							},
+						],
+					}),
+		});
+		socket.receive({
+			type: "commit",
+			publication_id: "7",
+			body_count: 1,
+			frontier: { lsn: "0/10" },
+		});
+		if (round) {
+			sync(
+				"2",
+				{
+					kind: "selected",
+					selectors: [{ segment_tag: tag }],
+					covered: { from_sequence: "1", through_sequence: "1" },
+				},
+				"disconnect",
+			);
+		}
+
+		expect(updates).toEqual([]);
+		expect(subscription.getSnapshot()).toMatchObject({
+			status: "connecting",
+			data: [{ value: "old" }],
+		});
+		client.close();
+	});
+
 	it("does not restore stale when an older renewal is superseded", async () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({ url: "ws://live.test/v1" });
@@ -230,7 +349,7 @@ describe("RealtimeClient", () => {
 		expect(webSocketFactory).toHaveBeenCalledOnce();
 		expect(webSocketFactory).toHaveBeenCalledWith(
 			"ws://live.test/v1",
-			"neon.realtime.v2",
+			"neon.realtime.v3",
 		);
 		client.close();
 	});
@@ -410,6 +529,7 @@ describe("RealtimeClient", () => {
 		});
 		socket.receive({
 			type: "baseline_sync_start",
+			scope: { kind: "all" },
 			live_id: "41",
 			epoch: "1",
 			baseline_sync_attempt: "2",
@@ -417,6 +537,7 @@ describe("RealtimeClient", () => {
 		});
 		socket.receive({
 			type: "baseline_sync_start",
+			scope: { kind: "all" },
 			live_id: "41",
 			epoch: "1",
 			baseline_sync_attempt: "1",
@@ -737,7 +858,7 @@ describe("RealtimeClient", () => {
 		const socket = connectAndAdmit();
 		baselineSync(socket, "before");
 
-		expect(socket.protocols).toBe("neon.realtime.v2");
+		expect(socket.protocols).toBe("neon.realtime.v3");
 		expect(socket.sent).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({ type: "subscribe" }),
@@ -1107,6 +1228,7 @@ describe("RealtimeClient", () => {
 
 		socket.receive({
 			type: "baseline_sync_start",
+			scope: { kind: "all" },
 			live_id: "41",
 			epoch: "1",
 			baseline_sync_attempt: "1",
@@ -1174,6 +1296,7 @@ describe("RealtimeClient", () => {
 		});
 		socket.receive({
 			type: "baseline_sync_start",
+			scope: { kind: "all" },
 			live_id: "41",
 			epoch: "2",
 			baseline_sync_attempt: "1",
@@ -1598,6 +1721,7 @@ describe("RealtimeClient", () => {
 		};
 		socket.receive({
 			type: "baseline_sync_start",
+			scope: { kind: "all" },
 			...target,
 			mvcc: { xmin: "1", xmax: "2", xip: [] },
 		});
@@ -1828,6 +1952,7 @@ function baselineSyncRows(
 ): void {
 	socket.receive({
 		type: "baseline_sync_start",
+		scope: { kind: "all" },
 		live_id: liveId,
 		epoch,
 		baseline_sync_attempt: "1",
@@ -1875,6 +2000,7 @@ function emptySnapshot(
 ): void {
 	socket.receive({
 		type: "baseline_sync_start",
+		scope: { kind: "all" },
 		live_id: liveId,
 		epoch,
 		baseline_sync_attempt: "1",

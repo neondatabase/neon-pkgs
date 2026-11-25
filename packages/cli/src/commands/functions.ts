@@ -16,6 +16,7 @@ import {
 	listCustomDomains,
 	registerCustomDomain,
 } from "../custom_domains_api.js";
+import { REDACTED_INVALID_VALUE } from "../errors.js";
 import {
 	createDeployment,
 	deleteFunction,
@@ -385,7 +386,7 @@ const parseEnv = (entries: string[] | undefined): string | undefined => {
 		const eq = entry.indexOf("=");
 		if (eq <= 0) {
 			throw new Error(
-				`Invalid --env value "${entry}". Expected KEY=VALUE.`,
+				`Invalid --env value ${REDACTED_INVALID_VALUE}. Expected KEY=VALUE.`,
 			);
 		}
 		map[entry.slice(0, eq)] = entry.slice(eq + 1);

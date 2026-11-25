@@ -67,14 +67,20 @@ const DEPLOY_FREE_SERVICES: ReadonlySet<NeonService> = new Set([
 	"functions",
 ]);
 
-const needsDeploy = (declared: readonly NeonService[]): boolean =>
-	declared.some((service) => !DEPLOY_FREE_SERVICES.has(service));
+const needsDeploy = (service: NeonService): boolean =>
+	!DEPLOY_FREE_SERVICES.has(service);
 
 export type InitEnvPull =
 	| { kind: "skip" }
 	/** Resolve from neon.ts when present, else from the branch's live state. */
 	| { kind: "policy" }
-	| { kind: "services"; services: NeonService[]; envKeys: EnvPullKey[] };
+	| {
+			kind: "services";
+			services: NeonService[];
+			envKeys: EnvPullKey[];
+			/** Pulled when the branch already has them; `deploy` provisions the rest. */
+			optionalServices: NeonService[];
+	  };
 
 export const initEnvPullAfterConfig = (input: {
 	/** Init linked in this run and left the env pull until neon.ts exists. */
@@ -95,20 +101,14 @@ export const initEnvPullAfterConfig = (input: {
 	if (input.claimable && input.declared.length > 0) {
 		return { kind: "skip" };
 	}
-	if (!needsDeploy(input.declared)) {
+	const pending = input.declared.filter(needsDeploy);
+	if (pending.length === 0) {
 		return { kind: "policy" };
 	}
 	return {
 		kind: "services",
-		services: [
-			"postgres",
-			...(input.declared.includes("ai-gateway")
-				? (["ai-gateway"] as const)
-				: []),
-			...(input.declared.includes("functions")
-				? (["functions"] as const)
-				: []),
-		],
+		services: ["postgres", ...input.declared],
 		envKeys: [],
+		optionalServices: pending,
 	};
 };

@@ -8,6 +8,7 @@ import {
 } from "../analytics.js";
 import { isCi } from "../env.js";
 import { resolveEnvFilePath } from "../env_file.js";
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import type { InitAuthOptions } from "../init/auth.js";
 import {
 	BootstrapInputError,
@@ -344,7 +345,10 @@ const resolveSelectedTemplate = async (
 		const template = findTemplate(templates, props.template);
 		if (!template) {
 			throw new Error(
-				`Unknown template "${props.template}". Available templates: ${templateIds(templates)}.`,
+				`Unknown template ${REDACTED_INVALID_VALUE}.${didYouMean(
+					[props.template],
+					templates.map((candidate) => candidate.id),
+				)} Available templates: ${templateIds(templates)}.`,
 			);
 		}
 		return template;

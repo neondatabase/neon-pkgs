@@ -532,7 +532,7 @@ describe("functions", () => {
 			{
 				mockDir: "single_org",
 				code: 1,
-				stderr: 'ERROR: Invalid --env value "NOEQUALS". Expected KEY=VALUE.',
+				stderr: "ERROR: Invalid --env value <redacted invalid value>. Expected KEY=VALUE.",
 			},
 		);
 	});

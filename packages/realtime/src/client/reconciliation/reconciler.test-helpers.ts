@@ -137,6 +137,7 @@ export function baselineSyncStart(
 ): Extract<ServerMessage, { type: "baseline_sync_start" }> {
 	return {
 		type: "baseline_sync_start",
+		scope: { kind: "all" },
 		live_id: "9",
 		epoch,
 		baseline_sync_attempt: attempt,

@@ -1,3 +1,4 @@
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import { detectAgent } from "../init/detect_host.js";
 import { collectYesAgents, noDetectedAgentsMessage } from "../init/plan.js";
 import {
@@ -85,7 +86,7 @@ export async function resolveMcpPlan(
 			const id = tryResolveAddMcpAgentId(raw);
 			if (!id) {
 				throw new Error(
-					`Unknown agent: "${raw}". Supported agents: ${available.join(", ")}`,
+					`Unknown agent: ${REDACTED_INVALID_VALUE}.${didYouMean([raw], available)} Supported agents: ${available.join(", ")}`,
 				);
 			}
 			return id;
