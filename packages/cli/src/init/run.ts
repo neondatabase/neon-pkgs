@@ -108,6 +108,7 @@ import {
 	initStartProperties,
 	recordInitError,
 	recordInitExit,
+	recordToolingInstalled,
 } from "./funnel.js";
 import {
 	type InitLinkInputs,
@@ -1038,6 +1039,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					continue;
 				}
 				if (completed.includes(toolingStep.kind)) {
+					recordToolingInstalled(funnel, toolingStep.kind);
 					funnel.agentsInstalled = uniqueAgents([
 						...funnel.agentsInstalled,
 						...agentsForStep(plan, toolingStep.kind),
@@ -1666,6 +1668,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			...(extrasSetup(funnel.agentSetup) !== undefined
 				? { agent_setup: extrasSetup(funnel.agentSetup) }
 				: {}),
+			tooling_installed: funnel.toolingInstalled,
 		});
 	} catch (error) {
 		restoreCursor();

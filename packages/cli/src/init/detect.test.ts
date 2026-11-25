@@ -208,6 +208,7 @@ describe("init funnel payloads", () => {
 			mode: null,
 			agentSetup: null,
 			agentsInstalled: [],
+			toolingInstalled: [],
 			link: null,
 			config: null,
 			services: null,
@@ -216,6 +217,7 @@ describe("init funnel payloads", () => {
 		});
 		expect(end.mode).toBeNull();
 		expect(end.agent_setup).toBeNull();
+		expect(end.tooling_installed).toEqual([]);
 		expect(end.outcome).toBe("aborted");
 		expect(end.error_step).toBeNull();
 		expect(end.error_code).toBeNull();
@@ -235,6 +237,7 @@ describe("init funnel payloads", () => {
 			mode: "recommended",
 			agentSetup: "plugin",
 			agentsInstalled: [],
+			toolingInstalled: [],
 			link: "linked",
 			config: null,
 			services: null,
@@ -256,6 +259,7 @@ describe("init funnel payloads", () => {
 			mode: "recommended",
 			agentSetup: "plugin",
 			agentsInstalled: [],
+			toolingInstalled: [],
 			link: "linked",
 			config: "created",
 			services: ["postgres"],
@@ -281,6 +285,7 @@ describe("init funnel payloads", () => {
 			mode: "recommended",
 			agentSetup: "plugin",
 			agentsInstalled: [],
+			toolingInstalled: [],
 			link: "linked",
 			config: "created",
 			services: ["postgres"],
@@ -305,6 +310,7 @@ describe("init funnel payloads", () => {
 			mode: null,
 			agentSetup: null,
 			agentsInstalled: [],
+			toolingInstalled: [],
 			link: null,
 			config: null,
 			services: null,

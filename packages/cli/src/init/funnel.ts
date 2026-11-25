@@ -35,6 +35,14 @@ export type InitFunnelConfig = "created" | "seeded" | "existing" | "skipped";
 
 export type InitFunnelOutcome = "success" | "pending" | "error" | "aborted";
 
+export type InitFunnelToolingKind = "plugins" | "skills" | "mcp";
+
+const TOOLING_KIND_ORDER: readonly InitFunnelToolingKind[] = [
+	"plugins",
+	"skills",
+	"mcp",
+];
+
 /** `setup` is everything after `cli_init_start` and before the first install or link. */
 export type InitFunnelErrorStep =
 	| "setup"
@@ -64,6 +72,8 @@ export type InitFunnelEnd = {
 	mode: InitMode | null;
 	agent_setup: InitFunnelAgentSetup | null;
 	agents_installed: AgentType[];
+	/** Install steps that completed. `agent_setup` is the plan; `mixed` does not say whether skills, MCP, or both ran. */
+	tooling_installed: InitFunnelToolingKind[];
 	link: InitFunnelLink | null;
 	config: InitFunnelConfig | null;
 	services: NeonService[] | null;
@@ -210,6 +220,7 @@ export const initEndProperties = (input: {
 	mode: InitMode | null;
 	agentSetup: InitFunnelAgentSetup | null;
 	agentsInstalled: AgentType[];
+	toolingInstalled: InitFunnelToolingKind[];
 	link: InitFunnelLink | null;
 	config: InitFunnelConfig | null;
 	services: NeonService[] | null;
@@ -226,6 +237,7 @@ export const initEndProperties = (input: {
 		mode: input.mode,
 		agent_setup: input.agentSetup,
 		agents_installed: input.agentsInstalled,
+		tooling_installed: input.toolingInstalled,
 		link: input.link,
 		config: input.config,
 		services: input.services,
@@ -256,6 +268,7 @@ export type InitFunnelState = {
 	mode: InitMode | null;
 	agentSetup: InitFunnelAgentSetup | null;
 	agentsInstalled: AgentType[];
+	toolingInstalled: InitFunnelToolingKind[];
 	link: InitFunnelLink | null;
 	config: InitFunnelConfig | null;
 	services: NeonService[] | null;
@@ -271,6 +284,7 @@ export const createInitFunnel = (
 	mode: null,
 	agentSetup: null,
 	agentsInstalled: [],
+	toolingInstalled: [],
 	link: null,
 	config: null,
 	services: null,
@@ -278,6 +292,15 @@ export const createInitFunnel = (
 	exitError: undefined,
 	ended: false,
 });
+
+export const recordToolingInstalled = (
+	state: InitFunnelState,
+	kind: InitFunnelToolingKind,
+): void => {
+	state.toolingInstalled = TOOLING_KIND_ORDER.filter(
+		(entry) => entry === kind || state.toolingInstalled.includes(entry),
+	);
+};
 
 /** Records a failure once: a deferred error rethrown at the end keeps the step it failed in. */
 export const recordInitError = (
@@ -315,6 +338,7 @@ export const finishInitFunnel = (
 			mode: state.mode,
 			agentSetup: state.agentSetup,
 			agentsInstalled: state.agentsInstalled,
+			toolingInstalled: state.toolingInstalled,
 			link: state.link,
 			config: state.config,
 			services: state.services,

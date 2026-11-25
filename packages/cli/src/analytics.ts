@@ -563,10 +563,12 @@ export type CommandAgentSetup =
 	| "skip";
 export type CommandInitKind = "empty-template" | "empty-skip" | "existing";
 export type CommandInstallScope = "project" | "global";
+export type CommandToolingKind = "plugins" | "skills" | "mcp";
 
 export type CommandSuccessExtras = {
 	template?: string;
 	agent_setup?: CommandAgentSetup;
+	tooling_installed?: CommandToolingKind[];
 	init_kind?: CommandInitKind;
 	scope?: CommandInstallScope;
 	skills?: SkillsTelemetry;
