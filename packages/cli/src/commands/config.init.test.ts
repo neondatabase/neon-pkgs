@@ -276,11 +276,15 @@ describe("config init", () => {
 	});
 
 	test("after npm ERESOLVE, the retry it prints adds --force and says why", async () => {
+		const runs: string[][] = [];
 		const failed = initCmd({
 			cwd: workspace,
 			requireInstall: true,
 			packageManager: "npm",
-			run: () => Promise.resolve({ ok: false, detail: "ERESOLVE" }),
+			run: (_pm, args) => {
+				runs.push(args);
+				return Promise.resolve({ ok: false, detail: "ERESOLVE" });
+			},
 		});
 
 		await expect(failed).rejects.toMatchObject({
@@ -292,6 +296,8 @@ describe("config init", () => {
 			),
 			hint: expect.stringContaining("peer dependency conflict"),
 		});
+		expect(runs).toHaveLength(1);
+		expect(runs[0]).not.toContain("--force");
 	});
 
 	// A script under pnpm can run npm, so pnpm's install can report npm's code.
