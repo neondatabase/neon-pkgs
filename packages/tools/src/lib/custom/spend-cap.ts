@@ -1,4 +1,4 @@
-import * as z from "zod";
+import type * as z from "zod";
 import {
 	bindTool,
 	publishedId,
@@ -18,11 +18,6 @@ const notices = [
 	"Enforcement converges asynchronously. Applied means control planes acknowledged the decision, not that all workloads finished stopping or resuming. Other restrictions can remain.",
 ];
 
-// Output schemas describe JSON types; the API boundary validates the enum values.
-const outputSchema = spendCapResponse.extend({
-	status: z.string().nullish(),
-	enforcement_status: z.string().nullish(),
-});
 const result = (data: z.infer<typeof spendCapResponse>, updated = false) => ({
 	...data,
 	notice: (updated
@@ -59,7 +54,7 @@ export const getSpendCapTool = (options: ToolClientOptions) =>
 			title: "Get spend cap",
 			description: "Gets org cap status and usage.",
 			inputSchema: spendCapInput,
-			outputSchema,
+			outputSchema: spendCapResponse,
 			annotations: {
 				readOnlyHint: true,
 				destructiveHint: false,
@@ -82,7 +77,7 @@ export const setSpendCapTool = (options: ToolClientOptions) =>
 			title: "Set spend cap",
 			description: "Sets org cap; admins only.",
 			inputSchema: setSpendCapInput,
-			outputSchema,
+			outputSchema: spendCapResponse,
 			annotations,
 			requiresApproval: true,
 			metadata: { ...metadata, method: "PUT", readOnlySafe: false },
@@ -101,7 +96,7 @@ export const disableSpendCapTool = (options: ToolClientOptions) =>
 			description:
 				"Disables cap, keeping amount and emails; admin required.",
 			inputSchema: spendCapInput,
-			outputSchema,
+			outputSchema: spendCapResponse,
 			annotations,
 			requiresApproval: true,
 			metadata: { ...metadata, method: "PUT", readOnlySafe: false },

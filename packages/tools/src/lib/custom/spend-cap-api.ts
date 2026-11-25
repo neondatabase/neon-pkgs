@@ -22,8 +22,9 @@ export const spendCapResponse = z.looseObject({
 	current_usage_cents: z.int().min(0).nullish(),
 	usage_observed_at: z.iso.datetime({ offset: true }).nullish(),
 	invoice_period_id: z.string().nullish(),
-	status: z.enum(["off", "active", "approaching", "reached"]).nullish(),
-	enforcement_status: z.enum(["off", "pending", "applied"]).nullish(),
+	// New server states must not hide an accepted configuration and its warning.
+	status: z.string().nullish(),
+	enforcement_status: z.string().nullish(),
 	generation: z.int().min(0).nullish(),
 	period_ends_at: z.iso.datetime({ offset: true }).nullish(),
 	monitoring_delay: z.string().nullish(),

@@ -16,6 +16,12 @@ const fullStatus = {
 	warning: "Observed usage has reached the cap; suspension is being applied.",
 };
 
+const additiveStatus = {
+	...fullStatus,
+	status: "new_server_state",
+	enforcement_status: "awaiting_target",
+};
+
 const setup = (response: object = fullStatus, status = 200) => {
 	const requests: Request[] = [];
 	const tools = createNeonTools({
@@ -61,9 +67,33 @@ describe("organization spend caps", () => {
 			{ org_id: "org-1" },
 		);
 		expect(data).not.toHaveProperty("spend_cap_enabled");
+		expect(data).not.toHaveProperty("status");
 		expect(data).not.toHaveProperty("enforcement_status");
 		expect(data).not.toHaveProperty("current_usage_cents");
 		expect(data.notice).toContain("unavailable or unsupported");
+	});
+
+	test("preserves additive GET status strings and the backend warning", async () => {
+		const { tools, requests } = setup(additiveStatus);
+		const { data } = await tools["organizations.spendingLimit.get"].execute(
+			{ org_id: "org-1" },
+		);
+		expect(data).toMatchObject(additiveStatus);
+		expect(requests.map((request) => request.method)).toEqual(["GET"]);
+	});
+
+	test("preserves a successful PUT and its warning with additive status strings", async () => {
+		const { tools, requests } = setup(additiveStatus);
+		const { data } = await tools["organizations.spendingLimit.set"].execute(
+			{
+				org_id: "org-1",
+				spending_limit_cents: 10000,
+				spend_cap_enabled: true,
+			},
+		);
+		expect(data).toMatchObject(additiveStatus);
+		expect(data.notice).toContain("Configuration accepted");
+		expect(requests.map((request) => request.method)).toEqual(["PUT"]);
 	});
 
 	test("retains null usage instead of treating missing observations as zero", async () => {
