@@ -4640,7 +4640,7 @@ export const operationFactories = {
 	"limit": zod.zQueryProjectBranchLogsBody.shape["limit"],
 	"cursor": zod.zQueryProjectBranchLogsBody.shape["cursor"],
 	"sort_order": zod.zQueryProjectBranchLogsBody.shape["sort_order"],
-	"source": zod.zQueryProjectBranchLogsBody.shape["source"].describe("Only records emitted by this Neon service. neon_auth returns 404 telemetry_not_enabled when the project's Neon Auth logs are not enabled, even when other sources return logs."),
+	"source": zod.zQueryProjectBranchLogsBody.shape["source"].describe("Only this Neon service's records. neon_auth 404s telemetry_not_enabled when the project's Neon Auth logs are off."),
 	"service_name": zod.zQueryProjectBranchLogsBody.shape["service_name"],
 	"scope_name": zod.zQueryProjectBranchLogsBody.shape["scope_name"],
 	"minimum_severity": zod.zQueryProjectBranchLogsBody.shape["minimum_severity"],
