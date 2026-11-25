@@ -1615,6 +1615,10 @@ Every subcommand except `list` takes `--org-id`. Without it, the CLI uses the or
 
 `spending-limit set` takes dollars with up to two decimals and sends cents. The threshold sends emails at 80% and 100%. Amount-only updates preserve the current suspension setting; an existing notification-only threshold stays notification-only. JSON and YAML output keep the API's `spending_limit_cents`, and `members list` keeps the API's `{ member, user }` items. Role changes, member removal, and the spending limit writes need an organization admin.
 
+The existing `spending-limit` table also shows any returned suspension warning and
+cap/acknowledgement status. Servers that omit these fields keep the amount-only
+display; JSON and YAML preserve the API response without adding display fields.
+
 `org spend-cap set --amount` accepts positive USD amounts with at most two decimal
 places, from $0.01 through $90071992547409.91. Cent conversion is exact; input or
 API integers outside JavaScript's safe range are rejected rather than rounded.

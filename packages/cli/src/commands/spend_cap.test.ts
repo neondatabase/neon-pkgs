@@ -155,6 +155,55 @@ const spendCap = (args: string[], output = "json") =>
 	runCli(["org", "spend-cap", ...args, "--org-id", "org-test"], output);
 
 describe("organization spend-cap CLI", () => {
+	it("legacy amount-only set shows a warning without inventing unavailable acknowledgement status", async () => {
+		current = {
+			spending_limit_cents: 10000,
+			warning:
+				"Observed usage has reached the new cap; services will be suspended.",
+		};
+		const result = await runCli(
+			["orgs", "spending-limit", "set", "50", "--org-id", "org-test"],
+			"table",
+		);
+		expect(result.code, result.stderr).toBe(0);
+		expect(result.stdout).toContain(current.warning);
+		expect(result.stdout).not.toContain("Enforcement Status");
+		expect(result.stdout).not.toContain("Enforcement Note");
+		expect(requests[0].body).toEqual({ spending_limit_cents: 5000 });
+	});
+
+	it.each([
+		"table",
+		"json",
+		"yaml",
+	])("legacy amount-only set reports a successful suspension warning and acknowledgement in %s", async (output) => {
+		current.current_usage_cents = 10000;
+		current.warning =
+			"Observed usage has reached the new cap; services will be suspended.";
+		const result = await runCli(
+			["orgs", "spending-limit", "set", "50", "--org-id", "org-test"],
+			output,
+		);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests.map((req) => req.method)).toEqual(["PUT"]);
+		expect(requests[0].body).toEqual({ spending_limit_cents: 5000 });
+		expect(current.spend_cap_enabled).toBe(true);
+		if (output === "table") {
+			expect(result.stdout).toContain("$50.00");
+			expect(result.stdout).toContain(current.warning);
+			expect(result.stdout).toContain("reached");
+			expect(result.stdout).toContain("pending");
+			expect(result.stdout).toContain("does not confirm every workload");
+		} else {
+			const data =
+				output === "json"
+					? JSON.parse(result.stdout)
+					: YAML.parse(result.stdout);
+			expect(data).toEqual(current);
+			expect(result.stderr).toBe("");
+		}
+	});
+
 	it.each([
 		"json",
 		"yaml",

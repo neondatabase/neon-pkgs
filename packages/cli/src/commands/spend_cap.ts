@@ -6,7 +6,11 @@ import {
 import type { CommonProps } from "../types.js";
 import { fillSingleOrg } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
-import { formatUsd, parseUsdCents } from "./orgs.js";
+import {
+	formatUsd,
+	parseUsdCents,
+	SPEND_CAP_ACKNOWLEDGEMENT_NOTICE,
+} from "./orgs.js";
 
 type SpendCapProps = CommonProps & { orgId?: string };
 const resolveOrg = (props: SpendCapProps) =>
@@ -29,7 +33,7 @@ const writeSpendCap = (
 ) => {
 	const notice = [
 		...(saved ? ["Configuration accepted."] : []),
-		"Restrictions and clears are acknowledged asynchronously; pending means control planes have not yet acknowledged the current decision. Applied does not confirm every workload has finished stopping or resuming.",
+		SPEND_CAP_ACKNOWLEDGEMENT_NOTICE,
 		"Usage detection can lag by 1-2 hours; this is not a guaranteed maximum bill. Storage charges continue.",
 		"Only the current open invoice counts. Billing resets on the first UTC calendar day of each month.",
 	].join(" ");

@@ -4,13 +4,13 @@ import type {
 	MemberRole,
 	MemberWithUser,
 	Organization,
-	SpendingLimitResponse,
 } from "@neon/sdk";
 import chalk from "chalk";
 import type yargs from "yargs";
 
 import { readContextFile } from "../context.js";
 import { log } from "../log.js";
+import type { SpendingLimitResponse } from "../spend_caps_api.js";
 import type { CommonProps } from "../types.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
@@ -26,7 +26,16 @@ const ORG_DETAIL_FIELDS = [
 const MEMBER_TABLE_FIELDS = ["id", "email", "role", "joined_at"] as const;
 const MEMBER_FIELDS = ["id", "user_id", "role", "joined_at"] as const;
 const INVITATION_FIELDS = ["id", "email", "role", "invited_at"] as const;
-const SPENDING_LIMIT_TABLE_FIELDS = ["monthly_limit"] as const;
+const SPENDING_LIMIT_TABLE_FIELDS = [
+	"monthly_limit",
+	"status",
+	"enforcement_status",
+	"warning",
+	"enforcement_note",
+] as const;
+
+export const SPEND_CAP_ACKNOWLEDGEMENT_NOTICE =
+	"Restrictions and clears are acknowledged asynchronously; pending means control planes have not yet acknowledged the current decision. Applied does not confirm every workload has finished stopping or resuming.";
 
 const MEMBER_ROLES = [
 	"admin",
@@ -500,7 +509,16 @@ const writeSpendingLimit = (
 	}
 	const cents = limit.spending_limit_cents;
 	writer(props).end(
-		{ monthly_limit: cents === null ? "Not set" : formatUsd(cents) },
+		{
+			monthly_limit: cents === null ? "Not set" : formatUsd(cents),
+			status: limit.status,
+			enforcement_status: limit.enforcement_status,
+			warning: limit.warning,
+			enforcement_note:
+				limit.enforcement_status === undefined
+					? undefined
+					: SPEND_CAP_ACKNOWLEDGEMENT_NOTICE,
+		},
 		{
 			fields: SPENDING_LIMIT_TABLE_FIELDS,
 			title: `Spending limit for ${orgId}`,
