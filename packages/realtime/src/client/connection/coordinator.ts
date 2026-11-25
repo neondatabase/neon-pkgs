@@ -177,9 +177,9 @@ export class ConnectionCoordinator {
 					: options.heartbeat;
 			this.heartbeat = new ConnectionHeartbeat(heartbeatOptions, {
 				sendPing: (token) => {
-					const sent = this.send({ type: "ping", token });
-					if (sent) this.events.connection.heartbeatPingSent();
-					return sent;
+					if (this.send({ type: "ping", token })) {
+						this.events.connection.heartbeatPingSent();
+					}
 				},
 				timedOut: () => {
 					this.events.connection.heartbeatTimedOut();
@@ -328,6 +328,13 @@ export class ConnectionCoordinator {
 			this.socket?.readyState === SOCKET_OPEN
 		)
 			return;
+		// The current socket stopped being open without reporting close. Retire
+		// it before replacing it, so its heartbeat stops and every subscription
+		// resubscribes on the socket the scheduled reconnect opens.
+		if (this.socket) {
+			this.closeSocket(APPLICATION_CLOSE, "connection not open");
+			return;
+		}
 		this.cancelReconnect();
 		this.ready = false;
 		this.events.connection.attemptStarted();
