@@ -267,6 +267,14 @@ await tools["api.call"].execute({
 
 Neon's feedback reporting counts `manual_test`, `neon_agent`, `neon_cli`, `neon_mcp`, and `neon_website` by name and any other `feedbackSource`, including the default, as `other`.
 
+## Organization spend caps
+
+`organizations.spendingLimit.get` reads the notification threshold, observed current-invoice usage and optional enforcement status. `organizations.spendingLimit.set` takes a positive safe integer `spending_limit_cents` in USD cents (10000 means $100.00). Only explicit `spend_cap_enabled: true` opts in to suspension; omitting it preserves the existing setting, including notifications-only limits. Setting `false`, or calling `organizations.spendingLimit.disable`, retains the amount and emails. The disable tool uses GET then PUT, never DELETE; `organizations.spendingLimit.delete` removes notifications as well.
+
+Writes require Organization Admin permission from the API. This additive contract needs the organization spend-cap API rollout; no SDK schema upgrade is required. Missing status is unavailable or unsupported, never proof enforcement is off or applied. Results preserve optional status fields and include operational `notice` alongside any backend warning. Accepted saves do not confirm workload shutdown or recovery: `pending` waits for control-plane acknowledgements, and `applied` does not mean all workloads finished stopping or resuming. Other restrictions may remain.
+
+Billing resets on the first UTC calendar day of each month. Only the current open invoice counts, including when a month contains multiple invoices. Detection can lag by 1-2 hours, actual bills can exceed the threshold, and storage charges continue during suspension. Deleting stored objects requires lifting the restriction. The tools do not compute usage or enforcement decisions. Unsafe int64 values outside JavaScript's exact integer range are rejected rather than rounded.
+
 ## Read-only
 
 `metadata.readOnlySafe` is `true` when a tool changes no Neon resource and returns no connection string or role password: a `GET` that needs no approval, `logs.query`, the SQL tools that run one statement in a `READ ONLY` transaction, and the docs, feedback, search, and incidents tools. `postgres.connectionString` is a `GET` but not read-only safe, because its URI carries a role password that works against the read-write compute.

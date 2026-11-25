@@ -158,6 +158,7 @@ export const toolIds = [
 	"organizations.spendingLimit.get",
 	"organizations.spendingLimit.set",
 	"organizations.spendingLimit.delete",
+	"organizations.spendingLimit.disable",
 	"organizations.apiKeys.list",
 	"organizations.apiKeys.create",
 	"organizations.apiKeys.revoke",
@@ -189,6 +190,7 @@ export const toolIds = [
 
 /** Tools that compose several requests and are not a single `NeonClient` method. */
 export const customToolIds = [
+	"organizations.spendingLimit.disable",
 	"auth.getConfig",
 	"resources.search",
 	"sql.run",

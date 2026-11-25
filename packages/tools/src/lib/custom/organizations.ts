@@ -32,7 +32,7 @@ export const userOrganizationsTool = (options: ToolClientOptions) =>
 			id: publishedId("user.organizations"),
 			title: "List organizations for the current user",
 			description:
-				"Lists the organizations the user belongs to; an organization API key gets its own organization. search filters by name or id.",
+				"Lists user orgs, or the key's org; search matches name or id.",
 			inputSchema: userOrganizationsInputSchema,
 			outputSchema: z.array(output.Organization),
 			annotations: { readOnlyHint: true, openWorldHint: false },
