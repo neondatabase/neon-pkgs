@@ -52,7 +52,7 @@ export const FUNCTION_SLUG = "hello";
 export const FUNCTION_NAME = "Hello World";
 export const FUNCTION_FILENAME = "hello.ts";
 
-/** Bucket scaffolded for `object-storage`. Neon's Object Storage guides read and write this name. */
+/** Neon's Object Storage guides use this bucket name. */
 export const BUCKET_NAME = "uploads";
 
 /**

@@ -636,7 +636,7 @@ describe("config init", () => {
 
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
 		expect(content).toContain("aiGateway: true");
-		expect(content).toContain('assets: { access: "private" }');
+		expect(content).toContain('uploads: { access: "private" }');
 	});
 
 	test("--services realtime runs offline end to end", async ({
