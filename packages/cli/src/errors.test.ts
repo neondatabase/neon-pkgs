@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { formatCheckoutPolicyFailure } from "./commands/checkout.js";
 import { parseEnvPullKeys } from "./env_services.js";
 import { isNetworkError, matchErrorCode } from "./errors.js";
 import { pluginsGitError } from "./plugins/plan.js";
@@ -84,6 +85,19 @@ describe("matchErrorCode", () => {
 			[
 				"Could not install the Neon dependencies with npm (ERESOLVE).",
 				"DEPENDENCY_INSTALL_FAILED",
+			],
+			[
+				'These function deployments were not confirmed complete; every other plan step was applied:\n  • "api" deployment 2 failed: boom',
+				"FUNCTION_BUILD_UNFINISHED",
+			],
+			[
+				formatCheckoutPolicyFailure({
+					branchName: "dev",
+					branchId: "br-dev",
+					failure:
+						'These function deployments were not confirmed complete; every other plan step was applied:\n  • "api" deployment 1 did not complete within 600s',
+				}),
+				"FUNCTION_BUILD_UNFINISHED",
 			],
 		];
 		for (const [message, code] of cases) {

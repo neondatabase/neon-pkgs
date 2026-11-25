@@ -34,6 +34,7 @@ export type ErrorCode =
 	| "LEGACY_FUNCTION_ENV_KEY"
 	| "PROJECT_NOT_LINKED"
 	| "AMBIGUOUS_BRANCH_ROLE"
+	| "FUNCTION_BUILD_UNFINISHED"
 	| "UNKNOWN_ERROR";
 
 // First match wins: a skills CLI failure caused by a missing git is GIT_NOT_FOUND.
@@ -72,6 +73,11 @@ const ERROR_MATCHERS = [
 	[
 		/ roles and none is "neondb_owner"; cannot auto-pick\./,
 		"AMBIGUOUS_BRANCH_ROLE",
+	],
+	// Unanchored: checkout wraps the apply error in its own sentence.
+	[
+		/function deployments were not confirmed complete/,
+		"FUNCTION_BUILD_UNFINISHED",
 	],
 ] as const;
 
