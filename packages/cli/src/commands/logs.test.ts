@@ -292,6 +292,46 @@ describe("logs", () => {
 		});
 	});
 
+	test("query accepts --source functions as the API source function", async ({
+		testCliCommand,
+	}) => {
+		const sink = join(TEST_TMP, "query-functions-alias.json");
+		process.env.NEONCTL_TEST_LOGS_QUERY_SINK = sink;
+
+		await testCliCommand(
+			["logs", "query", "--source", "functions", ...SCOPE],
+			{
+				mockDir: "single_org",
+				snapshot: false,
+			},
+		);
+
+		expect(JSON.parse(readFileSync(sink, "utf8"))).toEqual({
+			limit: 100,
+			source: "function",
+		});
+	});
+
+	test("query accepts --search as an alias of --body-contains", async ({
+		testCliCommand,
+	}) => {
+		const sink = join(TEST_TMP, "query-search-alias.json");
+		process.env.NEONCTL_TEST_LOGS_QUERY_SINK = sink;
+
+		await testCliCommand(
+			["logs", "query", "--search", "timeout", ...SCOPE],
+			{
+				mockDir: "single_org",
+				snapshot: false,
+			},
+		);
+
+		expect(JSON.parse(readFileSync(sink, "utf8"))).toEqual({
+			limit: 100,
+			body_contains: "timeout",
+		});
+	});
+
 	test("query prints neon_auth records and sources this release does not know", async ({
 		testCliCommand,
 	}) => {
