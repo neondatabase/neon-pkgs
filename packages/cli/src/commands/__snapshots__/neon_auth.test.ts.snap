@@ -7,14 +7,28 @@ Neon Auth logs export disabled
 "
 `;
 
+exports[`neon-auth > config logs-export > disable reports a branch that isn't on Better Auth 1`] = `""`;
+
 exports[`neon-auth > config logs-export > enable 1`] = `
 "
-Neon Auth logs export enabled. Read the events with neon logs query --source neon_auth
+Neon Auth logs export enabled. Read the exported events with neon logs query --source neon_auth. A query covers at most the last 7 days.
 
 "
 `;
 
+exports[`neon-auth > config logs-export > enable passes any other 400 through 1`] = `""`;
+
 exports[`neon-auth > config logs-export > enable reports 404 as not available 1`] = `""`;
+
+exports[`neon-auth > config logs-export > enable reports 409 1`] = `""`;
+
+exports[`neon-auth > config logs-export > enable reports 423 1`] = `""`;
+
+exports[`neon-auth > config logs-export > enable reports 429 1`] = `""`;
+
+exports[`neon-auth > config logs-export > enable reports 503 1`] = `""`;
+
+exports[`neon-auth > config logs-export > enable reports a branch that isn't on Better Auth 1`] = `""`;
 
 exports[`neon-auth > config logs-export > get when disabled 1`] = `
 "
@@ -29,10 +43,24 @@ exports[`neon-auth > config logs-export > get when enabled 1`] = `
 "
 `;
 
+exports[`neon-auth > config logs-export > get when enabled, as json 1`] = `
+"{
+  "enabled": true
+}
+"
+`;
+
 exports[`neon-auth > config logs-export > get when the project has no logs export 1`] = `
 "
 Neon Auth logs export isn't available for this project. During the beta it requires Managed Better Auth in a supported region.
 
+"
+`;
+
+exports[`neon-auth > config logs-export > get when the project has no logs export, as json 1`] = `
+"{
+  "available": false
+}
 "
 `;
 

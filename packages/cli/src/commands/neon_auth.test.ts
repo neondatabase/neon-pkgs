@@ -2632,7 +2632,7 @@ describe("neon-auth", () => {
 		test("get when the project has no logs export", async ({
 			testCliCommand,
 		}) => {
-			await testCliCommand(logsExportArgs("get"));
+			await testCliCommand(logsExportArgs("get"), { output: "table" });
 		});
 
 		test("enable", async ({ testCliCommand }) => {
@@ -2649,6 +2649,69 @@ describe("neon-auth", () => {
 				onRequest: (r) => requests.push(r),
 			});
 			expect(logsExportBodies(requests)).toEqual([{ enabled: false }]);
+		});
+
+		test("get when the project has no logs export, as json", async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(logsExportArgs("get"), { output: "json" });
+		});
+
+		test("get when enabled, as json", async ({ testCliCommand }) => {
+			await testCliCommand(logsExportArgs("get"), {
+				mockDir: "neon-auth-logs-export-enabled",
+				output: "json",
+			});
+		});
+
+		test.for([
+			[
+				"409",
+				"ERROR: Neon Auth is busy with another change on this branch. Try again in a moment.",
+			],
+			[
+				"423",
+				"ERROR: Neon Auth is still busy with another change on this branch after retrying. Try again later.",
+			],
+			[
+				"429",
+				"ERROR: Neon Auth logs export is still unavailable after retrying. Try again later.",
+			],
+			[
+				"503",
+				"ERROR: Neon Auth logs export is still unavailable after retrying. Try again later.",
+			],
+		])("enable reports %s", async ([status, stderr], {
+			testCliCommand,
+		}) => {
+			await testCliCommand(logsExportArgs("enable"), {
+				mockDir: `neon-auth-logs-export-${status}`,
+				code: 1,
+				stderr,
+			});
+		});
+
+		test.for([
+			"enable",
+			"disable",
+		])("%s reports a branch that isn't on Better Auth", async (sub, {
+			testCliCommand,
+		}) => {
+			await testCliCommand(logsExportArgs(sub), {
+				mockDir: "neon-auth-logs-export-not-better-auth",
+				code: 1,
+				stderr: "ERROR: Logs export is only available for Managed Better Auth branches.",
+			});
+		});
+
+		test("enable passes any other 400 through", async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(logsExportArgs("enable"), {
+				mockDir: "neon-auth-logs-export-bad-request",
+				code: 1,
+				stderr: "ERROR: invalid request body",
+			});
 		});
 
 		test("enable reports 404 as not available", async ({
