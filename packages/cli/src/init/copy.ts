@@ -281,10 +281,12 @@ export const installFailedNext = (
 	command: string,
 	envPull: boolean,
 	reason: string,
+	hint?: string,
 ): { heading: string; body: string; next: string[] } => ({
 	heading: HEADING_FAILED,
 	body: reason,
 	next: [
+		...(hint ? [hint] : []),
 		"Install the dependencies, then run neon init again:",
 		command,
 		...(envPull
