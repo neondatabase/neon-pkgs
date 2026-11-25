@@ -33,6 +33,7 @@ export type ErrorCode =
 	| "DEPENDENCY_INSTALL_FAILED"
 	| "LEGACY_FUNCTION_ENV_KEY"
 	| "PROJECT_NOT_LINKED"
+	| "FUNCTION_BUILD_UNFINISHED"
 	| "UNKNOWN_ERROR";
 
 // First match wins: a skills CLI failure caused by a missing git is GIT_NOT_FOUND.
@@ -68,6 +69,11 @@ const ERROR_MATCHERS = [
 		"LEGACY_FUNCTION_ENV_KEY",
 	],
 	[/^No Neon project is linked here/, "PROJECT_NOT_LINKED"],
+	// Unanchored: checkout wraps the apply error in its own sentence.
+	[
+		/function deployments were not confirmed complete/,
+		"FUNCTION_BUILD_UNFINISHED",
+	],
 ] as const;
 
 export const matchErrorCode = (message?: string): ErrorCode => {

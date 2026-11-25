@@ -254,6 +254,8 @@ export interface NeonFunctionDeploymentSnapshot {
 	/** The deployment id (monotonic per function). */
 	id: number;
 	status: "pending" | "building" | "completed" | "failed";
+	/** The platform's reason, present only when `status` is `"failed"`. */
+	error?: string;
 }
 
 interface NeonTriggerSnapshotBase {
@@ -621,8 +623,9 @@ export interface NeonApi {
 
 	/**
 	 * Read one function, including {@link NeonFunctionSnapshot.currentDeployment}.
-	 * Optional so a pre-feature adapter still type-checks; retarget waits on it
-	 * before deleting the previous custom-domain registration.
+	 * Optional so a pre-feature adapter still type-checks. Apply polls it until every
+	 * deployment it submitted reports `completed` or `failed`, so an implementation must
+	 * fill in `currentDeployment`; without the method, apply warns and does not wait.
 	 */
 	getBranchFunction?(
 		projectId: string,

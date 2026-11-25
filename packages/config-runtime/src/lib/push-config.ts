@@ -9,9 +9,12 @@ import {
 	diffConfig,
 	ErrorCode,
 	type FunctionEnvTarget,
+	isPlatformError,
 	type NeonApi,
 	type NeonBranchSnapshot,
 	type NeonCustomDomainSnapshot,
+	type NeonFunctionDeploymentSnapshot,
+	type NeonFunctionSnapshot,
 	type PlanStep,
 	PlatformError,
 	PushAbortedError,
@@ -114,6 +117,15 @@ export interface PushConfigOptions {
 	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
 	/**
+	 * Wait for every function deployment this push submits to finish building, and throw
+	 * when one fails or does not complete in time. Defaults to `true`. With `false`, the
+	 * push returns once each deployment is accepted, and a new function's URL answers 404
+	 * until its build finishes. Retargeting a custom domain always waits for its function.
+	 */
+	waitForFunctionBuilds?: boolean;
+	/** Called once with the function slugs before waiting for their builds. */
+	onWaitForFunctionBuilds?: (slugs: readonly string[]) => void;
+	/**
 	 * When `true`, compute the full plan against the live remote state but **do not
 	 * execute any mutations**. The resulting `PushResult.applied` array records every
 	 * change that *would* run on a real push (with the same action / identifier / details
@@ -180,7 +192,7 @@ function withDeployFunctionEnv(
  *
  * Filesystem- and env-agnostic: the caller supplies an already-validated `Config` object
  * (from `defineConfig` / `loadConfigFromFile`) and explicit `projectId` + `branch` in
- * `options`. `pushConfig` performs no `.neon` lookups and reads no `NEON_*` env vars except the API credential/host resolution documented on `apiKey`/`apiHost`.
+ * `options`. `pushConfig` performs no `.neon` lookups and reads no `NEON_*` env vars except the API credential/host resolution documented on `apiKey`/`apiHost` and `NEON_FUNCTIONS_POLL_INTERVAL_MS`/`NEON_FUNCTIONS_POLL_TIMEOUT_MS`, which pace the wait for function builds.
  *
  * It will **not** create a project or branch — both must already exist on Neon.
  */
@@ -350,6 +362,13 @@ export async function pushConfig(
 			? synthesizeAppliedChange(step)
 			: await applyStep(step, ctx);
 		applied.push(change);
+	}
+	if (!dryRun && options.waitForFunctionBuilds !== false) {
+		await waitForFunctionBuilds(
+			ctx,
+			branch.id,
+			options.onWaitForFunctionBuilds,
+		);
 	}
 
 	// Surface each deployed function's invocation URL on its applied change so callers
@@ -1144,6 +1163,84 @@ function functionSlugFromIdentifier(identifier: string): string | undefined {
 		: undefined;
 }
 
+type DeploymentOutcome =
+	| { kind: "completed" }
+	| { kind: "failed"; error?: string }
+	| { kind: "superseded"; currentId: number }
+	| {
+			kind: "timeout";
+			timeoutMs: number;
+			lastSeen?: NeonFunctionDeploymentSnapshot;
+	  };
+
+async function pollFunctionDeployment(args: {
+	api: NeonApi;
+	get: NonNullable<NeonApi["getBranchFunction"]>;
+	projectId: string;
+	branchId: string;
+	slug: string;
+	deploymentId: number;
+}): Promise<DeploymentOutcome> {
+	const intervalMs =
+		Number(process.env.NEON_FUNCTIONS_POLL_INTERVAL_MS) || 2000;
+	const timeoutMs =
+		Number(process.env.NEON_FUNCTIONS_POLL_TIMEOUT_MS) || 600_000;
+	const deadline = Date.now() + timeoutMs;
+	const sleep = () =>
+		new Promise((resolve) => setTimeout(resolve, intervalMs));
+	for (;;) {
+		let fn: NeonFunctionSnapshot;
+		try {
+			fn = await args.get.call(
+				args.api,
+				args.projectId,
+				args.branchId,
+				args.slug,
+			);
+		} catch (err) {
+			// The deployment was already accepted, so a transient read failure says nothing about it.
+			if (!isTransientReadError(err) || Date.now() >= deadline) throw err;
+			await sleep();
+			continue;
+		}
+		const dep = fn.currentDeployment;
+		// GET can still report the previous deployment after this apply's POST returns.
+		if (dep !== undefined && dep.id > args.deploymentId) {
+			return { kind: "superseded", currentId: dep.id };
+		}
+		if (dep !== undefined && dep.id === args.deploymentId) {
+			if (dep.status === "completed") return { kind: "completed" };
+			if (dep.status === "failed") {
+				return dep.error === undefined
+					? { kind: "failed" }
+					: { kind: "failed", error: dep.error };
+			}
+		}
+		if (Date.now() >= deadline) {
+			return dep === undefined
+				? { kind: "timeout", timeoutMs }
+				: { kind: "timeout", timeoutMs, lastSeen: dep };
+		}
+		await sleep();
+	}
+}
+
+function isTransientReadError(err: unknown): boolean {
+	if (!isPlatformError(err)) return false;
+	if (
+		err.code === ErrorCode.NetworkError ||
+		err.code === ErrorCode.RateLimited
+	) {
+		return true;
+	}
+	const status = err.details.status;
+	return (
+		err.code === ErrorCode.ServerError &&
+		typeof status === "number" &&
+		status >= 500
+	);
+}
+
 async function waitForCompletedFunctionDeployment(args: {
 	api: NeonApi;
 	projectId: string;
@@ -1158,42 +1255,138 @@ async function waitForCompletedFunctionDeployment(args: {
 			`Cannot retarget a custom domain onto ${JSON.stringify(args.slug)}: this NeonApi adapter does not implement getBranchFunction, so apply cannot confirm the function finished deploying.`,
 		);
 	}
-	const intervalMs =
-		Number(process.env.NEON_FUNCTIONS_POLL_INTERVAL_MS) || 2000;
-	const timeoutMs =
-		Number(process.env.NEON_FUNCTIONS_POLL_TIMEOUT_MS) || 600_000;
-	const deadline = Date.now() + timeoutMs;
-	for (;;) {
-		const fn = await get.call(
-			args.api,
-			args.projectId,
-			args.branchId,
-			args.slug,
-		);
-		const dep = fn.currentDeployment;
-		// GET can still report the previous deployment after this apply's POST returns.
-		if (dep !== undefined && dep.id > args.deploymentId) {
+	const outcome = await pollFunctionDeployment({ ...args, get });
+	switch (outcome.kind) {
+		case "completed":
+			return;
+		case "superseded":
 			throw new PlatformError(
 				ErrorCode.ServerError,
-				`Cannot retarget a custom domain onto ${JSON.stringify(args.slug)}: current deployment is ${dep.id}, this apply submitted ${args.deploymentId}; left the previous custom-domain registration in place.`,
+				`Cannot retarget a custom domain onto ${JSON.stringify(args.slug)}: current deployment is ${outcome.currentId}, this apply submitted ${args.deploymentId}; left the previous custom-domain registration in place.`,
 			);
-		}
-		if (dep !== undefined && dep.id === args.deploymentId) {
-			if (dep.status === "completed") return;
-			if (dep.status === "failed") {
-				throw new PlatformError(
-					ErrorCode.ServerError,
-					`Deployment of function ${JSON.stringify(args.slug)} failed; left the previous custom-domain registration in place.`,
-				);
-			}
-		}
-		if (Date.now() >= deadline) {
+		case "failed":
+			throw new PlatformError(
+				ErrorCode.ServerError,
+				`Deployment of function ${JSON.stringify(args.slug)} failed${outcome.error === undefined ? "" : ` (${outcome.error})`}; left the previous custom-domain registration in place.`,
+			);
+		case "timeout":
 			throw new PlatformError(
 				ErrorCode.ServerError,
 				`Timed out waiting for function ${JSON.stringify(args.slug)} to finish deploying; left the previous custom-domain registration in place.`,
 			);
+	}
+}
+
+/**
+ * Waits for every deployment this apply submitted to finish building: until then the
+ * invocation URL of a new function answers 404, and a failed build would otherwise be
+ * reported as applied.
+ */
+async function waitForFunctionBuilds(
+	ctx: ApplyContext,
+	branchId: string,
+	onWait: PushConfigOptions["onWaitForFunctionBuilds"],
+): Promise<void> {
+	if (ctx.deploymentIdBySlug.size === 0) return;
+	const get = ctx.api.getBranchFunction;
+	if (!get) {
+		ctx.warnings.push(
+			`Did not wait for ${[...ctx.deploymentIdBySlug.keys()].map((slug) => JSON.stringify(slug)).join(", ")} to finish building: this NeonApi adapter does not implement getBranchFunction.`,
+		);
+		return;
+	}
+	const deployments = [...ctx.deploymentIdBySlug];
+	onWait?.(deployments.map(([slug]) => slug));
+	// allSettled: one unreadable status must neither hide the other outcomes nor leave
+	// their polls running after apply has already thrown.
+	const settled = await Promise.allSettled(
+		deployments.map(([slug, deploymentId]) =>
+			pollFunctionDeployment({
+				api: ctx.api,
+				get,
+				projectId: ctx.remoteProjectId,
+				branchId,
+				slug,
+				deploymentId,
+			}),
+		),
+	);
+	const unfinished = settled.flatMap(
+		(result, index): UnfinishedDeployment[] => {
+			const [slug, deploymentId] = deployments[index];
+			if (result.status === "rejected") {
+				const error =
+					result.reason instanceof Error
+						? result.reason.message
+						: String(result.reason);
+				return [
+					{
+						slug,
+						deploymentId,
+						outcome: { kind: "unreadable", error },
+					},
+				];
+			}
+			return result.value.kind === "completed"
+				? []
+				: [{ slug, deploymentId, outcome: result.value }];
+		},
+	);
+	if (unfinished.length === 0) return;
+	const firstReadError = settled.find(
+		(result) => result.status === "rejected",
+	);
+	throw new PlatformError(
+		ErrorCode.ServerError,
+		[
+			"These function deployments were not confirmed complete; every other plan step was applied:",
+			...unfinished.map(
+				({ slug, deploymentId, outcome }) =>
+					`  • ${JSON.stringify(slug)} deployment ${deploymentId} ${describeUnfinished(outcome)}`,
+			),
+		].join("\n"),
+		{
+			...(firstReadError ? { cause: firstReadError.reason } : {}),
+			details: {
+				deployments: unfinished.map(
+					({ slug, deploymentId, outcome }) => ({
+						slug,
+						deploymentId,
+						...outcome,
+					}),
+				),
+			},
+		},
+	);
+}
+
+type UnfinishedOutcome =
+	| Exclude<DeploymentOutcome, { kind: "completed" }>
+	| { kind: "unreadable"; error: string };
+
+type UnfinishedDeployment = {
+	slug: string;
+	deploymentId: number;
+	outcome: UnfinishedOutcome;
+};
+
+function describeUnfinished(outcome: UnfinishedOutcome): string {
+	switch (outcome.kind) {
+		case "failed":
+			return outcome.error === undefined
+				? "failed"
+				: `failed: ${outcome.error}`;
+		case "superseded":
+			return `was replaced by deployment ${outcome.currentId} before it finished`;
+		case "timeout": {
+			const seconds = Math.round(outcome.timeoutMs / 1000);
+			const lastSeen = outcome.lastSeen
+				? ` (last seen: deployment ${outcome.lastSeen.id} ${outcome.lastSeen.status})`
+				: " (no deployment reported yet)";
+			return `did not complete within ${seconds}s${lastSeen}`;
 		}
-		await new Promise((resolve) => setTimeout(resolve, intervalMs));
+		case "unreadable":
+			return `has an unknown status: ${outcome.error}`;
 	}
 }
 
