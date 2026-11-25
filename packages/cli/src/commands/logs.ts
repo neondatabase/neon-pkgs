@@ -49,8 +49,7 @@ const LOG_SOURCE_CHOICES = [
 const parseLogSource = (raw: unknown): ProjectBranchLogSource | undefined => {
 	const value = single("source")(raw);
 	if (value === undefined) return undefined;
-	// @ts-expect-error CLI tsconfig targets ES2020; Object.hasOwn is typed in ES2022.
-	if (Object.hasOwn(LOG_SOURCE_ALIASES, value)) {
+	if (Object.prototype.hasOwnProperty.call(LOG_SOURCE_ALIASES, value)) {
 		return LOG_SOURCE_ALIASES[value as keyof typeof LOG_SOURCE_ALIASES];
 	}
 	return value as ProjectBranchLogSource;
