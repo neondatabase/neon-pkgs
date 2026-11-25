@@ -1,4 +1,5 @@
 import type * as z from "zod";
+import { toolDescriptions } from "../../descriptions.gen.js";
 import {
 	bindTool,
 	publishedId,
@@ -12,6 +13,7 @@ import {
 } from "./spend-cap-api.js";
 
 const notices = [
+	"For new limits, omitted spend_cap_enabled defaults to suspension when spend caps are available for the organization. For existing limits, omission preserves saved enforcement, including notifications-only limits. Explicit false creates notifications only and does not require observed usage; a new enabled limit requires observed current-invoice usage.",
 	"Usage detection can lag by 1-2 hours; this is not a guaranteed maximum bill. Storage charges continue during suspension.",
 	"Billing resets on the first UTC calendar day of each month. Only the current open invoice counts, including when plan changes create multiple invoices in one month.",
 	"Missing status fields are unavailable or unsupported; they do not prove enforcement is off or applied.",
@@ -75,7 +77,9 @@ export const setSpendCapTool = (options: ToolClientOptions) =>
 			operationId: "organizations.spendingLimit.set",
 			id: publishedId("organizations.spendingLimit.set"),
 			title: "Set spend cap",
-			description: "Sets org cap; admins only.",
+			description:
+				toolDescriptions["organizations.spendingLimit.set"] ??
+				"Sets org cap; admins only.",
 			inputSchema: setSpendCapInput,
 			outputSchema: spendCapResponse,
 			annotations,

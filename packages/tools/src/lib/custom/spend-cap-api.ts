@@ -13,7 +13,9 @@ export const setSpendCapInput = spendCapInput.extend({
 	spend_cap_enabled: z
 		.boolean()
 		.optional()
-		.describe("True opts in; false keeps emails. Omit preserves."),
+		.describe(
+			"Omit: new suspension on when available; existing preserves. False: emails only; true: suspension.",
+		),
 });
 
 export const spendCapResponse = z.looseObject({
