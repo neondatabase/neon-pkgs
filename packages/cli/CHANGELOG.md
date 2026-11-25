@@ -1,5 +1,21 @@
 # neon
 
+## 9.10.0
+
+### Minor Changes
+
+- 438d8c2: `neon deploy`, `neon checkout`, `neon config apply`, and `apply()` now wait for every function deployment they submit to finish building before reporting success, and fail with the platform's reason when a build fails. Previously they returned while the build was still running, so the printed function URL answered 404 until it finished. `neon deploy --no-wait` (and `waitForFunctionBuilds: false` on `apply()`) keeps the previous behavior.
+- 6b3b105: `neon env pull --role-name <role>` connects `DATABASE_URL` and `DATABASE_URL_UNPOOLED` as `<role>`. Use it on a branch with several roles and no `neondb_owner`, where the role can't be picked automatically; the error on those branches now names the flag.
+- b0e5d16: Add `neon neon-auth config logs-export get|enable|disable` to turn on export of Neon Auth events to Neon logs (beta). `get` reports whether export is on, or that the project can't use it yet (`{"available": false}` with `-o json|yaml`): during the beta it requires Managed Better Auth in a supported region. Enabling or disabling on a branch that isn't on Better Auth says so. Read the exported events with `neon logs query --source neon_auth`. A query covers at most the last 7 days.
+
+### Patch Changes
+
+- 539c12d: `neon logs query` accepts `--source functions` (normalized to the API value `function`) and `--search` as an alias of `--body-contains`, matching the forms agents try first.
+- 647399f: `neon env pull`, `neon link`, and `neon checkout` now write the branch's `DATABASE_URL` and other available variables when `neon.ts` declares a bucket or service the branch does not have yet, and name what `neon deploy` still has to provision. Previously the pull failed, and `link` / `checkout` left the previous branch's values in `.env.local`. Undeployed triggers no longer block `neon env pull` or `neon dev`.
+- Updated dependencies [438d8c2]
+  - @neon/config-runtime@1.13.0
+  - @neon/config@1.14.8
+
 ## 9.9.10
 
 ### Patch Changes
