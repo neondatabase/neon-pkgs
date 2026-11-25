@@ -332,6 +332,29 @@ describe("logs", () => {
 		});
 	});
 
+	test("query rejects --logql together with --search", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"logs",
+				"query",
+				"--logql",
+				'{entity_type="function"}',
+				"--search",
+				"timeout",
+				...SCOPE,
+			],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: expect.stringContaining(
+					"Arguments logql and body-contains are mutually exclusive",
+				),
+			},
+		);
+	});
+
 	test("query prints neon_auth records and sources this release does not know", async ({
 		testCliCommand,
 	}) => {
@@ -757,6 +780,29 @@ describe("logs", () => {
 
 		expect(JSON.parse(readFileSync(sink, "utf8")).query).toEqual({
 			source: "neon_auth",
+		});
+	});
+
+	test("field-values accepts --source functions as the API source function", async ({
+		testCliCommand,
+	}) => {
+		const sink = join(TEST_TMP, "field-values-functions-alias.json");
+		process.env.NEONCTL_TEST_LOGS_FIELD_VALUES_SINK = sink;
+
+		await testCliCommand(
+			[
+				"logs",
+				"field-values",
+				"service_name",
+				"--source",
+				"functions",
+				...SCOPE,
+			],
+			{ mockDir: "single_org", snapshot: false },
+		);
+
+		expect(JSON.parse(readFileSync(sink, "utf8")).query).toEqual({
+			source: "function",
 		});
 	});
 

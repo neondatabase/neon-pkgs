@@ -49,7 +49,8 @@ const LOG_SOURCE_CHOICES = [
 const parseLogSource = (raw: unknown): ProjectBranchLogSource | undefined => {
 	const value = single("source")(raw);
 	if (value === undefined) return undefined;
-	if (value in LOG_SOURCE_ALIASES) {
+	// @ts-expect-error CLI tsconfig targets ES2020; Object.hasOwn is typed in ES2022.
+	if (Object.hasOwn(LOG_SOURCE_ALIASES, value)) {
 		return LOG_SOURCE_ALIASES[value as keyof typeof LOG_SOURCE_ALIASES];
 	}
 	return value as ProjectBranchLogSource;
@@ -140,7 +141,6 @@ const CONTENT_FILTERS = [
 	"minimum-severity",
 	"severity-text",
 	"body-contains",
-	"search",
 	"trace-id",
 ] as const;
 
