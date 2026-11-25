@@ -52,7 +52,7 @@
 		"org_id": "Organization id from {{user.organizations}}; required with a personal API key."
 	},
 	"queryProjectBranchLogs": {
-		"source": "Only records emitted by this Neon service. neon_auth returns 404 telemetry_not_enabled when the project's Neon Auth logs are not enabled, even when other sources return logs."
+		"source": "Only this Neon service's records. neon_auth 404s telemetry_not_enabled when the project's Neon Auth logs are off."
 	},
 	"registerProjectBranchCustomDomain": {
 		"entity_id": "The function slug from {{functions.list}}."
