@@ -858,6 +858,8 @@ neon config plan --project-id polished-snowflake-12345678 --output json
 neon deploy --branch my-feature --update-existing
 ```
 
+`apply`, `deploy`, and `checkout` wait for every Function build they start to finish, up to 10 minutes, and print the function URLs only after that. A failed or unfinished build exits 1 with the platform's reason, after the other changes are applied. `--no-wait` on `apply` and `deploy` returns once each deployment is accepted; a new function's URL answers 404 until its build finishes.
+
 Function deploys declared under `functions` are bundled with esbuild by default. A directory `source` is discovered as `index.ts`, then `index.js`, then `index.mjs`. Set `bundler: "none"` to ship a prebuilt directory as-is. `neon function deploy --no-bundle` is the same switch without a `neon.ts`.
 
 Point a domain you already own at a function with `neon function domains` (alias `domain`):

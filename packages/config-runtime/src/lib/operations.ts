@@ -61,6 +61,10 @@ export interface ApplyOptions extends ConfigOperationOptions {
 	beforeMutations?: PushConfigOptions["beforeMutations"];
 	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
+	/** Defaults to `true`. See {@link PushConfigOptions.waitForFunctionBuilds}. */
+	waitForFunctionBuilds?: PushConfigOptions["waitForFunctionBuilds"];
+	/** See {@link PushConfigOptions.onWaitForFunctionBuilds}. */
+	onWaitForFunctionBuilds?: PushConfigOptions["onWaitForFunctionBuilds"];
 }
 
 /**
@@ -136,6 +140,12 @@ export async function apply(
 		...(options.bundleFunction
 			? { bundleFunction: options.bundleFunction }
 			: {}),
+		...(options.waitForFunctionBuilds === false
+			? { waitForFunctionBuilds: false }
+			: {}),
+		...(options.onWaitForFunctionBuilds
+			? { onWaitForFunctionBuilds: options.onWaitForFunctionBuilds }
+			: {}),
 	});
 }
 
@@ -154,6 +164,8 @@ export interface CreateBranchOptions {
 	api?: NeonApi;
 	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
+	/** See {@link PushConfigOptions.onWaitForFunctionBuilds}. */
+	onWaitForFunctionBuilds?: PushConfigOptions["onWaitForFunctionBuilds"];
 }
 
 /**
@@ -287,6 +299,9 @@ export async function createBranch(
 			allowProtectedBranch: true,
 			...(options.bundleFunction
 				? { bundleFunction: options.bundleFunction }
+				: {}),
+			...(options.onWaitForFunctionBuilds
+				? { onWaitForFunctionBuilds: options.onWaitForFunctionBuilds }
 				: {}),
 		});
 	} catch (cause) {
