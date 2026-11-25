@@ -6,13 +6,8 @@ import YAML from "yaml";
 import type yargs from "yargs";
 
 import { codeFromBody, isNeonApiError, type RequestParams } from "../api.js";
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 import type { CommonProps } from "../types.js";
-import {
-	DEFAULT_SPEC_URL,
-	describeOperation,
-	getEndpoints,
-	loadSpec,
-} from "../utils/openapi.js";
 import { writer } from "../writer.js";
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
@@ -44,7 +39,7 @@ export function parseTypedValue(raw: string): unknown {
 export function parseKeyValue(input: string): { key: string; value: string } {
 	const eq = input.indexOf("=");
 	if (eq === -1) {
-		throw new Error(`Invalid "key=value" pair: "${input}".`);
+		throw new Error(`Invalid "key=value" pair: ${REDACTED_INVALID_VALUE}.`);
 	}
 	return { key: input.slice(0, eq), value: input.slice(eq + 1) };
 }
@@ -105,9 +100,21 @@ export function parseHeaders(pairs: string[]): Record<string, string> {
 	for (const pair of pairs) {
 		const idx = pair.indexOf(":");
 		if (idx === -1) {
-			throw new Error(`Invalid header "${pair}". Expected "key:value".`);
+			throw new Error(
+				`Invalid header ${REDACTED_INVALID_VALUE}. Expected "key:value".`,
+			);
 		}
-		headers[pair.slice(0, idx).trim()] = pair.slice(idx + 1).trim();
+		const name = pair.slice(0, idx).trim();
+		const value = pair.slice(idx + 1).trim();
+		// fetch would reject the same header later with an error that quotes it.
+		try {
+			new Headers().append(name, value);
+		} catch {
+			throw new Error(
+				`Invalid header ${REDACTED_INVALID_VALUE}. Header names must be HTTP tokens and values cannot contain line breaks.`,
+			);
+		}
+		headers[name] = value;
 	}
 	return headers;
 }
@@ -115,7 +122,7 @@ export function parseHeaders(pairs: string[]): Record<string, string> {
 function assertMethod(method: string): asserts method is HttpMethod {
 	if (!(HTTP_METHODS as readonly string[]).includes(method)) {
 		throw new Error(
-			`Unsupported method "${method}". Use one of: ${HTTP_METHODS.join(", ")}.`,
+			`Unsupported method ${REDACTED_INVALID_VALUE}.${didYouMean([method], HTTP_METHODS)} Use one of: ${HTTP_METHODS.join(", ")}.`,
 		);
 	}
 }
@@ -193,22 +200,27 @@ type ApiArgs = CommonProps & {
 	list: boolean;
 	describe: boolean;
 	refresh: boolean;
-	specUrl: string;
+	specUrl?: string;
 	color?: boolean;
 };
 
 const toStrings = (values?: (string | number)[]): string[] =>
 	(values ?? []).map(String);
 
+// Loaded only for --list and --describe, so a plain request stays within its module budget.
+const openapi = () => import("../utils/openapi.js");
+
 async function listEndpoints(args: ApiArgs): Promise<void> {
+	const { DEFAULT_SPEC_URL, getEndpoints, loadSpec } = await openapi();
+	const specUrl = args.specUrl ?? DEFAULT_SPEC_URL;
 	const spec = await loadSpec({
 		configDir: args.configDir,
-		specUrl: args.specUrl,
+		specUrl,
 		refresh: args.refresh,
 	});
 	if (!spec) {
 		throw new Error(
-			`Could not load the Neon OpenAPI spec from ${args.specUrl}. ` +
+			`Could not load the Neon OpenAPI spec from ${specUrl}. ` +
 				"Check your network connection or pass --spec-url.",
 		);
 	}
@@ -289,14 +301,16 @@ async function describeRoute(args: ApiArgs): Promise<void> {
 				"Drop -F, -f, -d, -Q, -H, and -i.",
 		);
 	}
+	const { DEFAULT_SPEC_URL, describeOperation, loadSpec } = await openapi();
+	const specUrl = args.specUrl ?? DEFAULT_SPEC_URL;
 	const spec = await loadSpec({
 		configDir: args.configDir,
-		specUrl: args.specUrl,
+		specUrl,
 		refresh: args.refresh,
 	});
 	if (!spec) {
 		throw new Error(
-			`Could not load the Neon OpenAPI spec from ${args.specUrl}. ` +
+			`Could not load the Neon OpenAPI spec from ${specUrl}. ` +
 				"Check your network connection or pass --spec-url.",
 		);
 	}
@@ -551,9 +565,10 @@ export const builder = (argv: yargs.Argv) =>
 			},
 			"spec-url": {
 				type: "string",
-				default: process.env.NEON_API_SPEC_URL ?? DEFAULT_SPEC_URL,
+				default: process.env.NEON_API_SPEC_URL,
 				hidden: true,
-				describe: "OpenAPI spec URL used by --list and --describe.",
+				describe:
+					"OpenAPI spec URL used by --list and --describe. Defaults to the released spec on neon.com.",
 			},
 		})
 		.example("$0 api /projects", "List your projects")

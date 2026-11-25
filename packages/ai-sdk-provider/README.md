@@ -163,7 +163,34 @@ System One models are rolling out to the gateway. `GET $NEON_AI_GATEWAY_BASE_URL
 
 ## Image generation
 
-Available on OpenAI models via the Responses `image_generation` tool (there is no `generateImage()` image-model endpoint). Use `streamText` — streaming returns the image as a `tool-result` part and avoids the gateway's non-streaming response-size cap and read timeout:
+There is no `generateImage()` image-model endpoint. Images come from two kinds of models.
+
+### Gemini image models
+
+`gemini-3-pro-image` and `gemini-3-1-flash-image` generate images directly. `generateText` and `streamText` return them in `result.files`:
+
+```ts
+import { writeFile } from "node:fs/promises";
+import { generateText } from "ai";
+import { neon } from "@neon/ai-sdk-provider";
+
+const result = await generateText({
+  model: neon("gemini-3-1-flash-image"),
+  prompt: "Generate an image of a red apple on a wooden table",
+});
+
+for (const file of result.files) {
+  if (file.mediaType.startsWith("image/")) {
+    await writeFile("apple.png", file.uint8Array);
+  }
+}
+```
+
+With `streamText`, each image arrives as a `file` part on `fullStream`, and `await result.files` lists them all.
+
+### OpenAI models
+
+OpenAI models generate images with the Responses `image_generation` tool. Use `streamText`, since streaming returns the image as a `tool-result` part and avoids the gateway's non-streaming response-size cap and read timeout:
 
 ```ts
 import { streamText } from "ai";
@@ -266,7 +293,7 @@ So `store` is only refused on the Responses route; the same option is ignored el
 
 ## Limitations
 
-- The gateway does not offer an image model endpoint, so `generateImage()` throws `NoSuchModelError`. Image generation is available through the Responses API's built-in `image_generation` tool with `neon.tools.imageGeneration()`.
+- The gateway does not offer an image model endpoint, so `generateImage()` throws `NoSuchModelError`. Generate images with a Gemini image model through `generateText` or `streamText`, or with the Responses API's built-in `image_generation` tool through `neon.tools.imageGeneration()`. See [Image generation](#image-generation).
 - Results from provider-executed tools (`neon.tools.imageGeneration`, and the other Responses built-ins) are not replayed to the gateway on a later step — see [Edit a generated image](#edit-a-generated-image).
 - The Responses route is stateless, so the provider sends `store: false` and refuses `store: true`, `store: null`, `previousResponseId`, or `conversation` — see [Errors](#errors).
 

@@ -1475,6 +1475,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							? {
 									services: envPullPlan.services,
 									envKeys: envPullPlan.envKeys,
+									optionalServices:
+										envPullPlan.optionalServices,
 								}
 							: {}),
 					}),

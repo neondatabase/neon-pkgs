@@ -16,6 +16,7 @@
       // the export map at runtime (the emitted JS keeps the bare specifiers).
       "@neon/sdk": ["node_modules/@neon/sdk/dist/index"],
       "@neon/sdk/raw": ["node_modules/@neon/sdk/dist/raw"],
+      "@neon/sdk/openapi": ["node_modules/@neon/sdk/dist/openapi"],
       // And for `@neon/env/runtime`, the stateful half of `@neon/env` (credential
       // reuse / revocation), which is a subpath export so an app importing
       // `@neon/env` is never offered it.

@@ -133,6 +133,8 @@ Custom tools combine several requests into one call, or call Postgres or neon.co
 | `queryTuning.complete` | `complete_query_tuning` | Applies `suggested_sql_statements` when `apply_changes` is true, deletes the temporary branch unless `should_delete_temporary_branch` is false, and returns `{ appliedChanges?, results?, deletedBranches?, message }`. |
 | `docs.search` | `search_docs` | `{ hits: [{ title, url, slug, category, breadcrumb, heading, excerpt }] }` from neon.com site search. |
 | `docs.get` | `get_docs` | `{ url, markdown }` for one neon.com page slug, without the agent skills note and feedback footer neon.com adds for agents that browse the site. |
+| `api.search` | `search_api` | `{ endpoints: [{ method, path, summary, operation_id, body_required, content_type?, fields }] }`: the endpoints of the released Neon OpenAPI spec that match `query`, best first, with each one's path, query, header, and body fields (body fields as dotted paths, descriptions cut to one sentence). Needs no credential. |
+| `api.call` | `call_api` | The response body of one request to any Neon API path, from `neon.request`. Not read-only safe; withheld under `secrets: "none"`; under `secrets: "setup"` it refuses paths with an `auth` segment, because Neon Auth routes return stored secrets. |
 | `feedback.send` | `send_feedback` | Posts `{ feedback, source }` to the Neon feedback service. |
 
 ```ts
@@ -246,6 +248,21 @@ const tools = createNeonTools({
 
 const { data } = await tools["docs.search"].execute({ query: "reset a branch" });
 const { data: page } = await tools["docs.get"].execute({ slug: data.hits[0].slug });
+```
+
+### API search and passthrough
+
+`api.search` fetches the released spec once an hour per URL and shares the fetch between concurrent calls; a failed fetch throws and is retried on the next call. `apiSpecUrl` on `createNeonTools` points it elsewhere. `api.call` sends what `neon.request` sends, so the path rules and typed errors are the SDK's:
+
+```ts
+const tools = createNeonTools({ apiKey, tools: ["api.search", "api.call"] });
+const { data } = await tools["api.search"].execute({ query: "create branch" });
+// data.endpoints[0]: { method: "POST", path: "/projects/{project_id}/branches", fields: [...] }
+await tools["api.call"].execute({
+	method: "POST",
+	path: "/projects/old-flower-123/branches",
+	body: { branch: { name: "dev" } },
+});
 ```
 
 Neon's feedback reporting counts `manual_test`, `neon_agent`, `neon_cli`, `neon_mcp`, and `neon_website` by name and any other `feedbackSource`, including the default, as `other`.

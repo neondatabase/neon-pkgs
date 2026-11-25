@@ -43,7 +43,7 @@ describe("NEON_SKILL_CATALOG", () => {
 	test("does not offer the deleted claimable-postgres skill", () => {
 		expect(listSkillIds()).not.toContain("claimable-postgres");
 		expect(() => resolveSkillId("claimable-postgres")).toThrow(
-			/Unknown skill: "claimable-postgres"/,
+			/Unknown skill: <redacted invalid value>/,
 		);
 	});
 });
@@ -51,7 +51,9 @@ describe("NEON_SKILL_CATALOG", () => {
 describe("resolveSkillId", () => {
 	test("rejects * and unknown names", () => {
 		expect(() => resolveSkillId("*")).toThrow(/does not accept --skill \*/);
-		expect(() => resolveSkillId("eve")).toThrow(/Unknown skill: "eve"/);
+		expect(() => resolveSkillId("eve")).toThrow(
+			/Unknown skill: <redacted invalid value>/,
+		);
 	});
 
 	test("maps platforms to its own repo", () => {

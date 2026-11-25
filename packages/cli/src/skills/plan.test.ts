@@ -175,7 +175,7 @@ describe("resolveSkillsPlan", () => {
 					},
 				}),
 			),
-		).rejects.toThrow(/Unknown skill: "eve"/);
+		).rejects.toThrow(/Unknown skill: <redacted invalid value>/);
 		expect(asked).toBe(false);
 	});
 
@@ -198,7 +198,7 @@ describe("resolveSkillsPlan", () => {
 					interactive: false,
 				}),
 			),
-		).rejects.toThrow(/Unknown skill: "eve"/);
+		).rejects.toThrow(/Unknown skill: <redacted invalid value>/);
 	});
 
 	test("specified agents skip the agent picker and still ask for skills", async () => {
@@ -256,7 +256,7 @@ describe("resolveSkillsPlan", () => {
 					agents: ["eve"],
 				}),
 			),
-		).rejects.toThrow(/Unknown agent: "eve"/);
+		).rejects.toThrow(/Unknown agent: <redacted invalid value>/);
 		await expect(
 			resolveSkillsPlan(
 				planOptions(cwd, {
@@ -265,7 +265,7 @@ describe("resolveSkillsPlan", () => {
 					agents: ["cursor-cli"],
 				}),
 			),
-		).rejects.toThrow(/Unknown agent: "cursor-cli"/);
+		).rejects.toThrow(/Unknown agent: <redacted invalid value>/);
 	});
 
 	test("skips MCP agents that cannot install skills", async () => {

@@ -72,10 +72,23 @@ export type DevEnvContext = {
 	 * Add the AI Gateway to the **no-`neon.ts`** resolution. `pullConfig` cannot detect the
 	 * gateway — it has no branch-level enabled state, only branch-credential capability — so
 	 * a caller that wants it in the "everything this branch has" set has to ask. `neon env
-	 * pull` does; `neon dev` and the pull bundled into `link` / `checkout` / `apply` do not.
+	 * pull` and `neon dev` do; the pull bundled into `link` / `checkout` / `apply` does not.
 	 * Ignored when {@link DevEnvContext.services} is set, since that selection already says.
 	 */
 	implyAiGateway?: boolean;
+	/**
+	 * Limit the **no-`neon.ts`** resolution's credential-backed services (object storage, the
+	 * AI Gateway) to these. Object storage the branch has but this omits is left out and
+	 * reported as `withheld`. Listing `ai-gateway` implies it like
+	 * {@link DevEnvContext.implyAiGateway}.
+	 */
+	secretServices?: readonly NeonService[];
+	/**
+	 * Members of {@link DevEnvContext.services} the branch may not have yet. Each is resolved
+	 * when the branch has it and reported in `skipped` when it does not, instead of failing
+	 * the selection.
+	 */
+	optionalServices?: readonly NeonService[];
 	/** Env pull needs function slugs even when their runtime secrets are unset. */
 	omitUnsetFunctionEnv?: boolean;
 	/**
@@ -131,6 +144,8 @@ export class ServiceNotOnBranchError extends Error {
 export type ResolvedNeonEnvVars = ReusedBranchEnv & {
 	/** Keeps implicit resolution failures visible while explicit selections fail directly. */
 	skipped?: readonly NeonService[];
+	/** Services the branch has that {@link DevEnvContext.secretServices} left out. */
+	withheld?: readonly NeonService[];
 };
 
 const CLAIMABLE_UNSUPPORTED_SERVICES: ReadonlySet<NeonService> = new Set([
@@ -368,7 +383,8 @@ const resolveClaimableNeonEnvVars = async (
  *      buckets) into a config, then `fetchEnv` resolves what is actually enabled —
  *      so a branch with a bucket gets its `AWS_*` storage vars pulled with no policy. With
  *      {@link DevEnvContext.implyAiGateway}, the AI Gateway is added on top, since
- *      `pullConfig` cannot read it back.
+ *      `pullConfig` cannot read it back. {@link DevEnvContext.secretServices} narrows the
+ *      credential-backed services.
  *   3. otherwise -> throw {@link MissingBranchContextError}.
  *
  * {@link DevEnvContext.claimable} keeps the same precedence. Credentials are not
@@ -424,23 +440,48 @@ export const resolveNeonEnvVars = async (
 				? { expiresAt: pulled.branch.expiresAt }
 				: {}),
 		};
+		const { config, withheld } = withholdSecretServices(
+			pulled.config,
+			ctx.secretServices,
+		);
 		// The AI Gateway is resolved separately because it has no read-back state.
-		if (!ctx.implyAiGateway) {
-			return await fetchAndProject(pulled.config, ctx, {
-				resolvedBranch,
-			});
-		}
-		return await resolveWithImpliedGateway(pulled.config, ctx, {
-			projectId: ctx.projectId,
-			branchId: ctx.branchId,
-			resolvedBranch,
-		});
+		const resolved =
+			ctx.implyAiGateway ||
+			(ctx.secretServices?.includes("ai-gateway") ?? false)
+				? await resolveWithImpliedGateway(config, ctx, {
+						projectId: ctx.projectId,
+						branchId: ctx.branchId,
+						resolvedBranch,
+						// Storage keys this pull leaves unrefreshed may name the credential a
+						// refreshed gateway token replaces.
+						revokeSuperseded:
+							ctx.secretServices === undefined ||
+							config.preview?.buckets !== undefined,
+					})
+				: await fetchAndProject(config, ctx, { resolvedBranch });
+		return withheld.length > 0 ? { ...resolved, withheld } : resolved;
 	}
 
 	throw new MissingBranchContextError(
 		`No project/branch context found. Link a branch (\`${getCliName()} link\` / ` +
 			`\`${getCliName()} checkout\`) or pass --project-id and --branch.`,
 	);
+};
+
+/** Drop the read-back object storage when `keep` does not name it. */
+const withholdSecretServices = (
+	config: Config,
+	keep: readonly NeonService[] | undefined,
+): { config: Config; withheld: NeonService[] } => {
+	if (
+		keep === undefined ||
+		keep.includes("object-storage") ||
+		config.preview?.buckets === undefined
+	) {
+		return { config, withheld: [] };
+	}
+	const { buckets: _, ...preview } = config.preview;
+	return { config: { ...config, preview }, withheld: ["object-storage"] };
 };
 
 /** The same config with the AI Gateway enabled, leaving any other `preview` entries intact. */
@@ -479,12 +520,16 @@ const resolveWithImpliedGateway = async (
 		projectId: string;
 		branchId: string;
 		resolvedBranch: NeonBranchSnapshot;
+		revokeSuperseded?: boolean;
 	},
 ): Promise<ResolvedNeonEnvVars> => {
 	const unreachable = await credentialsUnreachable(ctx, branch);
 	if (unreachable === null) {
 		return await fetchAndProject(withAiGateway(config), ctx, {
 			resolvedBranch: branch.resolvedBranch,
+			...(branch.revokeSuperseded === false
+				? { revokeSuperseded: false }
+				: {}),
 		});
 	}
 	// Deliberately does not assert that the project lacks the gateway: a read can also fail
@@ -570,25 +615,50 @@ const resolveSelectedServices = async (
 	const api = apiFor(ctx);
 	const has = (service: (typeof ENV_PULL_SERVICES)[number]): boolean =>
 		services.includes(service);
+	const optional = ctx.optionalServices ?? [];
+	const read = <T>(
+		service: NeonService,
+		load: () => Promise<T>,
+		absent: T,
+	): Promise<T> =>
+		optional.includes(service)
+			? absentWhenUnavailable(load, absent)
+			: load();
 	const checkAiGateway =
 		has("ai-gateway") &&
 		!selectedKeys.includes(NEON_ENV_VAR_KEYS.aiGateway.apiKey);
 	const [auth, dataApiEnabled, realtime, buckets, aiGatewayAvailable] =
 		await Promise.all([
-			has("auth") ? api.getNeonAuth(projectId, branchId) : null,
-			has("data-api")
-				? readDataApiEnabled(api, projectId, branchId)
+			has("auth")
+				? read("auth", () => api.getNeonAuth(projectId, branchId), null)
 				: null,
-			has("realtime") ? readRealtime(api, projectId, branchId) : null,
+			has("data-api")
+				? read(
+						"data-api",
+						() => readDataApiEnabled(api, projectId, branchId),
+						false,
+					)
+				: null,
+			has("realtime")
+				? read(
+						"realtime",
+						() => readRealtime(api, projectId, branchId),
+						{ enabled: false, pending: false },
+					)
+				: null,
 			has("object-storage")
-				? api.listBranchBuckets(projectId, branchId)
+				? read(
+						"object-storage",
+						() => api.listBranchBuckets(projectId, branchId),
+						[],
+					)
 				: null,
 			checkAiGateway
 				? readAiGatewayAvailable(api, projectId, branchId)
 				: null,
 		]);
 
-	const config = configForServices(
+	const { config, skipped } = configForServices(
 		services,
 		branchId,
 		{
@@ -603,15 +673,39 @@ const resolveSelectedServices = async (
 			// needed only when the base URL was selected on its own.
 			aiGatewayAvailable: aiGatewayAvailable ?? true,
 		},
-		{ directServices, envKeys },
+		{ directServices, envKeys, optional },
 	);
 	// A selection resolves part of the branch, so it must not revoke: the credential its
 	// persisted secrets name may also back a service it is not resolving. See
 	// `fetchEnvReusingSecrets`'s `revokeSuperseded`.
-	return await fetchAndProject(config, ctx, {
+	const resolved = await fetchAndProject(config, ctx, {
 		keys: selectedKeys,
 		revokeSuperseded: false,
 	});
+	return skipped.length > 0 ? { ...resolved, skipped } : resolved;
+};
+
+/**
+ * Read an optional service's live state, treating a feature the project or region lacks
+ * (`FeatureUnavailable`, or a route-level 404) as absent, as `pullConfig` does.
+ */
+const absentWhenUnavailable = async <T>(
+	load: () => Promise<T>,
+	absent: T,
+): Promise<T> => {
+	try {
+		return await load();
+	} catch (error) {
+		if (
+			isPlatformError(error) &&
+			(error.code === ErrorCode.FeatureUnavailable ||
+				(error.code === ErrorCode.NotFound &&
+					error.details.status === 404))
+		) {
+			return absent;
+		}
+		throw error;
+	}
 };
 
 /**
@@ -685,7 +779,7 @@ const NEON_DEFAULT_DATABASE = "neondb";
  * {@link ServiceNotOnBranchError} for anything the branch does not have. Naming a service
  * that isn't there has to fail rather than contribute no vars, or a scoped pull would report
  * "no Neon env variables to pull" — which reads as a statement about the branch rather than
- * about the selection.
+ * about the selection. An optional service the branch lacks is returned in `skipped` instead.
  */
 const configForServices = (
 	services: readonly NeonService[],
@@ -701,8 +795,9 @@ const configForServices = (
 	selection: {
 		directServices: readonly NeonService[];
 		envKeys: readonly EnvPullKey[];
+		optional: readonly NeonService[];
 	},
-): Config => {
+): { config: Config; skipped: NeonService[] } => {
 	// The command that provisions each one, for a user who may well have no `neon.ts` — in
 	// which case `deploy` / `config apply` would be no help at all.
 	const provisionWith: Record<string, string> = {
@@ -746,28 +841,50 @@ const configForServices = (
 		);
 	};
 
+	const skipped: NeonService[] = [];
+	const onBranch = (
+		service: NeonService,
+		present: boolean,
+		what: string,
+	): boolean => {
+		if (present) return true;
+		if (!selection.optional.includes(service)) notOnBranch(service, what);
+		skipped.push(service);
+		return false;
+	};
+
 	const config: Config = {};
-	if (services.includes("auth")) {
-		if (!branch.authEnabled) notOnBranch("auth", "Neon Auth integration");
+	if (
+		services.includes("auth") &&
+		onBranch("auth", branch.authEnabled, "Neon Auth integration")
+	) {
 		config.auth = true;
 	}
-	if (services.includes("data-api")) {
-		// Only a positive "not there" is an error; an undecidable read defers to `fetchEnv`.
-		if (branch.dataApiEnabled === false) {
-			notOnBranch("data-api", "Data API integration");
-		}
+	// Only a positive "not there" counts as not on the branch; an undecidable read defers to `fetchEnv`.
+	if (
+		services.includes("data-api") &&
+		onBranch(
+			"data-api",
+			branch.dataApiEnabled !== false,
+			"Data API integration",
+		)
+	) {
 		config.dataApi = true;
 	}
-	if (services.includes("realtime")) {
-		if (!branch.realtimeEnabled) {
-			notOnBranch("realtime", "Realtime integration");
-		}
+	if (
+		services.includes("realtime") &&
+		onBranch("realtime", branch.realtimeEnabled, "Realtime integration")
+	) {
 		config.preview = { realtime: true };
 	}
-	if (services.includes("object-storage")) {
-		if (branch.buckets.length === 0) {
-			notOnBranch("object-storage", "object-storage buckets");
-		}
+	if (
+		services.includes("object-storage") &&
+		onBranch(
+			"object-storage",
+			branch.buckets.length > 0,
+			"object-storage buckets",
+		)
+	) {
 		config.buckets = Object.fromEntries(
 			branch.buckets.map((bucket) => [
 				bucket.name,
@@ -780,7 +897,7 @@ const configForServices = (
 		config.aiGateway = true;
 	}
 
-	return config;
+	return { config, skipped };
 };
 
 /**
