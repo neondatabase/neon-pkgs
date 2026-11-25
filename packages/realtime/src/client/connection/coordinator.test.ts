@@ -855,6 +855,81 @@ describe("ConnectionCoordinator", () => {
 		expect(FakeWebSocket.instances).toHaveLength(2);
 	});
 
+	it("opens no socket from a connecting callback while a socket is retired", async () => {
+		vi.useFakeTimers();
+		let factoryCalls = 0;
+		const coordinator = createCoordinator({
+			webSocketFactory: (url, protocols) => {
+				factoryCalls += 1;
+				return new FakeWebSocket(url, protocols);
+			},
+		});
+		const first = target();
+		let subscribedThird = false;
+		first.connecting.mockImplementation(() => {
+			if (subscribedThird) return;
+			subscribedThird = true;
+			coordinator.subscribe({ capability: "third" }, target());
+		});
+		coordinator.subscribe({ capability: "token" }, first);
+		const stuck = admit();
+		stuck.emitCloseOnClose = false;
+		stuck.close();
+
+		// Retiring the stuck socket tells the first subscription it is
+		// connecting, and its listener subscribes a third query. That waits for
+		// the reconnect the retirement schedules, rather than opening a socket.
+		coordinator.subscribe({ capability: "second" }, target());
+		expect(subscribedThird).toBe(true);
+		expect(factoryCalls).toBe(1);
+
+		await vi.advanceTimersByTimeAsync(1);
+		expect(factoryCalls).toBe(2);
+		const replacement = defined(FakeWebSocket.instances[1]);
+		replacement.open();
+		replacement.receive({ type: "ready" });
+		expect(
+			replacement.sent.filter((message) => message.type === "subscribe"),
+		).toHaveLength(3);
+		coordinator.close();
+		// Only the retired socket's force-close grace timer is left, and it
+		// terminates that socket.
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(stuck.readyState).toBe(FakeWebSocket.CLOSED);
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("doesn't treat a socket that stopped being open as stable", async () => {
+		vi.useFakeTimers();
+		const coordinator = createCoordinator({
+			reconnect: {
+				baseMs: 100,
+				capMs: 1_000,
+				stabilityMs: 1_000,
+				maxElapsedMs: 10_000,
+				random: () => 0,
+			},
+		});
+		coordinator.subscribe({ capability: "token" }, target());
+		admit().disconnect();
+		await vi.advanceTimersByTimeAsync(50);
+		const second = defined(FakeWebSocket.instances[1]);
+		second.open();
+		second.receive({ type: "ready" });
+		// It stops being open at once, and reports close only after the
+		// stability period has passed.
+		second.emitCloseOnClose = false;
+		second.close();
+		await vi.advanceTimersByTimeAsync(1_000);
+		second.disconnect();
+
+		// The reconnect episode wasn't reset, so backoff keeps growing.
+		await vi.advanceTimersByTimeAsync(99);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(3);
+	});
+
 	it("handles an inbound response delivered synchronously from ping", async () => {
 		vi.useFakeTimers();
 		const coordinator = createCoordinator({
