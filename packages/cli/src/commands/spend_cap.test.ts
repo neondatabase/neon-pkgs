@@ -155,6 +155,52 @@ const spendCap = (args: string[], output = "json") =>
 	runCli(["org", "spend-cap", ...args, "--org-id", "org-test"], output);
 
 describe("organization spend-cap CLI", () => {
+	it.each([
+		["org", "spend-cap", "set"],
+		["orgs", "spending-limit", "set"],
+	])("help for %j explains the new-limit default and notification-only option", async (...path) => {
+		const result = await runCli([...path, "--help"]);
+		expect(result.code, result.stderr).toBe(0);
+		const help = result.stdout.replace(/\s+/g, " ");
+		expect(help).toContain(
+			"New limits default to suspension when available",
+		);
+		expect(help).toContain("existing limits keep their setting");
+		if (path[1] === "spend-cap") {
+			expect(help).toContain("false selects email notifications only");
+		} else {
+			expect(help).toContain("--spend-cap-enabled=false");
+		}
+		expect(requests).toHaveLength(0);
+	});
+
+	it.each([
+		["org", "spend-cap", "set", "--amount", "100"],
+		["orgs", "spending-limit", "set", "100"],
+	])("%j leaves new-limit enforcement defaults to the server", async (...args) => {
+		current = { spending_limit_cents: null };
+		const result = await runCli([...args, "--org-id", "org-test"]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests.map((req) => req.method)).toEqual(["PUT"]);
+		expect(requests[0].body).toEqual({ spending_limit_cents: 10000 });
+	});
+
+	it("can explicitly create a notification-only limit without observed usage", async () => {
+		current = { spending_limit_cents: null, current_usage_cents: null };
+		const result = await spendCap([
+			"set",
+			"--amount",
+			"100",
+			"--spend-cap-enabled=false",
+		]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests.map((req) => req.method)).toEqual(["PUT"]);
+		expect(requests[0].body).toEqual({
+			spending_limit_cents: 10000,
+			spend_cap_enabled: false,
+		});
+	});
+
 	it("legacy amount-only set shows a warning without inventing unavailable acknowledgement status", async () => {
 		current = {
 			spending_limit_cents: 10000,

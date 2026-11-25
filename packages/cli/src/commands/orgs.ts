@@ -97,7 +97,7 @@ export const builder = (argv: yargs.Argv) => {
 					)
 					.command(
 						"set",
-						"Set the amount; preserve enforcement unless explicitly specified. Admin only",
+						"Set the amount. New limits default to suspension when available; existing limits keep their setting. Admin only",
 						(argv) =>
 							guarded(
 								argv
@@ -112,7 +112,7 @@ export const builder = (argv: yargs.Argv) => {
 									})
 									.option("spend-cap-enabled", {
 										describe:
-											"Explicitly opt in to service suspension; false keeps email notifications only",
+											"true enables service suspension; false selects email notifications only. Omit to use the new-limit default or preserve an existing setting",
 										type: "boolean",
 									}),
 							),
@@ -271,12 +271,12 @@ export const builder = (argv: yargs.Argv) => {
 					)
 					.command(
 						"set <usd>",
-						"Set the monthly notification threshold; preserve the existing suspension setting. Admin only",
+						"Set the monthly threshold. New limits default to suspension when available; existing limits keep their setting. Admin only",
 						(yargs) =>
 							guarded(
 								yargs.positional("usd", {
 									describe:
-										"Monthly limit in US dollars, e.g. 500 or 250.50",
+										"Monthly limit in US dollars, e.g. 500 or 250.50. For notifications only, use org spend-cap set --amount <usd> --spend-cap-enabled=false",
 									type: "string",
 								}),
 							),

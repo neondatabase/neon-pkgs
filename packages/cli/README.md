@@ -1605,6 +1605,7 @@ neon orgs spending-limit delete
 neon org spend-cap get --org-id org-example
 neon org spend-cap set --org-id org-example --amount 100.25
 neon org spend-cap set --org-id org-example --amount 100.25 --spend-cap-enabled
+neon org spend-cap set --org-id org-example --amount 100.25 --spend-cap-enabled=false
 neon org spend-cap disable --org-id org-example
 neon org spend-cap get --org-id org-example --output json
 ```
@@ -1613,7 +1614,7 @@ Every subcommand except `list` takes `--org-id`. Without it, the CLI uses the or
 
 `members update` and `invitations create` take `--role`: `admin`, `member`, `editor`, `viewer`, or `collaborator`. The API decides which of them an organization accepts. Every invitee is emailed, and anyone who already has a Neon account joins immediately.
 
-`spending-limit set` takes dollars with up to two decimals and sends cents. The threshold sends emails at 80% and 100%. Amount-only updates preserve the current suspension setting; an existing notification-only threshold stays notification-only. JSON and YAML output keep the API's `spending_limit_cents`, and `members list` keeps the API's `{ member, user }` items. Role changes, member removal, and the spending limit writes need an organization admin.
+`spending-limit set` takes dollars with up to two decimals and sends cents. The threshold sends emails at 80% and 100%. When no limit is configured, the server defaults a new limit to suspension only if the organization's spend-cap feature is available. Amount-only updates to an existing configured limit preserve its saved suspension setting; an existing notification-only threshold stays notification-only. JSON and YAML output keep the API's `spending_limit_cents`, and `members list` keeps the API's `{ member, user }` items. Role changes, member removal, and the spending limit writes need an organization admin.
 
 The existing `spending-limit` table also shows any returned suspension warning and
 cap/acknowledgement status. Servers that omit these fields keep the amount-only
@@ -1622,9 +1623,18 @@ display; JSON and YAML preserve the API response without adding display fields.
 `org spend-cap set --amount` accepts positive USD amounts with at most two decimal
 places, from $0.01 through $90071992547409.91. Cent conversion is exact; input or
 API integers outside JavaScript's safe range are rejected rather than rounded.
-Use `--spend-cap-enabled` to explicitly opt in to suspending eligible services, or
-`--spend-cap-enabled=false` to keep email notifications only. `disable` reads the
-current threshold and PUTs the same amount with enforcement off. It never uses
+Omitting `--spend-cap-enabled` uses the server's new-limit default or preserves an
+existing configured limit's saved setting. Use `--spend-cap-enabled` to explicitly
+enable suspension, or `--spend-cap-enabled=false` to create or update a
+notification-only limit, including when suspension is available. Enabling a new
+cap requires observed current-invoice usage; explicit false does not require a
+usage observation. These defaults also apply to `orgs spending-limit set`; use
+`org spend-cap set --amount <usd> --spend-cap-enabled=false` for notification-only
+configuration. The CLI leaves omitted options out of the request so the server
+applies its availability gate and defaults.
+
+`disable` reads the current threshold and PUTs the same amount with enforcement
+off. It never uses
 DELETE, which would also remove notifications; an unset threshold is left unset.
 Cap writes require an Organization Admin on an eligible non-free plan.
 
