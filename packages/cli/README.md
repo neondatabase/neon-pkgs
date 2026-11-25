@@ -1602,13 +1602,47 @@ neon orgs invitations create --email dev@example.com --email ops@example.com --r
 neon orgs spending-limit get
 neon orgs spending-limit set 500                      # US dollars per month
 neon orgs spending-limit delete
+neon org spend-cap get --org-id org-example
+neon org spend-cap set --org-id org-example --amount 100.25
+neon org spend-cap set --org-id org-example --amount 100.25 --spend-cap-enabled
+neon org spend-cap disable --org-id org-example
+neon org spend-cap get --org-id org-example --output json
 ```
 
 Every subcommand except `list` takes `--org-id`. Without it, the CLI uses the organization in `.neon`, then the only organization you belong to, and otherwise fails naming `--org-id`. `orgs get` also takes the id as a positional argument.
 
 `members update` and `invitations create` take `--role`: `admin`, `member`, `editor`, `viewer`, or `collaborator`. The API decides which of them an organization accepts. Every invitee is emailed, and anyone who already has a Neon account joins immediately.
 
-`spending-limit set` takes dollars with up to two decimals and sends cents. The limit sends emails at 80% and 100% and does not suspend computes. JSON and YAML output keep the API's `spending_limit_cents`, and `members list` keeps the API's `{ member, user }` items. Role changes, member removal, and the spending limit writes need an organization admin.
+`spending-limit set` takes dollars with up to two decimals and sends cents. The threshold sends emails at 80% and 100%. Amount-only updates preserve the current suspension setting; an existing notification-only threshold stays notification-only. JSON and YAML output keep the API's `spending_limit_cents`, and `members list` keeps the API's `{ member, user }` items. Role changes, member removal, and the spending limit writes need an organization admin.
+
+`org spend-cap set --amount` accepts positive USD amounts with at most two decimal
+places, from $0.01 through $90071992547409.91. Cent conversion is exact; input or
+API integers outside JavaScript's safe range are rejected rather than rounded.
+Use `--spend-cap-enabled` to explicitly opt in to suspending eligible services, or
+`--spend-cap-enabled=false` to keep email notifications only. `disable` reads the
+current threshold and PUTs the same amount with enforcement off. It never uses
+DELETE, which would also remove notifications; an unset threshold is left unset.
+Cap writes require an Organization Admin on an eligible non-free plan.
+
+Table, JSON, and YAML output show the server's current-invoice usage, observation
+time, invoice-period ID, cap and enforcement status, generation, period end,
+monitoring delay, and any successful-save warning. Older servers can omit optional
+fields: tables mark them unavailable/unsupported and structured output leaves them
+absent. Missing status never establishes that enforcement is off or applied.
+
+Billing resets on the first day of each UTC calendar month. Only the current open
+invoice counts, even when plan changes create several invoices in a month. Usage
+detection can lag by 1–2 hours and actual spending can exceed the cap. Storage
+charges continue; lift the cap before deleting stored data to reduce those charges.
+Choose a threshold below your maximum acceptable bill.
+
+Successful saves accept configuration asynchronously. `pending` means control
+planes have not acknowledged the current restriction or clear. `applied` confirms
+acknowledgements, not that every running workload has finished stopping or
+resuming. Raising or disabling the cap clears only spend-cap restrictions; other
+restrictions may remain. Use `get` to check later status. Existing commands that
+are blocked by the cap exit unsuccessfully with `SPEND_CAP_EXCEEDED` and Organization
+Billing guidance, without retrying the denial.
 
 ## Commands
 
@@ -1619,7 +1653,7 @@ Every subcommand except `list` takes `--org-id`. Without it, the CLI uses the or
 | profile                                                                    | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
 | api                                                                        |                                                                                                              | Call any Neon API route            |
-| orgs (`org`)                                                               | `list`, `get`, `members`, `invitations`, `spending-limit`                                                    | Manage organizations               |
+| orgs (`org`)                                                               | `list`, `get`, `members`, `invitations`, `spending-limit`, `spend-cap`                                                    | Manage organizations               |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
 | [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show the current user, organization, or Claimable project |

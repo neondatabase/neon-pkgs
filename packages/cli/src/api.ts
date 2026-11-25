@@ -168,6 +168,19 @@ export function codeFromBody(body: unknown): string | undefined {
 	return undefined;
 }
 
+/** Actionable billing denials keep their backend code and message. */
+export function spendCapErrorMessage(body: unknown): string | undefined {
+	const code = codeFromBody(body);
+	const message = messageFromBody(body);
+	if (code === "SPEND_CAP_EXCEEDED") {
+		return `${code}: ${message ?? "Organization spend cap reached."} Ask an Organization Admin to increase or disable the cap in Organization Billing. Other restrictions may still apply.`;
+	}
+	if (code === "INSUFFICIENT_ORG_PERMISSIONS") {
+		return `${code}: ${message ?? "Permission denied."} An Organization Admin must make this change.`;
+	}
+	return undefined;
+}
+
 /**
  * Adapt a WHATWG `ReadableStream` (what `fetch` gives us as `response.body`) to
  * a Node `Readable`, so callers can `pipeline()` the body straight to disk. Done

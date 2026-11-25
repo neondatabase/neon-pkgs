@@ -69,6 +69,69 @@ export const builder = (argv: yargs.Argv) => {
 	return argv
 		.usage("$0 orgs <sub-command> [options]")
 		.command(
+			"spend-cap",
+			"Manage organization spending notifications and optional service suspension",
+			(argv) =>
+				argv
+					.usage("$0 org spend-cap <sub-command> [options]")
+					.options(orgIdOption)
+					.command(
+						"get",
+						"Get the threshold, observed usage, and enforcement status",
+						guarded,
+						async (args) => {
+							const { getSpendCap } = await import(
+								"./spend_cap.js"
+							);
+							await getSpendCap(args as unknown as OrgProps);
+						},
+					)
+					.command(
+						"set",
+						"Set the amount; preserve enforcement unless explicitly specified. Admin only",
+						(argv) =>
+							guarded(
+								argv
+									.option("amount", {
+										describe:
+											"Positive USD amount with at most two decimal places",
+										type: "string",
+										coerce: single("amount", {
+											required: true,
+										}),
+										demandOption: true,
+									})
+									.option("spend-cap-enabled", {
+										describe:
+											"Explicitly opt in to service suspension; false keeps email notifications only",
+										type: "boolean",
+									}),
+							),
+						async (args) => {
+							const { setSpendCap } = await import(
+								"./spend_cap.js"
+							);
+							await setSpendCap(
+								args as unknown as OrgProps & {
+									amount: string;
+									spendCapEnabled?: boolean;
+								},
+							);
+						},
+					)
+					.command(
+						"disable",
+						"Disable suspension while retaining the amount and email notifications. Admin only",
+						guarded,
+						async (args) => {
+							const { disableSpendCap } = await import(
+								"./spend_cap.js"
+							);
+							await disableSpendCap(args as unknown as OrgProps);
+						},
+					),
+		)
+		.command(
 			"list",
 			"List organizations",
 			(yargs) => yargs,
@@ -185,7 +248,7 @@ export const builder = (argv: yargs.Argv) => {
 		)
 		.command(
 			"spending-limit",
-			"Manage the organization's monthly spending limit (Launch and Scale plans)",
+			"Manage the organization's monthly spending notifications (non-free plans)",
 			(yargs) =>
 				yargs
 					.usage("$0 orgs spending-limit <sub-command> [options]")
@@ -199,7 +262,7 @@ export const builder = (argv: yargs.Argv) => {
 					)
 					.command(
 						"set <usd>",
-						"Set the monthly spending limit. Neon emails at 80% and 100% and keeps computes running. Admin only",
+						"Set the monthly notification threshold; preserve the existing suspension setting. Admin only",
 						(yargs) =>
 							guarded(
 								yargs.positional("usd", {
@@ -445,33 +508,6 @@ const writeSpendingLimit = (
 	);
 };
 
-const USD = new Intl.NumberFormat("en-US", {
-	style: "currency",
-	currency: "USD",
-});
-
-const formatUsd = (cents: number) => USD.format(cents / 100);
-
-/**
- * `500` or `250.50` → cents. Parsed as text, not with `Number()`: `1e3` and `0x10` are
- * numbers too, and a float multiply turns `0.29` into 28.999… cents.
- */
-export const parseUsdCents = (value: unknown): number => {
-	const match =
-		typeof value === "string"
-			? /^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim())
-			: null;
-	const cents = match
-		? Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"))
-		: Number.NaN;
-	if (!Number.isSafeInteger(cents) || cents <= 0) {
-		throw new Error(
-			`spending-limit set needs a positive amount in US dollars, such as 500 or 250.50. Got \`${String(value)}\`. To remove the limit, run \`neon orgs spending-limit delete\`.`,
-		);
-	}
-	return cents;
-};
-
 const ACRONYMS: Record<string, string> = { aws: "AWS", pg: "PG" };
 
 /** `free_v3` -> `Free`, `aws_marketplace` -> `AWS Marketplace`; JSON/YAML keep the API id. */
@@ -482,3 +518,37 @@ export const planName = (plan: string | undefined): string =>
 		.filter(Boolean)
 		.map((word) => ACRONYMS[word] ?? word[0].toUpperCase() + word.slice(1))
 		.join(" ");
+
+/** Parse dollars as text so floating-point multiplication cannot round a cent. */
+export const parseUsdCents = (
+	value: unknown,
+	command = "spending-limit set",
+): number => {
+	const match =
+		typeof value === "string"
+			? /^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim())
+			: null;
+	const cents = match
+		? BigInt(match[1]) * 100n + BigInt((match[2] ?? "").padEnd(2, "0"))
+		: null;
+	if (
+		cents === null ||
+		cents <= 0n ||
+		cents > BigInt(Number.MAX_SAFE_INTEGER)
+	) {
+		throw new Error(
+			`${command} needs a positive amount in US dollars with at most two decimals, from $0.01 to $90071992547409.91. To remove the notification threshold, run \`neon orgs spending-limit delete\`.`,
+		);
+	}
+	return Number(cents);
+};
+
+export const formatUsd = (cents: number): string => {
+	if (!Number.isSafeInteger(cents) || cents < 0) {
+		throw new Error(
+			"The API returned an amount outside the supported safe integer range.",
+		);
+	}
+	const value = BigInt(cents);
+	return `$${(value / 100n).toLocaleString("en-US")}.${(value % 100n).toString().padStart(2, "0")}`;
+};

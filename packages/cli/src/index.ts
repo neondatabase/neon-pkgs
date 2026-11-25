@@ -15,6 +15,7 @@ import {
 	isNeonApiError,
 	messageFromBody,
 	type NeonApiClient,
+	spendCapErrorMessage,
 	UnreadableResponseError,
 } from "./api.js";
 import { AuthRefreshError, defaultClientID } from "./auth.js";
@@ -346,7 +347,8 @@ async function handleError(
 			sendError(err, "AUTH_FAILED");
 			return await recoverFrom401(canRetry);
 		} else {
-			const serverMessage = messageFromBody(err.data);
+			const serverMessage =
+				spendCapErrorMessage(err.data) ?? messageFromBody(err.data);
 			if (serverMessage) {
 				log.error(serverMessage);
 			} else if (err instanceof UnreadableResponseError) {
