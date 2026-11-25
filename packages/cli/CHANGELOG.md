@@ -1,5 +1,13 @@
 # neon
 
+## 9.9.9
+
+### Patch Changes
+
+- 5635524: `neon bootstrap --install` now installs dependencies when run without a terminal, such as from a coding agent or CI, instead of skipping the install. A failed install exits with an error. Without `--install` or `--default`, a non-interactive run still only scaffolds.
+- e8f08d5: When npm cannot add `@neon/config` and `@neon/env` because the project already has a peer dependency conflict (`ERESOLVE`), `neon init`, `neon config init`, and `neon config add` now print `npm install --force @neon/config @neon/env` as the retry, with a line saying why, instead of repeating the command that failed.
+- 6a8aa3a: `neon init` and `neon config init` with `--services object-storage` now scaffold a bucket named `uploads`, the name Neon's Object Storage guides use, instead of `assets`. Existing `neon.ts` files are not touched.
+
 ## 9.9.8
 
 ### Patch Changes
