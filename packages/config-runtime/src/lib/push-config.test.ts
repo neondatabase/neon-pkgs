@@ -1719,6 +1719,52 @@ describe("pushConfig", () => {
 			]);
 		});
 
+		test("waitForFunctionBuilds: false returns while the build is still running", async () => {
+			const { api, projectId } = seededFake();
+			stubFunctionDeploymentReads(api, "fn1", [
+				{ id: 1, status: "building" },
+			]);
+
+			const result = await withFastFunctionPoll(
+				() =>
+					pushConfig(helloConfig(), {
+						api,
+						projectId,
+						branchId: "br-main",
+						waitForFunctionBuilds: false,
+					}),
+				{ timeoutMs: "40" },
+			);
+
+			expect(
+				result.applied.some((c) => c.identifier === "function:fn1"),
+			).toBe(true);
+		});
+
+		test("announces the functions it waits for before polling", async () => {
+			const { api, projectId } = seededFake();
+			const events: string[] = [];
+			const originalGet = api.getBranchFunction.bind(api);
+			api.getBranchFunction = async (projectId, branchId, slug) => {
+				events.push(`read ${slug}`);
+				return originalGet(projectId, branchId, slug);
+			};
+
+			await withFastFunctionPoll(() =>
+				pushConfig(helloConfig(), {
+					api,
+					projectId,
+					branchId: "br-main",
+					onWaitForFunctionBuilds: (slugs) => {
+						events.push(`wait ${slugs.join(",")}`);
+					},
+				}),
+			);
+
+			expect(events[0]).toBe("wait fn1");
+			expect(events).toContain("read fn1");
+		});
+
 		test("a dry run reads no deployment status", async () => {
 			const { api, projectId } = seededFake();
 

@@ -117,6 +117,15 @@ export interface PushConfigOptions {
 	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
 	/**
+	 * Wait for every function deployment this push submits to finish building, and throw
+	 * when one fails or does not complete in time. Defaults to `true`. With `false`, the
+	 * push returns once each deployment is accepted, and a new function's URL answers 404
+	 * until its build finishes. Retargeting a custom domain always waits for its function.
+	 */
+	waitForFunctionBuilds?: boolean;
+	/** Called once with the function slugs before waiting for their builds. */
+	onWaitForFunctionBuilds?: (slugs: readonly string[]) => void;
+	/**
 	 * When `true`, compute the full plan against the live remote state but **do not
 	 * execute any mutations**. The resulting `PushResult.applied` array records every
 	 * change that *would* run on a real push (with the same action / identifier / details
@@ -354,7 +363,13 @@ export async function pushConfig(
 			: await applyStep(step, ctx);
 		applied.push(change);
 	}
-	if (!dryRun) await waitForFunctionBuilds(ctx, branch.id);
+	if (!dryRun && options.waitForFunctionBuilds !== false) {
+		await waitForFunctionBuilds(
+			ctx,
+			branch.id,
+			options.onWaitForFunctionBuilds,
+		);
+	}
 
 	// Surface each deployed function's invocation URL on its applied change so callers
 	// (e.g. neonctl) can show users where to call it right after a push.
@@ -1270,6 +1285,7 @@ async function waitForCompletedFunctionDeployment(args: {
 async function waitForFunctionBuilds(
 	ctx: ApplyContext,
 	branchId: string,
+	onWait: PushConfigOptions["onWaitForFunctionBuilds"],
 ): Promise<void> {
 	if (ctx.deploymentIdBySlug.size === 0) return;
 	const get = ctx.api.getBranchFunction;
@@ -1280,6 +1296,7 @@ async function waitForFunctionBuilds(
 		return;
 	}
 	const deployments = [...ctx.deploymentIdBySlug];
+	onWait?.(deployments.map(([slug]) => slug));
 	// allSettled: one unreadable status must neither hide the other outcomes nor leave
 	// their polls running after apply has already thrown.
 	const settled = await Promise.allSettled(

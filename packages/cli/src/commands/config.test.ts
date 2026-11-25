@@ -479,6 +479,17 @@ class ChildBranchNeonApi extends FakeNeonApi {
  * anything else is absent and would throw if touched.
  */
 /** `apply` always fails partway through — used to prove `deploy.after` does not run then. */
+class BuildingFunctionNeonApi extends FakeNeonApi {
+	override async getBranchFunction(
+		projectId: string,
+		branchId: string,
+		slug: string,
+	): Promise<NeonFunctionSnapshot> {
+		const fn = await super.getBranchFunction(projectId, branchId, slug);
+		return { ...fn, currentDeployment: { id: 1, status: "building" } };
+	}
+}
+
 class RejectAuthNeonApi extends FakeNeonApi {
 	override async enableNeonAuth(): Promise<NeonAuthSnapshot> {
 		throw new Error("Neon Auth enablement rejected (test)");
@@ -1196,6 +1207,104 @@ describe("config commands", () => {
 		expect(out).toContain(
 			`https://${BRANCH_ID}.fake.neon.tech/functions/hello`,
 		);
+	});
+
+	describe("waiting for function builds", () => {
+		const writeHelloConfig = () => {
+			const source = join(cwd, "hello.ts");
+			writeFileSync(
+				source,
+				"export default { fetch() { return new Response('ok'); } };\n",
+			);
+			return writeConfig(
+				`export default { functions: { hello: { name: 'Hello', source: ${JSON.stringify(
+					source,
+				)} } } };\n`,
+			);
+		};
+
+		const captureStderr = async (run: () => Promise<void>) => {
+			const chunks: string[] = [];
+			const origErr = process.stderr.write.bind(process.stderr);
+			process.stderr.write = ((chunk: string | Uint8Array) => {
+				chunks.push(chunk.toString());
+				return true;
+			}) as typeof process.stderr.write;
+			try {
+				await run();
+			} finally {
+				process.stderr.write = origErr;
+			}
+			return chunks.join("");
+		};
+
+		const withPollTimeout = async <T>(
+			run: () => Promise<T>,
+		): Promise<T> => {
+			const prev = {
+				interval: process.env.NEON_FUNCTIONS_POLL_INTERVAL_MS,
+				timeout: process.env.NEON_FUNCTIONS_POLL_TIMEOUT_MS,
+			};
+			process.env.NEON_FUNCTIONS_POLL_INTERVAL_MS = "5";
+			process.env.NEON_FUNCTIONS_POLL_TIMEOUT_MS = "40";
+			try {
+				return await run();
+			} finally {
+				for (const [key, value] of [
+					["NEON_FUNCTIONS_POLL_INTERVAL_MS", prev.interval],
+					["NEON_FUNCTIONS_POLL_TIMEOUT_MS", prev.timeout],
+				] as const) {
+					if (value === undefined) delete process.env[key];
+					else process.env[key] = value;
+				}
+			}
+		};
+
+		it("names the functions it waits for, and fails when a build does not finish", async () => {
+			const { stream } = captureOut();
+			const config = writeHelloConfig();
+			let failure: unknown;
+
+			const stderr = await withPollTimeout(() =>
+				captureStderr(async () => {
+					try {
+						await applyCmd({
+							...baseProps(new BuildingFunctionNeonApi(), stream),
+							config,
+						});
+					} catch (err) {
+						failure = err;
+					}
+				}),
+			);
+
+			expect(stderr).toContain(
+				"Waiting for Function builds to finish: hello…",
+			);
+			expect(String(failure)).toMatch(
+				/"hello" deployment 1 did not complete within/,
+			);
+		});
+
+		it("--no-wait returns while the build is still running", async () => {
+			const { stream, read } = captureOut();
+			const config = writeHelloConfig();
+
+			const stderr = await withPollTimeout(() =>
+				captureStderr(() =>
+					applyCmd({
+						...baseProps(new BuildingFunctionNeonApi(), stream),
+						config,
+						wait: false,
+					}),
+				),
+			);
+
+			expect(stderr).not.toContain("Waiting for Function builds");
+			expect(read()).toContain(
+				`https://${BRANCH_ID}.fake.neon.tech/functions/hello`,
+			);
+		});
 	});
 
 	it("keeps the changes table minimal and lists function URLs out of the table (regression)", async () => {

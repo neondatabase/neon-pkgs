@@ -186,6 +186,8 @@ export type ConfigProps = BranchScopeProps & {
 	allowProtected?: boolean;
 	/** Both of the above (apply only). */
 	yes?: boolean;
+	/** Wait for Function builds (apply only). `--no-wait` sets this `false`. */
+	wait?: boolean;
 	/** `status` only: print just the neon.ts-shaped config JSON to stdout. */
 	configJson?: boolean;
 	/**
@@ -242,6 +244,12 @@ export const applyFlags = {
 			"Answer yes to every confirmation: --update-existing and --allow-protected",
 		type: "boolean",
 		default: false,
+	},
+	wait: {
+		describe:
+			"Wait for Function builds to finish. Use --no-wait to return once each deployment is accepted",
+		type: "boolean",
+		default: true,
 	},
 } as const;
 
@@ -1598,6 +1606,8 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 					cwd,
 				}),
 			bundleFunction: neonctlBundler,
+			...(props.wait === false ? { waitForFunctionBuilds: false } : {}),
+			onWaitForFunctionBuilds: logWaitForFunctionBuilds,
 		});
 	} catch (err) {
 		if (err instanceof PushAbortedError) {
@@ -1888,9 +1898,14 @@ export const applyPolicyOnCreate = async (props: {
 		updateExisting: true,
 		allowProtectedBranch: true,
 		bundleFunction: neonctlBundler,
+		onWaitForFunctionBuilds: logWaitForFunctionBuilds,
 	});
 	logPolicyResult(result, { color: props.color !== false });
 };
+
+function logWaitForFunctionBuilds(slugs: readonly string[]): void {
+	log.info("Waiting for Function builds to finish: %s…", slugs.join(", "));
+}
 
 /**
  * Report what applying a `neon.ts` policy changed, using the same `field → value` diff
@@ -1988,6 +2003,7 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 				...(props.apiHost ? { apiHost: props.apiHost } : {}),
 				...(props.runtimeApi ? { api: props.runtimeApi } : {}),
 				bundleFunction: neonctlBundler,
+				onWaitForFunctionBuilds: logWaitForFunctionBuilds,
 			},
 		);
 		log.info(
