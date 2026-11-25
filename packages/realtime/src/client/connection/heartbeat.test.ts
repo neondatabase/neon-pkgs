@@ -36,6 +36,32 @@ describe("ConnectionHeartbeat", () => {
 		expect(timedOut).not.toHaveBeenCalled();
 	});
 
+	it("times out a ping that could not be sent", () => {
+		const timers: Array<() => void> = [];
+		// The coordinator's send() reports false when the socket isn't open.
+		const sendPing = vi.fn(() => false);
+		const timedOut = vi.fn();
+		const heartbeat = new ConnectionHeartbeat(
+			{
+				idleMs: 20,
+				timeoutMs: 10,
+				setTimer: ((callback: () => void) => {
+					timers.push(callback);
+					return timers.length;
+				}) as unknown as HeartbeatOptions["setTimer"],
+				clearTimer: vi.fn(),
+			},
+			{ sendPing, timedOut },
+		);
+
+		heartbeat.start();
+		defined(timers[0])();
+		expect(sendPing).toHaveBeenCalledOnce();
+		expect(timedOut).not.toHaveBeenCalled();
+		defined(timers[1])();
+		expect(timedOut).toHaveBeenCalledOnce();
+	});
+
 	it("rejects invalid timer configuration", () => {
 		expect(
 			() => new ConnectionHeartbeat({ idleMs: 0 }, callbacks()),

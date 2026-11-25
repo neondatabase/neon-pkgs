@@ -105,6 +105,14 @@ class RealtimeClientImpl implements RealtimeClient {
 			queryUnavailable: () => subscription.queryUnavailable(),
 			failed: (error) => subscription.fail(error),
 		});
+		// Subscribing can run other subscriptions' callbacks synchronously, for
+		// example when it retires a socket that stopped being open, and one of
+		// them may close this client. close() couldn't see this subscription.
+		if (this.disposed) {
+			handle.unsubscribe();
+			subscription.markClosed();
+			throw new Error("Realtime client is closed");
+		}
 		this.handles.set(subscription as Subscription<unknown>, handle);
 		return subscription;
 	}

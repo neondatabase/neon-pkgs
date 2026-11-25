@@ -150,6 +150,8 @@ export class ConnectionCoordinator {
 	private requestId = 0n;
 	private ready = false;
 	private disposed = false;
+	/** True while disconnected() notifies subscriptions; connect() waits. */
+	private disconnecting = false;
 	private terminalConnection?: ConnectionCoordinatorError;
 	private pendingConnectionError?: ConnectionCoordinatorError;
 
@@ -177,9 +179,9 @@ export class ConnectionCoordinator {
 					: options.heartbeat;
 			this.heartbeat = new ConnectionHeartbeat(heartbeatOptions, {
 				sendPing: (token) => {
-					const sent = this.send({ type: "ping", token });
-					if (sent) this.events.connection.heartbeatPingSent();
-					return sent;
+					if (this.send({ type: "ping", token })) {
+						this.events.connection.heartbeatPingSent();
+					}
 				},
 				timedOut: () => {
 					this.events.connection.heartbeatTimedOut();
@@ -323,11 +325,22 @@ export class ConnectionCoordinator {
 	private connect(): void {
 		if (
 			this.disposed ||
+			// A callback run by disconnected() subscribed or renewed. The
+			// disconnect schedules one reconnect for every active subscription,
+			// so a socket opened now would race it.
+			this.disconnecting ||
 			this.terminalConnection ||
 			this.socket?.readyState === SOCKET_CONNECTING ||
 			this.socket?.readyState === SOCKET_OPEN
 		)
 			return;
+		// The current socket stopped being open without reporting close. Retire
+		// it before replacing it, so its heartbeat stops and every subscription
+		// resubscribes on the socket the scheduled reconnect opens.
+		if (this.socket) {
+			this.closeSocket(APPLICATION_CLOSE, "connection not open");
+			return;
+		}
 		this.cancelReconnect();
 		this.ready = false;
 		this.events.connection.attemptStarted();
@@ -726,8 +739,13 @@ export class ConnectionCoordinator {
 		// Reset every peer before callbacks can synchronously unsubscribe one.
 		for (const subscription of this.activeSubscriptions)
 			subscription.resetWire();
-		for (const subscription of this.activeSubscriptions) {
-			subscription.callbacks.connecting();
+		this.disconnecting = true;
+		try {
+			for (const subscription of this.activeSubscriptions) {
+				subscription.callbacks.connecting();
+			}
+		} finally {
+			this.disconnecting = false;
 		}
 		if (
 			!this.disposed &&
@@ -793,10 +811,13 @@ export class ConnectionCoordinator {
 		this.cancelStabilityTimer();
 		const episodeGeneration = this.reconnectEpisodeGeneration;
 		this.stabilityTimer = this.reconnect.setTimer(() => {
+			// A socket that stopped being open isn't stable, even if it hasn't
+			// reported close yet.
 			if (
 				episodeGeneration !== this.reconnectEpisodeGeneration ||
 				this.socket !== socket ||
-				!this.ready
+				!this.ready ||
+				socket.readyState !== SOCKET_OPEN
 			)
 				return;
 			this.stabilityTimer = undefined;
