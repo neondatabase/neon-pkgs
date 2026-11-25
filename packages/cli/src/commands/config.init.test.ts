@@ -398,7 +398,7 @@ describe("config init", () => {
 		});
 
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
-		expect(content).toContain('assets: { access: "private" }');
+		expect(content).toContain('uploads: { access: "private" }');
 		// Object storage needs no source file, unlike functions.
 		expect(existsSync(join(workspace, "hello.ts"))).toBe(false);
 	});
@@ -438,7 +438,7 @@ describe("config init", () => {
 		}
 
 		expect(readFileSync(join(workspace, "neon.ts"), "utf8")).toContain(
-			'assets: { access: "private" }',
+			'uploads: { access: "private" }',
 		);
 		expect(warnings.join("")).toContain(
 			'"storage" is the old name for "object-storage"',
@@ -596,7 +596,7 @@ describe("config init", () => {
 					dataApiEnabled: false,
 					aiGateway: true,
 					functions: ["hello:./hello.ts"],
-					buckets: ["assets:private"],
+					buckets: ["uploads:private"],
 				},
 			},
 		];
@@ -681,7 +681,7 @@ describe("config init", () => {
 
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
 		expect(content).toContain("aiGateway: true");
-		expect(content).toContain('assets: { access: "private" }');
+		expect(content).toContain('uploads: { access: "private" }');
 	});
 
 	test("--services accepts the space-joined list PowerShell passes for an unquoted a,b", async ({
@@ -705,7 +705,7 @@ describe("config init", () => {
 
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
 		expect(content).toContain("aiGateway: true");
-		expect(content).toContain('assets: { access: "private" }');
+		expect(content).toContain('uploads: { access: "private" }');
 	});
 
 	test("--services realtime runs offline end to end", async ({
