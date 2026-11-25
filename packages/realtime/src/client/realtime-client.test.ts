@@ -265,6 +265,123 @@ describe("RealtimeClient", () => {
 		}
 	});
 
+	it("closes a new subscription when its creation lets a listener close the client", () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		FakeWebSocket.deferClose = true;
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const first = client.subscribe(query("first"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "first");
+		// Something outside the client closes the socket, and no close event
+		// follows. Subscribing again retires it, which tells the first
+		// subscription it is connecting, and its listener closes the client.
+		socket.close();
+		first.onStateChange((state) => {
+			if (state.status === "connecting") client.close();
+		});
+
+		expect(() => client.subscribe(query("second"))).toThrow(
+			"Realtime client is closed",
+		);
+		expect(first.getState().status).toBe("closed");
+		expect(vi.getTimerCount()).toBe(0);
+		expect(FakeWebSocket.instances).toHaveLength(1);
+	});
+
+	it("confirms a transaction on a resubscribed query only once its own result shows it", async () => {
+		vi.useFakeTimers();
+		vi.spyOn(Math, "random").mockReturnValue(0);
+		useFakeWebSocket();
+		FakeWebSocket.deferClose = true;
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		try {
+			const first = client.subscribe(query("first"));
+			const stuck = connectAndAdmit();
+			baselineSync(stuck, "before");
+			let confirmed = false;
+			const confirmation = first.awaitTxId("50").then(() => {
+				confirmed = true;
+			});
+			// The socket closes without a close event, then a second query
+			// subscribes.
+			stuck.close();
+			client.subscribe(query("second"));
+			await vi.advanceTimersByTimeAsync(5_000);
+			const replacement = defined(FakeWebSocket.instances.at(-1));
+			expect(replacement).not.toBe(stuck);
+			replacement.open();
+			replacement.receive({ type: "ready" });
+
+			// Progress is connection-wide. Before the first query is admitted
+			// again, it must not confirm that query's transaction.
+			replacement.receive({
+				type: "progress",
+				mvcc: { xmin: "60", xmax: "60", xip: [] },
+			});
+			await vi.advanceTimersByTimeAsync(0);
+			expect(confirmed).toBe(false);
+			expect(first.getSnapshot().data).toEqual([
+				{ id: 1, title: "before" },
+			]);
+
+			const requests = replacement.sent.filter(
+				(message) => message.type === "subscribe",
+			);
+			expect(requests).toHaveLength(2);
+			const request = defined(
+				requests.find(
+					(message) =>
+						message.authorization === query("first").capability,
+				),
+			);
+			replacement.receive({
+				type: "subscribed",
+				request_id: request.request_id,
+				live_id: "51",
+				epoch: "1",
+				first_sequence: "1",
+				columns: [
+					{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+					{
+						name: "title",
+						type_oid: 25,
+						typmod: -1,
+						codec: "pg_text",
+					},
+				],
+			});
+			const version = {
+				live_id: "51",
+				epoch: "1",
+				baseline_sync_attempt: "1",
+			};
+			replacement.receive({
+				type: "baseline_sync_start",
+				...version,
+				scope: { kind: "all" },
+				mvcc: { xmin: "60", xmax: "60", xip: [] },
+			});
+			replacement.receive({
+				type: "baseline_sync_batch",
+				...version,
+				index: 0,
+				rows: [{ row_key: ROW_KEY, values: ["1", "after"] }],
+			});
+			replacement.receive({
+				type: "baseline_sync_end",
+				...version,
+				batch_count: 1,
+			});
+			await confirmation;
+			expect(first.getSnapshot().data).toEqual([
+				{ id: 1, title: "after" },
+			]);
+		} finally {
+			client.close();
+		}
+	});
+
 	it("keeps a newer automatic capability when an older manual renewal completes", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);

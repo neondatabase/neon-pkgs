@@ -606,6 +606,19 @@ describe("formatInstallCommand", () => {
 		).toBe(expected);
 	});
 
+	it.each([
+		["npm", "npm install --force @neon/config @neon/env"],
+		["pnpm", "pnpm add @neon/config @neon/env"],
+		["yarn", "yarn add @neon/config @neon/env"],
+		["bun", "bun add @neon/config @neon/env"],
+	] as const)("accepts peer conflicts with %s", (pm, expected) => {
+		expect(
+			formatInstallCommand(pm, ["@neon/config", "@neon/env"], {
+				acceptPeerConflicts: true,
+			}),
+		).toBe(expected);
+	});
+
 	it("ignores the dev flag when installing the whole manifest", () => {
 		expect(formatInstallCommand("pnpm", [], { dev: true })).toBe(
 			"pnpm install",

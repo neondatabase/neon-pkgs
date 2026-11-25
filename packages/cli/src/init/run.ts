@@ -1403,6 +1403,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						error.command,
 						linkDeferredPull,
 						error.message,
+						error.hint,
 					);
 					printInitDone(
 						formatInitDone({
