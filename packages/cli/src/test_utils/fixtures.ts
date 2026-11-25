@@ -2,6 +2,7 @@ import { fork } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import emocks from "emocks";
 import express from "express";
 import strip from "strip-ansi";
@@ -43,6 +44,12 @@ type Fixtures = {
 			unreachableHost?: boolean;
 			apiKey?: string | false;
 			snapshot?: boolean;
+			/**
+			 * Run with analytics on and send the CLI's track.neon.tech requests to this URL
+			 * (`analytics_collector.mjs`). Set `CI` in `env` or pass `--config-dir`, or the run
+			 * stores an anonymous id in the real config directory.
+			 */
+			analyticsCollector?: string;
 		},
 	) => Promise<{ stdout: string; stderr: string; code: number | null }>;
 };
@@ -172,7 +179,7 @@ export const test = originalTest.extend<Fixtures>({
 								options.output ??
 									(options.outputTable ? "table" : "yaml"),
 							]),
-					"--no-analytics",
+					...(options.analyticsCollector ? [] : ["--no-analytics"]),
 					...(options.apiKey === false
 						? []
 						: ["--api-key", options.apiKey ?? "test-key"]),
@@ -181,10 +188,30 @@ export const test = originalTest.extend<Fixtures>({
 				{
 					stdio: "pipe",
 					...(options.cwd ? { cwd: options.cwd } : {}),
+					...(options.analyticsCollector
+						? {
+								execArgv: [
+									...process.execArgv,
+									"--import",
+									pathToFileURL(
+										join(
+											process.cwd(),
+											"src/test_utils/analytics_collector.mjs",
+										),
+									).href,
+								],
+							}
+						: {}),
 					env: {
 						PATH: `${join(process.cwd(), "mocks/bin")}:${process.env.PATH}`,
 						// This env does not inherit test-setup.ts's NO_UPDATE_NOTIFIER.
 						NO_UPDATE_NOTIFIER: "1",
+						...(options.analyticsCollector
+							? {
+									NEON_TEST_ANALYTICS_COLLECTOR:
+										options.analyticsCollector,
+								}
+							: {}),
 						...(options.env ?? {}),
 					},
 				},
