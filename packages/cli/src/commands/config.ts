@@ -276,7 +276,7 @@ const isNpmPeerConflict = (pm: PackageManager, detail: string): boolean =>
 	pm === "npm" && detail === "ERESOLVE";
 
 const PEER_CONFLICT_HINT =
-	"npm stops on a peer dependency conflict in this project's dependency tree. --force installs the Neon packages anyway and reports the conflict as a warning.";
+	"npm stops on a peer dependency conflict in this project's dependency tree. --force accepts the conflict, which npm reports as a warning, and installs the Neon packages along with any peer dependencies the tree is missing.";
 
 export class ConfigInstallFailed extends DetailedError {
 	/** The retry to run by hand. */
