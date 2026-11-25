@@ -881,4 +881,93 @@ describe("resolveDevEnv", () => {
 			}),
 		).rejects.toBeInstanceOf(DevEnvMismatchError);
 	});
+
+	it("tier 1: undeployed triggers do not block, since they add no env vars", async () => {
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { functions: { pipeline: { name: 'Pipeline', source: './index.ts' } }, " +
+				"buckets: { uploads: {} }, " +
+				"triggers: { nightly: { type: 'schedule', function: 'pipeline', cron: '0 4 * * *', functionPath: '/report' } } };\n",
+		);
+		const api = new FakeNeonApi({
+			listBranchBuckets: async () => [
+				{ name: "uploads", accessLevel: "private" },
+			],
+		});
+
+		const result = await resolveNeonEnvVars({
+			cwd,
+			projectId: PROJECT_ID,
+			branchId: BRANCH_ID,
+			api,
+		});
+
+		expect(result.vars.DATABASE_URL).toBeDefined();
+		expect(result.vars.AWS_ACCESS_KEY_ID).toBeDefined();
+		expect(result.undeployed).toBeUndefined();
+	});
+
+	describe("skipUndeployed", () => {
+		const policy =
+			"export default { auth: {}, buckets: { 'pipeline-data': {} } };\n";
+
+		it("resolves what the branch has and reports the undeployed resources", async () => {
+			writeFileSync(join(cwd, "neon.ts"), policy);
+
+			const result = await resolveNeonEnvVars({
+				cwd,
+				projectId: PROJECT_ID,
+				branchId: BRANCH_ID,
+				api: new FakeNeonApi(),
+				skipUndeployed: true,
+			});
+
+			expect(result.undeployed).toEqual(["auth", "bucket:pipeline-data"]);
+			expect(Object.keys(result.vars).sort()).toEqual([
+				"DATABASE_URL",
+				"DATABASE_URL_UNPOOLED",
+				"NEON_BRANCH",
+				"NEON_BRANCH_ID",
+				"NEON_FUNCTION_HOST_SUFFIX",
+			]);
+		});
+
+		it("keeps the deployed services neon.ts declares", async () => {
+			writeFileSync(join(cwd, "neon.ts"), policy);
+			const api = new FakeNeonApi({
+				getNeonAuth: async () => ({
+					projectId: "auth-project",
+					jwksUrl:
+						"https://auth.fake.neon.tech/.well-known/jwks.json",
+					baseUrl: "https://auth.fake.neon.tech",
+				}),
+			});
+
+			const result = await resolveNeonEnvVars({
+				cwd,
+				projectId: PROJECT_ID,
+				branchId: BRANCH_ID,
+				api,
+				skipUndeployed: true,
+			});
+
+			expect(result.undeployed).toEqual(["bucket:pipeline-data"]);
+			expect(result.vars.NEON_AUTH_BASE_URL).toBe(
+				"https://auth.fake.neon.tech",
+			);
+		});
+
+		it("without the option, the same policy still throws", async () => {
+			writeFileSync(join(cwd, "neon.ts"), policy);
+
+			await expect(
+				resolveNeonEnvVars({
+					cwd,
+					projectId: PROJECT_ID,
+					branchId: BRANCH_ID,
+					api: new FakeNeonApi(),
+				}),
+			).rejects.toThrow(/auth, bucket:pipeline-data.*neon deploy/s);
+		});
+	});
 });

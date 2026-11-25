@@ -2121,6 +2121,159 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 		// Nothing is written when the pull fails before resolving any vars.
 		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
 	});
+
+	describe("when neon.ts declares resources the branch does not have yet", () => {
+		const PIPELINE_POLICY =
+			"export default {\n" +
+			"  functions: { pipeline: { name: 'CSV Pipeline', source: './index.ts' } },\n" +
+			"  triggers: {\n" +
+			"    'nightly-report': { type: 'schedule', function: 'pipeline', cron: '0 4 * * *', functionPath: '/report' },\n" +
+			"    'ingest-uploads': { type: 'storage_object_created', function: 'pipeline', bucket: 'pipeline-data', prefix: 'uploads/', functionPath: '/ingest' },\n" +
+			"  },\n" +
+			"  buckets: { 'pipeline-data': {} },\n" +
+			"};\n";
+		const PREVIOUS_BRANCH_ENV =
+			"DATABASE_URL=postgresql://neondb_owner:pw@br-previous-pooler.fake.neon.tech/neondb\n" +
+			"NEON_BRANCH=dev\n" +
+			"NEON_BRANCH_ID=br-previous\n" +
+			"NEON_AUTH_BASE_URL=https://auth-previous.fake.neon.tech\n" +
+			"AWS_ACCESS_KEY_ID=cred-previous\n" +
+			"AWS_ENDPOINT_URL_S3=https://br-previous.storage.fake.neon.tech\n" +
+			"APP_SECRET=keep-me\n";
+
+		it("replaces the previous branch's env with this branch's and names what to deploy", async () => {
+			writeFileSync(join(cwd, "neon.ts"), PIPELINE_POLICY);
+			writeFileSync(join(cwd, ".env.local"), PREVIOUS_BRANCH_ENV);
+
+			let result: Awaited<ReturnType<typeof autoPullEnvAfterPin>> = {
+				status: "skipped",
+			};
+			const logged = stripAnsi(
+				await captureLog(async () => {
+					result = await autoPullEnvAfterPin({
+						...baseProps(new FakeNeonApi(), cwd),
+						envPull: true,
+					});
+				}),
+			);
+
+			expect(result).toMatchObject({
+				status: "written",
+				undeployed: ["bucket:pipeline-data"],
+			});
+			const env = readEnvFile(join(cwd, ".env.local"));
+			expect(env.DATABASE_URL).toContain(`${BRANCH_ID}-pooler`);
+			expect(env.NEON_BRANCH).toBe(BRANCH_NAME);
+			expect(env.NEON_BRANCH_ID).toBe(BRANCH_ID);
+			expect(env.NEON_AUTH_BASE_URL).toBeUndefined();
+			expect(env.APP_SECRET).toBe("keep-me");
+			expect(logged).toContain(
+				"Not deployed    bucket pipeline-data, declared in neon.ts. " +
+					"Run `neon deploy` to provision it and pull its variables.",
+			);
+			expect(logged).toContain(
+				"The AWS_* values already in .env.local were not updated",
+			);
+			expect(logged).not.toContain("trigger:");
+			expect(logged).not.toContain("pulling its Neon env vars failed");
+		});
+
+		it("writes the function host suffix when neon.ts declares no functions", async () => {
+			writeFileSync(
+				join(cwd, "neon.ts"),
+				"export default { buckets: { 'pipeline-data': {} } };\n",
+			);
+
+			await autoPullEnvAfterPin({
+				...baseProps(new FakeNeonApi(), cwd),
+				envPull: true,
+			});
+
+			const env = readEnvFile(join(cwd, ".env.local"));
+			expect(env.DATABASE_URL).toBeDefined();
+			expect(env.NEON_FUNCTION_HOST_SUFFIX).toBeDefined();
+		});
+
+		it("still pulls object storage when one declared bucket exists", async () => {
+			writeFileSync(
+				join(cwd, "neon.ts"),
+				"export default { buckets: { assets: {}, uploads: {} } };\n",
+			);
+
+			writeFileSync(
+				join(cwd, ".env.local"),
+				"AWS_ACCESS_KEY_ID=cred-previous\n",
+			);
+
+			let result: Awaited<ReturnType<typeof autoPullEnvAfterPin>> = {
+				status: "skipped",
+			};
+			const logged = stripAnsi(
+				await captureLog(async () => {
+					result = await autoPullEnvAfterPin({
+						...baseProps(new StorageNeonApi(), cwd),
+						envPull: true,
+					});
+				}),
+			);
+
+			expect(result).toMatchObject({
+				status: "written",
+				undeployed: ["bucket:uploads"],
+			});
+			const env = readEnvFile(join(cwd, ".env.local"));
+			expect(env.AWS_ACCESS_KEY_ID).toBe("cred-fake-0001");
+			expect(env.AWS_SECRET_ACCESS_KEY).toBeDefined();
+			expect(logged).toContain("Not deployed    bucket uploads");
+			expect(logged).not.toContain("AWS_* values already in");
+		});
+
+		it("an explicit env pull writes the branch's env and names what to deploy", async () => {
+			writeFileSync(join(cwd, "neon.ts"), PIPELINE_POLICY);
+			writeFileSync(join(cwd, ".env.local"), PREVIOUS_BRANCH_ENV);
+
+			let result: Awaited<ReturnType<typeof pull>> = { status: "empty" };
+			const logged = stripAnsi(
+				await captureLog(async () => {
+					result = await pull(baseProps(new FakeNeonApi(), cwd), {
+						announce: true,
+					});
+				}),
+			);
+
+			expect(result).toMatchObject({
+				status: "written",
+				undeployed: ["bucket:pipeline-data"],
+			});
+			const env = readEnvFile(join(cwd, ".env.local"));
+			expect(env.NEON_BRANCH_ID).toBe(BRANCH_ID);
+			expect(env.APP_SECRET).toBe("keep-me");
+			expect(logged).toContain(
+				"Not deployed    bucket pipeline-data, declared in neon.ts. " +
+					"Run `neon deploy` to provision it and pull its variables.",
+			);
+		});
+
+		it("does not call the user's own AWS_* keys stale", async () => {
+			writeFileSync(join(cwd, "neon.ts"), PIPELINE_POLICY);
+			writeFileSync(
+				join(cwd, ".env.local"),
+				"AWS_ACCESS_KEY_ID=AKIAOWN\nAWS_ENDPOINT_URL_S3=https://s3.us-east-1.amazonaws.com\n",
+			);
+
+			const logged = stripAnsi(
+				await captureLog(async () => {
+					await pull(baseProps(new FakeNeonApi(), cwd));
+				}),
+			);
+
+			expect(logged).toContain("Not deployed    bucket pipeline-data");
+			expect(logged).not.toContain("AWS_* values already in");
+			expect(readEnvFile(join(cwd, ".env.local")).AWS_ACCESS_KEY_ID).toBe(
+				"AKIAOWN",
+			);
+		});
+	});
 });
 
 describe("env pull option parsing", () => {

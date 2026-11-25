@@ -642,6 +642,14 @@ auth env vars to pull. Provision it first (`neon deploy`, `neon config apply`, o
 Console), or drop auth from --service.
 ```
 
+When `neon.ts` declares a resource the branch does not have yet (a bucket, Neon Auth, the Data API, Realtime), `env pull` still writes the branch's other variables, such as `DATABASE_URL`, and names what `neon deploy` has to provision. `neon deploy` pulls env vars again once it has:
+
+```text
+  Not deployed    bucket pipeline-data, declared in neon.ts. Run `neon deploy` to provision it and pull its variables.
+```
+
+`neon dev` stops with an error instead, since the process it starts would run without those variables. Undeployed functions and triggers never block a pull, because the variables a pull writes do not depend on their deployment.
+
 `link`, `checkout`, and `config apply` invoke `env pull` automatically (see above). Those bundled pulls follow rules 2 and 3 above, with two differences:
 
 - **The AI Gateway only when the file already has `NEON_AI_GATEWAY_*`.** Minting a credential for a service you never named isn't something a side effect of another command should do; once you run `neon env pull`, later bundled pulls keep the gateway current, so `checkout` moves it to the new branch.

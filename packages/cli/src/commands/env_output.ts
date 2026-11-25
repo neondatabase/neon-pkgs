@@ -7,7 +7,11 @@ import {
 	isLegacyFunctionBaseUrlKey,
 	serviceForEnvKey,
 } from "../env_services.js";
-import { NEON_SERVICE_LABELS, NEON_SERVICES } from "../neon_services.js";
+import {
+	NEON_SERVICE_LABELS,
+	NEON_SERVICES,
+	type NeonService,
+} from "../neon_services.js";
 import { getCliName } from "../utils/cli_name.js";
 import type { ResolvedBranchRef } from "../utils/enrichers.js";
 import type { PullOutcome } from "./env.js";
@@ -68,6 +72,22 @@ export const pulledBranch = (branch: ResolvedBranchRef): string =>
 		`(${branch.branchId}${branch.usedDefault ? ", project default" : ""})`,
 	)}`;
 
+const PLAN_SERVICES: Readonly<Record<string, NeonService>> = {
+	auth: "auth",
+	dataApi: "data-api",
+	realtime: "realtime",
+};
+
+/** `bucket:uploads` reads as "bucket uploads"; a service identifier as its label. */
+const undeployedLabel = (identifier: string): string => {
+	const service = PLAN_SERVICES[identifier];
+	if (service) return NEON_SERVICE_LABELS[service];
+	const separator = identifier.indexOf(":");
+	return separator === -1
+		? identifier
+		: `${identifier.slice(0, separator)} ${identifier.slice(separator + 1)}`;
+};
+
 export const formatPulledEnv = (
 	outcome: Extract<PullOutcome, { status: "written" }>,
 	cwd: string,
@@ -111,6 +131,24 @@ export const formatPulledEnv = (
 				"Not pulled",
 				`Object Storage, to keep the AWS_* keys already in ${displayPath(outcome.file, cwd)}. ` +
 					`Use \`${getCliName()} env pull -s object-storage\` to replace them.`,
+			),
+		);
+	}
+	if (outcome.undeployed) {
+		const one = outcome.undeployed.length === 1;
+		lines.push(
+			row(
+				"Not deployed",
+				`${outcome.undeployed.map(undeployedLabel).join(", ")}, declared in neon.ts. ` +
+					`Run \`${getCliName()} deploy\` to provision ${one ? "it" : "them"} and pull ${one ? "its" : "their"} variables.`,
+			),
+		);
+	}
+	if (outcome.staleStorage) {
+		lines.push(
+			row(
+				"",
+				`The AWS_* values already in ${displayPath(outcome.file, cwd)} were not updated and may belong to another branch.`,
 			),
 		);
 	}
