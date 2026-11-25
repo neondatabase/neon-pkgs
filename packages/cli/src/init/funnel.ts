@@ -37,12 +37,6 @@ export type InitFunnelOutcome = "success" | "pending" | "error" | "aborted";
 
 export type InitFunnelToolingKind = "plugins" | "skills" | "mcp";
 
-const TOOLING_KIND_ORDER: readonly InitFunnelToolingKind[] = [
-	"plugins",
-	"skills",
-	"mcp",
-];
-
 /** `setup` is everything after `cli_init_start` and before the first install or link. */
 export type InitFunnelErrorStep =
 	| "setup"
@@ -292,15 +286,6 @@ export const createInitFunnel = (
 	exitError: undefined,
 	ended: false,
 });
-
-export const recordToolingInstalled = (
-	state: InitFunnelState,
-	kind: InitFunnelToolingKind,
-): void => {
-	state.toolingInstalled = TOOLING_KIND_ORDER.filter(
-		(entry) => entry === kind || state.toolingInstalled.includes(entry),
-	);
-};
 
 /** Records a failure once: a deferred error rethrown at the end keeps the step it failed in. */
 export const recordInitError = (
