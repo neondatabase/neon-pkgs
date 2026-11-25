@@ -50,6 +50,7 @@ const ERROR_MATCHERS = [
 	[/^neon skills needs Node\.js /, "NODE_VERSION_UNSUPPORTED"],
 	[/needs npx \(Node\.js\)/, "NPX_NOT_FOUND"],
 	[/spawn git ENOENT/, "GIT_NOT_FOUND"],
+	[/^Installing the Neon plugin needs Git, /, "GIT_NOT_FOUND"],
 	[
 		/^(Failed to install Neon agent skills|skills CLI failed)/,
 		"SKILLS_CLI_FAILED",
@@ -166,4 +167,61 @@ export const isNetworkError = (err: unknown): boolean => {
 		current = (current as { cause?: unknown }).cause;
 	}
 	return false;
+};
+
+/**
+ * Stands in for a flag value the CLI rejected. Error messages are sent as `CLI Error`
+ * telemetry, and a value typed into the wrong flag is sometimes a pasted secret, so an error
+ * names only values it can vouch for (a valid choice, a key it knows) and replaces the rest.
+ */
+export const REDACTED_INVALID_VALUE = "<redacted invalid value>";
+
+/**
+ * ` Did you mean x?` for rejected values within two edits of a valid choice, else `""`. The
+ * error cannot show what was typed, so a near miss is named by the choice it was close to.
+ */
+export const didYouMean = (
+	rejected: readonly string[],
+	choices: readonly string[],
+): string => {
+	const suggestions = [
+		...new Set(
+			rejected
+				.map((value) => closestChoice(value, choices))
+				.filter((choice): choice is string => choice !== undefined),
+		),
+	];
+	return suggestions.length > 0
+		? ` Did you mean ${suggestions.join(" or ")}?`
+		: "";
+};
+
+const closestChoice = (
+	value: string,
+	choices: readonly string[],
+): string | undefined => {
+	const closest = choices
+		.map((choice) => [choice, editDistance(value, choice)] as const)
+		.sort((a, b) => a[1] - b[1])[0];
+	return closest && closest[1] <= 2 ? closest[0] : undefined;
+};
+
+const editDistance = (left: string, right: string): number => {
+	let previous = Array.from(
+		{ length: right.length + 1 },
+		(_, index) => index,
+	);
+	for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+		const current = [leftIndex];
+		for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+			current[rightIndex] = Math.min(
+				(previous[rightIndex] ?? 0) + 1,
+				(current[rightIndex - 1] ?? 0) + 1,
+				(previous[rightIndex - 1] ?? 0) +
+					(left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1),
+			);
+		}
+		previous = current;
+	}
+	return previous[right.length] ?? right.length;
 };

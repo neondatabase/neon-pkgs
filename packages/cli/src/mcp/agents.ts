@@ -5,6 +5,7 @@ import {
 	detectGlobalAgents,
 	getAgentTypes,
 } from "add-mcp";
+import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
 
 export type { AgentType };
 
@@ -84,7 +85,7 @@ export function resolveAddMcpAgentId(rawAgent: string): AgentType {
 	const resolved = tryResolveAddMcpAgentId(rawAgent);
 	if (!resolved) {
 		throw new Error(
-			`Unknown agent: "${rawAgent}". Supported agents: ${listMcpAgentIds().join(", ")}`,
+			`Unknown agent: ${REDACTED_INVALID_VALUE}.${didYouMean([rawAgent], listMcpAgentIds())} Supported agents: ${listMcpAgentIds().join(", ")}`,
 		);
 	}
 	return resolved;

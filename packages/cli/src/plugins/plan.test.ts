@@ -143,7 +143,7 @@ describe("resolvePluginsPlan", () => {
 					agents: ["eve"],
 				}),
 			),
-		).rejects.toThrow(/Unknown agent: "eve"/);
+		).rejects.toThrow(/Unknown agent: <redacted invalid value>/);
 	});
 
 	test("Kimi Code installs without --global", async () => {

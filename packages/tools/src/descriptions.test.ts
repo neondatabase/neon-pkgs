@@ -307,8 +307,8 @@ describe("path parameter descriptions", () => {
 describe("mcp-tool-names.json", () => {
 	const selectors = Object.values(mcpToolNames);
 
-	test("maps each of the Neon MCP server's 141 tools to a distinct published selector", () => {
-		expect(Object.keys(mcpToolNames)).toHaveLength(141);
+	test("maps each of the Neon MCP server's 143 tools to a distinct published selector", () => {
+		expect(Object.keys(mcpToolNames)).toHaveLength(143);
 		expect(new Set(selectors).size).toBe(selectors.length);
 		expect(selectors.filter((selector) => !isNeonToolId(selector))).toEqual(
 			[],

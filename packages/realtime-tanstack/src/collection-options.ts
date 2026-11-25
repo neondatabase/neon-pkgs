@@ -15,6 +15,7 @@ import type {
 	UtilsRecord,
 } from "@tanstack/db";
 import { withCollectionConfigFactory } from "@tanstack/db";
+import { planBatch } from "./batch.js";
 import type { NoInferCompat } from "./no-infer.js";
 
 /** Utilities attached to a Realtime-backed TanStack DB collection. */
@@ -397,73 +398,16 @@ function createRealtimeCollectionOptions<
 					changes: readonly LiveQueryChange<Row>[],
 				) => {
 					try {
-						const nextRowIds = new Map(rowIds);
-						const nextKeys = new Map(keys);
-						const writes: Array<
-							| { type: "insert" | "update"; value: Row }
-							| { type: "delete"; key: Key }
-						> = [];
-
-						for (const change of changes) {
-							// Collection membership and values are independent of server order.
-							if (change.type === "move") continue;
-							if (change.type === "upsert") {
-								const key = config.getKey(change.row);
-								const previousKey = nextRowIds.get(
-									change.rowId,
-								);
-								const keyOwner = nextKeys.get(key);
-								if (
-									keyOwner !== undefined &&
-									keyOwner !== change.rowId
-								) {
-									throw new Error(
-										`Realtime upserted an existing key: ${String(key)}`,
-									);
-								}
-								if (previousKey === undefined) {
-									nextRowIds.set(change.rowId, key);
-									nextKeys.set(key, change.rowId);
-									writes.push({
-										type: "insert",
-										value: change.row,
-									});
-								} else if (key !== previousKey) {
-									nextKeys.delete(previousKey);
-									nextKeys.set(key, change.rowId);
-									nextRowIds.set(change.rowId, key);
-									writes.push({
-										type: "delete",
-										key: previousKey,
-									});
-									writes.push({
-										type: "insert",
-										value: change.row,
-									});
-								} else {
-									writes.push({
-										type: "update",
-										value: change.row,
-									});
-								}
-							} else if (change.type === "remove") {
-								const key = nextRowIds.get(change.rowId);
-								if (key === undefined) {
-									throw new Error(
-										`Realtime deleted an unknown row ID: ${change.rowId}`,
-									);
-								}
-								nextRowIds.delete(change.rowId);
-								nextKeys.delete(key);
-								writes.push({ type: "delete", key });
-							}
-						}
-
+						const batch = planBatch(
+							rowIds,
+							keys,
+							changes,
+							config.getKey,
+						);
 						begin();
-						for (const message of writes) write(message);
+						for (const message of batch.writes) write(message);
 						const receipt = commit();
-						rowIds = nextRowIds;
-						keys = nextKeys;
+						batch.commit();
 						observeReceipt(receipt);
 					} catch (error) {
 						stop(error);

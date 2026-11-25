@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`checkout > --create on an existing name pins it and does not create 1`] = `""`;
+exports[`checkout > --create on an existing name pins it, does not create, and says so 1`] = `""`;
 
 exports[`checkout > announces the branch currently pinned before switching to a new one 1`] = `""`;
 

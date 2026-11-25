@@ -146,7 +146,8 @@ export const builder = (argv: yargs.Argv) =>
 									"--category needs a value. Pass one, or omit the flag entirely.",
 								);
 							}
-							parts.push(trimmed);
+							// npm's `.ps1` shim hands an unquoted PowerShell `a,b` to the CLI as `a b`.
+							parts.push(...trimmed.split(/\s+/));
 						}
 					}
 					return parseMcpCategories(parts);

@@ -360,24 +360,32 @@ describe("checkout", () => {
 		removeFile(ctx);
 	});
 
-	test("--create on an existing name pins it and does not create", async ({
+	test("--create on an existing name pins it, does not create, and says so", async ({
 		testCliCommand,
 		readFile,
 		tmpContext,
 	}) => {
 		const ctx = tmpContext("create_existing");
-		await testCliCommand([
-			"checkout",
-			"main",
-			"--create",
-			"--project-id",
-			"test",
-			"--no-env-pull",
-			"--env",
-			"/no/such-neon-checkout.env",
-			"--context-file",
-			ctx,
-		]);
+		await testCliCommand(
+			[
+				"checkout",
+				"main",
+				"--create",
+				"--project-id",
+				"test",
+				"--no-env-pull",
+				"--env",
+				"/no/such-neon-checkout.env",
+				"--context-file",
+				ctx,
+			],
+			{
+				stderr:
+					"WARNING: Branch main (br-main-branch-123456) already exists, so --create did not create a new one; checking out the existing branch unchanged. Pass a new name for a fresh branch. " +
+					`Checked out branch br-main-branch-123456 on project test. Updated ${ctx}. ` +
+					`${ENV_PULL_SKIPPED_HINT}`,
+			},
+		);
 		expect(parseContext(readFile(ctx))).toEqual({
 			projectId: "test",
 			branch: "main",
@@ -409,6 +417,9 @@ describe("checkout --env", () => {
 		);
 		const text = `${stdout}\n${stderr}`;
 		expect(text).toContain("--create");
+		expect(text.replace(/\s+/g, " ")).toContain(
+			"New branches start from the parent set in neon.ts, else the project's default branch.",
+		);
 		expect(text).toContain("checkout dev --create");
 		expect(text).toContain("checkout feat --create --env .env.local");
 	});
