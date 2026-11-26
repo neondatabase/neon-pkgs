@@ -18,6 +18,8 @@ import { directoryIsEmpty } from "./plan.js";
 
 export type InitDetection = {
 	authenticated: boolean;
+	/** The profile whose stored session needs a new sign-in. It does not count as authenticated. */
+	expiredSession: string | null;
 	emptyDirectory: boolean;
 	interactive: boolean;
 	hostAgent: AgentType | null;
@@ -34,6 +36,7 @@ export type DetectInitEnvironmentOptions = {
 	detectInstalledAgents?: () => Promise<readonly AgentType[]>;
 	detectAgent?: () => AgentType | null;
 	hasLocalCredentials?: (configDir: string) => boolean;
+	expiredSessionProfile?: () => Promise<string | undefined>;
 	directoryNames?: readonly string[];
 	interactive?: boolean;
 };
@@ -99,10 +102,15 @@ export const detectInitEnvironment = async (
 		project,
 		global: globalAgents,
 	});
+	const hasCredentials = (options.hasLocalCredentials ?? hasLocalCredentials)(
+		options.configDir,
+	);
+	const expiredSession = hasCredentials
+		? await options.expiredSessionProfile?.()
+		: undefined;
 	return {
-		authenticated: (options.hasLocalCredentials ?? hasLocalCredentials)(
-			options.configDir,
-		),
+		authenticated: hasCredentials && expiredSession === undefined,
+		expiredSession: expiredSession ?? null,
 		emptyDirectory: directoryIsEmpty(names),
 		interactive: options.interactive ?? canPickAgentsInteractively(),
 		hostAgent: host,

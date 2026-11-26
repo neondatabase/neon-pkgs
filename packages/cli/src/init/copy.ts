@@ -110,6 +110,9 @@ export const INIT_NEEDS_YES =
 export const NON_TTY_LINK_NEEDS_AUTH =
 	"No interactive terminal. Sign in with `neon login`, then re-run, or pass --claimable.";
 
+export const expiredSessionWarning = (profile: string): string =>
+	`The stored Neon session for profile "${profile}" has expired and cannot be refreshed.`;
+
 export const MCP_OAUTH_FALLBACK =
 	"This CLI credential cannot mint an API key for the Neon MCP server. Configuring it with OAuth instead.";
 

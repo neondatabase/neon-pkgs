@@ -28,11 +28,11 @@ export const startNeonApiServer = async (
 			"",
 		);
 
+		seen.push(token);
+
 		if (url.pathname !== "/users/me") {
 			return json(res, 404, { message: "Not Found" });
 		}
-
-		seen.push(token);
 
 		if (rejectAll || token === "" || rejected.has(token)) {
 			return json(res, 401, { message: "Unauthorized" });

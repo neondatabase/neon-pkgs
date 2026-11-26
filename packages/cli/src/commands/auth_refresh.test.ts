@@ -66,6 +66,7 @@ type RunResult = { code: number; stdout: string; stderr: string };
 const forkCli = (
 	args: string[],
 	env: Record<string, string> = {},
+	cwd?: string,
 ): ChildProcess => {
 	if (!existsSync(cliEntry())) {
 		throw new Error(
@@ -89,6 +90,7 @@ const forkCli = (
 		],
 		{
 			stdio: "pipe",
+			...(cwd !== undefined ? { cwd } : {}),
 			env: {
 				PATH: process.env.PATH ?? "",
 				HOME: configDir,
@@ -105,8 +107,9 @@ const forkCli = (
 const runCli = (
 	args: string[] = ["me"],
 	env: Record<string, string> = {},
+	cwd?: string,
 ): Promise<RunResult> => {
-	const child = forkCli(args, env);
+	const child = forkCli(args, env, cwd);
 
 	let stdout = "";
 	let stderr = "";
@@ -443,5 +446,120 @@ describe("a damaged credentials file", () => {
 		expect(result.stderr).not.toContain(
 			"Cannot run interactive auth in CI",
 		);
+	});
+});
+
+describe("`neon init -y` from an agent shell", () => {
+	const agentShell = { CI: "", NO_UPDATE_NOTIFIER: "1" };
+	const initArgs = [
+		"init",
+		"--yes",
+		"--org-id",
+		"org-1",
+		"--project-id",
+		"proj-1",
+		"--branch",
+		"main",
+		"--no-agent-setup",
+		"--no-config",
+		"--output",
+		"table",
+	];
+	let cwd = "";
+
+	beforeEach(() => {
+		cwd = mkdtempSync(join(tmpdir(), "neon-init-session-"));
+	});
+
+	afterEach(() => {
+		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	it("finishes signed out when the stored session's grant is dead", async () => {
+		const before = seedCredentials({ expires_at: Date.now() - 1000 });
+		oauth.revoke(before.refresh_token as string);
+
+		const result = await runCli(initArgs, agentShell, cwd);
+
+		expect(result.code).toBe(0);
+		expect(result.stderr).toContain(
+			'The stored Neon session for profile "DEFAULT" has expired and cannot be refreshed.',
+		);
+		expect(result.stdout).toContain("Sign in to use it:");
+		expect(JSON.parse(readFileSync(join(cwd, ".neon"), "utf8"))).toEqual({
+			orgId: "org-1",
+			projectId: "proj-1",
+			branch: "main",
+		});
+		expect(oauth.refreshAttempts()).toBe(1);
+		expect(readStored()).toEqual(before);
+	});
+
+	it("finishes signed out when the expired session has no refresh token", async () => {
+		seedCredentials({
+			expires_at: Date.now() - 1000,
+			refresh_token: undefined,
+		});
+
+		const result = await runCli(initArgs, agentShell, cwd);
+
+		expect(result.code).toBe(0);
+		expect(result.stderr).toContain(
+			'The stored Neon session for profile "DEFAULT" has expired and cannot be refreshed.',
+		);
+		expect(existsSync(join(cwd, ".neon"))).toBe(true);
+		expect(oauth.refreshAttempts()).toBe(0);
+	});
+
+	it("still reports an unreachable authorization server at the link step", async () => {
+		seedCredentials({ expires_at: Date.now() - 1000 });
+		oauth.setUnreachable(true);
+
+		const result = await runCli(initArgs, agentShell, cwd);
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).not.toContain(
+			"has expired and cannot be refreshed",
+		);
+		expect(result.stderr).toContain(
+			"Could not reach the Neon authorization server",
+		);
+		expect(existsSync(join(cwd, ".neon"))).toBe(false);
+	});
+
+	it("leaves an unusable credentials file to the step that needs it", async () => {
+		writeFileSync(credentialsFile(), JSON.stringify({ type: "api_key" }), {
+			mode: 0o600,
+		});
+
+		const result = await runCli(
+			[
+				"init",
+				"--yes",
+				"--no-link",
+				"--no-agent-setup",
+				"--no-config",
+				"--output",
+				"table",
+			],
+			agentShell,
+			cwd,
+		);
+
+		expect(result.code).toBe(0);
+		expect(result.stderr).not.toContain('has no "api_key" value');
+	});
+
+	it("links with a session that refreshes, without refreshing twice", async () => {
+		seedCredentials({ expires_at: Date.now() - 1000 });
+
+		const result = await runCli(initArgs, agentShell, cwd);
+
+		expect(oauth.refreshAttempts()).toBe(1);
+		expect(oauth.rotations()).toBe(1);
+		expect(api.seenTokens()).toContain(readStored().access_token);
+		// The test API serves no projects, so the verified link stops at the project lookup.
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("Project 'proj-1' not found");
 	});
 });

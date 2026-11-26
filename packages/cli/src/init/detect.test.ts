@@ -189,6 +189,7 @@ describe("init funnel payloads", () => {
 			argv: ["init", "-y"],
 			detection: {
 				authenticated: false,
+				expiredSession: null,
 				emptyDirectory: true,
 				interactive: false,
 				hostAgent: null,
