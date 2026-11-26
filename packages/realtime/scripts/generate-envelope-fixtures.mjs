@@ -105,6 +105,7 @@ function claims({
   querySource = "raw_sql",
   iat = NOW,
   exp = NOW + LIFETIME_SECONDS,
+  dangerouslyBypassRls,
 } = {}) {
   return {
     v: 3,
@@ -118,6 +119,7 @@ function claims({
     iat,
     exp,
     auth: { user, credential },
+    ...(dangerouslyBypassRls === undefined ? {} : { dangerously_bypass_rls: dangerouslyBypassRls }),
   };
 }
 
@@ -255,6 +257,8 @@ async function build() {
       querySource: "kysely",
     }),
   );
+  await addValid("dangerously_bypass_rls", claims({ dangerouslyBypassRls: true }));
+  await addValid("dangerously_bypass_rls_false", claims({ dangerouslyBypassRls: false }));
   await addValid(
     "max_size_credential",
     claims({
@@ -435,6 +439,14 @@ async function build() {
         ...claims(),
         auth: { user: "neondb_owner", credential: PASSWORD, kind: "password" },
       }),
+    ),
+    "invalid_claims",
+  );
+  addInvalid(
+    "dangerously_bypass_rls_not_boolean",
+    await sealClaims(
+      "dangerously_bypass_rls_not_boolean",
+      JSON.stringify({ ...claims(), dangerously_bypass_rls: "true" }),
     ),
     "invalid_claims",
   );

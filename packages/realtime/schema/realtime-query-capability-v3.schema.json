@@ -186,7 +186,11 @@
           "minimum": 0,
           "maximum": 9007199254740991
         },
-        "auth": { "$ref": "#/$defs/auth" }
+        "auth": { "$ref": "#/$defs/auth" },
+        "dangerously_bypass_rls": {
+          "description": "Serve every row the SQL selects, ignoring row-level security policies. The issuer takes responsibility for who receives those rows. Tables with row-level security enabled are admitted only while none of their policies apply to the role Realtime reads as; others are still refused. Omitted means false: tables with row-level security enabled are refused.",
+          "type": "boolean"
+        }
       },
       "x-invariants": [
         "0 < exp - iat <= 300",
