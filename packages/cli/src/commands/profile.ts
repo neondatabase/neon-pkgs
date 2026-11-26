@@ -52,7 +52,7 @@ import prompts from "prompts";
 import type yargs from "yargs";
 import { getApiClient, isNeonApiError, type NeonApiClient } from "../api.js";
 import { auth, revokeToken } from "../auth.js";
-import { setAuthContext } from "../auth_context.js";
+import { API_KEYS_CONSOLE_URL, setAuthContext } from "../auth_context.js";
 import { storeFor } from "../credential_io.js";
 import { isCi } from "../env.js";
 import {
@@ -660,7 +660,7 @@ const create = async (props: CreateProps) => {
 		// same thing `--mint` says, since the two ways out are the same.
 		if (isCi() && props.forceAuth !== true) {
 			throw new Error(
-				`\`neon profile create ${name}\` with no key signs in through the browser, which cannot happen in CI. Pass a key instead: \`neon profile create ${name} --api-key "$KEY"\`, or pipe it with \`echo "$KEY" | neon profile create ${name} --api-key -\`.`,
+				`\`neon profile create ${name}\` with no key signs in through the browser, which cannot happen in CI. Pass a key from ${API_KEYS_CONSOLE_URL} instead: \`neon profile create ${name} --api-key "$KEY"\`, or pipe it with \`echo "$KEY" | neon profile create ${name} --api-key -\`.`,
 			);
 		}
 		const at = locationForCreate(props.configDir, name, props.keyring);

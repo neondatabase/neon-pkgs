@@ -579,6 +579,9 @@ describe("profile create", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).toContain(
+			"Pass a key from https://console.neon.tech/app/settings/api-keys instead",
+		);
 		expect(stderr).toContain('neon profile create ci --api-key "$KEY"');
 		expect(stderr).toContain("--api-key -");
 	});

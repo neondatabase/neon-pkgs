@@ -29,7 +29,7 @@ describe("signInGuidance", () => {
 		).toBe(
 			[
 				"Sign in with a browser on this machine: `neon login`",
-				'Or save an API key you already have: `echo "$KEY" | neon profile create DEFAULT --api-key -`',
+				'Or create an API key in any browser at https://console.neon.tech/app/settings/api-keys and save it: `echo "$KEY" | neon profile create DEFAULT --api-key -`',
 				"Or create a temporary project without an account: `neon claim create` (it expires in 72 hours unless claimed)",
 			].join("\n"),
 		);
@@ -70,7 +70,7 @@ describe("signInGuidance", () => {
 			}),
 		).toBe(
 			[
-				"Set NEON_API_KEY to an API key.",
+				"Set NEON_API_KEY to an API key from https://console.neon.tech/app/settings/api-keys.",
 				"Or create a temporary project without an account: `neon claim create` (it expires in 72 hours unless claimed)",
 			].join("\n"),
 		);
@@ -86,7 +86,7 @@ describe("signInGuidance", () => {
 				ci: true,
 			}),
 		).toBe(
-			'Save an API key to this profile: `echo "$KEY" | neon profile create work --api-key -`',
+			'Save an API key from https://console.neon.tech/app/settings/api-keys to this profile: `echo "$KEY" | neon profile create work --api-key -`',
 		);
 	});
 });
