@@ -2,6 +2,8 @@ import { writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import prompts from "prompts";
 import { recordScaffoldedTemplate } from "../analytics.js";
+import { renderTriggerEntry, type TriggerDeclaration } from "../config_edit.js";
+import { renderKey } from "../config_template.js";
 import { isInteractiveTerminal } from "../env.js";
 import { resolveEnvFilePath } from "../env_file.js";
 import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
@@ -49,6 +51,7 @@ import {
 	ensureConfigPackages,
 	installCommandFrom,
 	missingDependencies,
+	shellQuote,
 } from "./config.js";
 import { displayPath } from "./env_output.js";
 
@@ -60,6 +63,7 @@ const NEW_FUNCTION_FIELDS = [
 	"operations",
 	"routes",
 	"functions",
+	"triggers",
 	"directory",
 	"config",
 	"dependencies",
@@ -93,6 +97,10 @@ export type ScaffoldedFunction = Pick<
 	"slug" | "name" | "operation"
 > & { source: string };
 
+export type ScaffoldedTrigger = TriggerDeclaration & {
+	status: "added" | "already_declared" | "not_added";
+};
+
 export type ScaffoldFromTemplateResult =
 	| { cancelled: true }
 	| {
@@ -104,6 +112,7 @@ export type ScaffoldFromTemplateResult =
 			operations: string[];
 			routes?: string[];
 			functions: ScaffoldedFunction[];
+			triggers: ScaffoldedTrigger[];
 			directory: string;
 			config?: {
 				path: string;
@@ -198,6 +207,38 @@ const confirm = async (message: string, initial: boolean) => {
 	return answer.value as boolean | undefined;
 };
 
+const triggerCreateCommand = (
+	cli: string,
+	trigger: TriggerDeclaration,
+): string => {
+	const args = [
+		`--function-slug ${trigger.function}`,
+		`--name ${shellQuote(trigger.name)}`,
+		...(trigger.type === "schedule"
+			? [`--cron '${trigger.cron}'`]
+			: [
+					`--bucket ${shellQuote(trigger.bucket)}`,
+					...(trigger.prefix === undefined
+						? []
+						: [`--prefix=${shellQuote(trigger.prefix)}`]),
+				]),
+		...(trigger.functionPath === undefined
+			? []
+			: [`--function-path ${shellQuote(trigger.functionPath)}`]),
+	];
+	return `${cli} triggers create ${args.join(" ")}`;
+};
+
+const triggerDetail = (trigger: ScaffoldedTrigger): string => {
+	const event =
+		trigger.type === "schedule"
+			? `cron ${trigger.cron}`
+			: `bucket ${trigger.bucket}${trigger.prefix === undefined ? "" : `, prefix ${trigger.prefix}`}`;
+	return trigger.status === "already_declared"
+		? `${event}, already declared`
+		: event;
+};
+
 const assertSlug = (slug: string | undefined): void => {
 	if (slug === undefined || FUNCTION_SLUG_PATTERN.test(slug)) return;
 	const suggestion = deriveFunctionSlug(slug);
@@ -274,7 +315,12 @@ export const scaffoldFromTemplate = async (
 
 	const register = options.addToConfig !== false;
 	const registration = register
-		? planConfigRegistration(configPath, targetDir, plan.functions)
+		? planConfigRegistration(
+				configPath,
+				targetDir,
+				plan.functions,
+				plan.triggers,
+			)
 		: undefined;
 	if (
 		registration &&
@@ -350,6 +396,18 @@ export const scaffoldFromTemplate = async (
 		...(fn.operation ? { operation: fn.operation } : {}),
 		source: displayPath(join(targetDir, fn.file), cwd),
 	}));
+	const triggersDeclared = new Set(registration?.triggersDeclared);
+	const triggers: ScaffoldedTrigger[] = plan.triggers.map((trigger) => ({
+		...trigger,
+		status: !registration
+			? "not_added"
+			: triggersDeclared.has(trigger.name)
+				? "already_declared"
+				: "added",
+	}));
+	const configFlag = options.config
+		? ` --config ${shellQuote(options.config)}`
+		: "";
 	const nextSteps: string[] = [];
 	const next: string[] = [];
 	const missingConfig = registration?.created
@@ -366,6 +424,30 @@ export const scaffoldFromTemplate = async (
 			`Install the template's dependencies: \`${installHint(dependencies, true)}\``,
 		);
 		next.push(installHint(dependencies, true));
+	}
+	for (const bucket of registration?.undeclaredBuckets ?? []) {
+		const watching = triggers
+			.filter(
+				(trigger) =>
+					trigger.status === "added" &&
+					trigger.type === "storage_object_created" &&
+					trigger.bucket === bucket.name,
+			)
+			.map(({ name }) => name)
+			.join(", ");
+		if (bucket.byHand) {
+			const snippet = `${renderKey(bucket.name)}: { access: "private" },`;
+			nextSteps.push(
+				`Make sure neon.ts declares bucket ${bucket.name}, which trigger ${watching} watches. neon.ts does not load until it does, and \`${cli} config add bucket\` cannot edit this file's buckets, so add it by hand if it is missing: \`${snippet}\` (\`access: "public_read"\` if the bucket allows anonymous reads).`,
+			);
+			next.push(`Add to buckets in neon.ts if missing: ${snippet}`);
+			continue;
+		}
+		const command = `${cli} config add bucket ${shellQuote(bucket.name)}${configFlag}`;
+		nextSteps.push(
+			`Declare bucket ${bucket.name}, which trigger ${watching} watches: \`${command}\`. neon.ts does not load until it is declared. Add \`--access public_read\` if the bucket allows anonymous reads.`,
+		);
+		next.push(command);
 	}
 	const environment = template.environment.map(({ name }) => name);
 	const variables = template.environment
@@ -389,6 +471,16 @@ export const scaffoldFromTemplate = async (
 			`Routes: ${plan.routes.join(", ")}. Other paths return 404.`,
 		);
 	}
+	const triggersConflicting = new Set(registration?.triggersConflicting);
+	for (const trigger of triggers) {
+		if (!triggersConflicting.has(trigger.name)) continue;
+		const { status: _, ...declaration } = trigger;
+		const snippet = renderTriggerEntry(declaration);
+		nextSteps.push(
+			`neon.ts already declares a trigger named ${trigger.name}, so it was left as it is. To add this template's trigger, declare it under triggers by hand, renaming the key to keep both: \`${snippet}\``,
+		);
+		next.push(`Add to triggers in neon.ts: ${snippet}`);
+	}
 	if (register) {
 		const flag = options.config ? ` --config ${options.config}` : "";
 		const envFlag = variables ? ` --env ${envFile}` : "";
@@ -409,6 +501,17 @@ export const scaffoldFromTemplate = async (
 				`${cli} functions deploy ${fn.slug} --src ${fn.source}${envFlags}`,
 			);
 		}
+		for (const trigger of triggers) {
+			const command = triggerCreateCommand(cli, trigger);
+			const bucket =
+				trigger.type === "storage_object_created"
+					? ` (bucket ${trigger.bucket} must exist on the branch first)`
+					: "";
+			nextSteps.push(
+				`After deploying ${trigger.function}, create trigger ${trigger.name}${bucket}: \`${command}\``,
+			);
+			next.push(command);
+		}
 	}
 
 	if (registry.official) recordScaffoldedTemplate(template.id);
@@ -421,6 +524,7 @@ export const scaffoldFromTemplate = async (
 		operations: operations.map(({ id }) => id),
 		...(plan.routes ? { routes: plan.routes } : {}),
 		functions,
+		triggers,
 		directory,
 		...(registration && registration.changes.length > 0
 			? {
@@ -477,6 +581,14 @@ export const formatNewFunctionDone = (result: ScaffoldedTemplate): string => {
 			value: `${result.routes.join(", ")} (other paths return 404)`,
 		});
 	}
+	if (result.triggers.length > 0) {
+		rows.push({
+			label: result.triggers.length === 1 ? "Trigger" : "Triggers",
+			value: result.triggers
+				.map((trigger) => `${trigger.name} (${triggerDetail(trigger)})`)
+				.join(", "),
+		});
+	}
 	rows.push({
 		label: "Config",
 		value: result.config
@@ -531,6 +643,16 @@ const pickTemplate = async (
 	return typeof answer.value === "string" ? answer.value : undefined;
 };
 
+export const triggerJson = ({
+	functionPath,
+	status,
+	...trigger
+}: ScaffoldedTrigger) => ({
+	...trigger,
+	...(functionPath === undefined ? {} : { function_path: functionPath }),
+	status,
+});
+
 export const handleNew = async (props: NewFunctionProps): Promise<void> => {
 	const interactive =
 		props.yes !== true && !structured(props) && isInteractiveTerminal();
@@ -584,6 +706,7 @@ export const handleNew = async (props: NewFunctionProps): Promise<void> => {
 				operations: result.operations,
 				routes: result.routes ?? null,
 				functions: result.functions,
+				triggers: result.triggers.map(triggerJson),
 				directory: result.directory,
 				config: result.config
 					? { path: result.config.path, action: result.config.action }

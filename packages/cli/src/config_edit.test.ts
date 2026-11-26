@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { type ConfigEdit, editNeonConfig } from "./config_edit.js";
+import {
+	type ConfigEdit,
+	declaredValue,
+	declaresEntry,
+	editNeonConfig,
+} from "./config_edit.js";
 import { CONFIG_INIT_SERVICES, renderNeonConfig } from "./config_template.js";
 
 const fn = (slug: string): ConfigEdit => ({
@@ -18,6 +23,22 @@ const bucket = (name: string): ConfigEdit => ({
 	name,
 	access: "private",
 });
+const schedule: ConfigEdit = {
+	kind: "trigger",
+	name: "cleanup",
+	type: "schedule",
+	function: "uploads",
+	cron: "0 * * * *",
+	functionPath: "/cleanup",
+};
+const onUpload: ConfigEdit = {
+	kind: "trigger",
+	name: "describe-uploads",
+	type: "storage_object_created",
+	function: "uploads",
+	bucket: "uploads",
+	prefix: "images/",
+};
 const realtime = (
 	enabled: boolean,
 	allowedOrigins?: readonly string[],
@@ -163,6 +184,28 @@ describe("editNeonConfig on the starter policy", () => {
   // Branch policy`);
 	});
 
+	it("writes each trigger on one line, after functions and buckets", () => {
+		let source = editNeonConfig(STARTER, fn("uploads")).source;
+		const first = editNeonConfig(source, schedule);
+		expect(first.changes).toEqual(["added triggers.cleanup"]);
+		source = editNeonConfig(first.source, onUpload).source;
+		source = editNeonConfig(source, bucket("uploads")).source;
+
+		expect(source).toContain(
+			`  functions: {
+    uploads: { name: "Send Email", source: "./functions/uploads.ts" },
+  },
+  buckets: {
+    uploads: { access: "private" },
+  },
+  triggers: {
+    cleanup: { type: "schedule", function: "uploads", cron: "0 * * * *", functionPath: "/cleanup" },
+    "describe-uploads": { type: "storage_object_created", function: "uploads", bucket: "uploads", prefix: "images/" },
+  },
+  // Branch policy`,
+		);
+	});
+
 	it("is a no-op when run twice", () => {
 		for (const edit of [
 			realtime(true),
@@ -171,6 +214,8 @@ describe("editNeonConfig on the starter policy", () => {
 			service("ai-gateway"),
 			fn("sendemail"),
 			bucket("assets"),
+			schedule,
+			onUpload,
 		]) {
 			const first = editNeonConfig(STARTER, edit);
 			const second = editNeonConfig(first.source, edit);
@@ -202,6 +247,94 @@ describe("editNeonConfig on a file that declares services already", () => {
 	it("reports an existing function or bucket as already declared", () => {
 		expect(editNeonConfig(FULL, fn("hello")).changes).toEqual([]);
 		expect(editNeonConfig(FULL, bucket("uploads")).changes).toEqual([]);
+	});
+
+	it("leaves a trigger with the same name as it is", () => {
+		const declared = editNeonConfig(FULL, {
+			...schedule,
+			cron: "5 4 * * *",
+		}).source;
+
+		const { source, changes } = editNeonConfig(declared, schedule);
+		expect(changes).toEqual([]);
+		expect(source).toBe(declared);
+		expect(source).toContain('cron: "5 4 * * *"');
+	});
+});
+
+describe("declaresEntry", () => {
+	const withBuckets = (
+		block: string,
+	) => `import { defineConfig } from "@neon/config/v1";
+
+export default defineConfig({
+${block}
+});
+`;
+
+	it("finds a bucket at the top level or under preview", () => {
+		expect(
+			declaresEntry(
+				withBuckets(
+					'  buckets: { uploads: { access: "public_read" } },',
+				),
+				"buckets",
+				"uploads",
+			),
+		).toBe(true);
+		expect(
+			declaresEntry(
+				withBuckets(
+					'  preview: {\n    buckets: { uploads: { access: "private" } },\n  },',
+				),
+				"buckets",
+				"uploads",
+			),
+		).toBe(true);
+		expect(declaresEntry(STARTER, "buckets", "uploads")).toBe(false);
+	});
+
+	it("cannot tell when the container is an expression", () => {
+		expect(
+			declaresEntry(
+				withBuckets("  buckets: shared,"),
+				"buckets",
+				"uploads",
+			),
+		).toBeUndefined();
+	});
+});
+
+describe("declaredValue", () => {
+	const config = (
+		block: string,
+	) => `import { defineConfig } from "@neon/config/v1";
+
+export default defineConfig({
+${block}
+});
+`;
+
+	it("returns the source text of a top-level entry's value", () => {
+		expect(
+			declaredValue(
+				config(
+					'  triggers: {\n    tick: { type: "schedule", function: "x", cron: "0 * * * *" },\n  },',
+				),
+				"triggers",
+				"tick",
+			),
+		).toBe('{ type: "schedule", function: "x", cron: "0 * * * *" }');
+	});
+
+	it("returns undefined when the entry is missing or hidden", () => {
+		expect(declaredValue(STARTER, "triggers", "tick")).toBeUndefined();
+		expect(
+			declaredValue(config("  triggers: shared,"), "triggers", "tick"),
+		).toBeUndefined();
+		expect(
+			declaredValue(config("  triggers: { tick },"), "triggers", "tick"),
+		).toBeUndefined();
 	});
 });
 

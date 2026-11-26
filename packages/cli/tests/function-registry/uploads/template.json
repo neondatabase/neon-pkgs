@@ -1,0 +1,16 @@
+{
+	"id": "uploads",
+	"title": "Uploads",
+	"description": "Router layout with triggers.",
+	"layout": "router",
+	"operations": [
+		{ "id": "cleanup", "title": "Cleanup", "description": "Delete stale uploads.", "source": "functions/cleanup.ts", "recommended": true },
+		{ "id": "describe", "title": "Describe", "description": "Describe an uploaded image.", "source": "functions/describe.ts", "route": "/describe-image", "recommended": true },
+		{ "id": "health", "title": "Health", "description": "Health check.", "source": "functions/health.ts", "recommended": false }
+	],
+	"triggers": [
+		{ "name": "cleanup", "type": "schedule", "cron": "0 * * * *", "operation": "cleanup" },
+		{ "name": "describe-uploads", "type": "storage_object_created", "bucket": "uploads", "prefix": "images/", "operation": "describe" },
+		{ "name": "health-check", "type": "schedule", "cron": "*/15 * * * *", "operation": "health" }
+	]
+}

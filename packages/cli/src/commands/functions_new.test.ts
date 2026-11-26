@@ -415,7 +415,7 @@ describe("functions new", () => {
 			run({ template: "mailer", operations: ["nope"] }),
 		).rejects.toThrow(/Unknown operation <redacted invalid value>/);
 		await expect(run({ template: "nope" })).rejects.toThrow(
-			/^Unknown function template <redacted invalid value> in .*\. Did you mean notes\? Available templates: hello, notes, mailer\.$/,
+			/^Unknown function template <redacted invalid value> in .*\. Did you mean notes\? Available templates: hello, notes, mailer, uploads, pipeline, ticker\.$/,
 		);
 	});
 });

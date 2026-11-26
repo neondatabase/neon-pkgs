@@ -2,6 +2,9 @@
 	"templates": [
 		{ "id": "hello", "title": "Hello", "description": "No operations.", "path": "hello/template.json", "categories": ["first-party"] },
 		{ "id": "notes", "title": "Notes API", "description": "Router layout.", "path": "notes/template.json", "categories": ["first-party"] },
-		{ "id": "mailer", "provider": "Mailer", "title": "Mailer", "description": "Separate layout with env.", "path": "mailer/template.json", "categories": ["first-party"] }
+		{ "id": "mailer", "provider": "Mailer", "title": "Mailer", "description": "Separate layout with env.", "path": "mailer/template.json", "categories": ["first-party"] },
+		{ "id": "uploads", "title": "Uploads", "description": "Router layout with triggers.", "path": "uploads/template.json", "categories": ["first-party"] },
+		{ "id": "pipeline", "title": "Pipeline", "description": "Separate layout with triggers.", "path": "pipeline/template.json", "categories": ["first-party"] },
+		{ "id": "ticker", "title": "Ticker", "description": "No operations, with triggers.", "path": "ticker/template.json", "categories": ["first-party"] }
 	]
 }

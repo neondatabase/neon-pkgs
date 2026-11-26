@@ -1,0 +1,14 @@
+{
+	"id": "pipeline",
+	"title": "Pipeline",
+	"description": "Separate layout with triggers.",
+	"layout": "separate",
+	"operations": [
+		{ "id": "ingest", "title": "Ingest", "description": "Ingest a file.", "source": "functions/ingest.ts", "slug": "pipeingest", "recommended": true },
+		{ "id": "report", "title": "Report", "description": "Send the nightly report.", "source": "functions/report.ts", "slug": "pipereport", "recommended": true }
+	],
+	"triggers": [
+		{ "name": "ingest-files", "type": "storage_object_created", "bucket": "inbox", "operation": "ingest" },
+		{ "name": "nightly-report", "type": "schedule", "cron": "30 2 * * 1-5", "operation": "report", "path": "/run" }
+	]
+}

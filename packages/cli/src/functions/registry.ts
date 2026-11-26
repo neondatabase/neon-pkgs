@@ -35,6 +35,15 @@ export type FunctionTemplateOperation = {
 	recommended: boolean;
 };
 
+export type FunctionTemplateTrigger = {
+	name: string;
+	operation?: string;
+	path?: string;
+} & (
+	| { type: "schedule"; cron: string }
+	| { type: "storage_object_created"; bucket: string; prefix?: string }
+);
+
 export type FunctionTemplate = {
 	id: string;
 	provider?: string;
@@ -44,6 +53,7 @@ export type FunctionTemplate = {
 	dependencies: string[];
 	environment: FunctionTemplateEnvironment[];
 	operations?: FunctionTemplateOperation[];
+	triggers: FunctionTemplateTrigger[];
 };
 
 export const GITHUB_OWNER_PATTERN =
@@ -109,10 +119,11 @@ export type RegistryIndexDocument = {
 
 export type TemplateDocument = Omit<
 	FunctionTemplate,
-	"dependencies" | "environment"
+	"dependencies" | "environment" | "triggers"
 > & {
 	dependencies?: string[];
 	environment?: FunctionTemplateEnvironment[];
+	triggers?: unknown;
 };
 
 function assertValid<T>(
@@ -251,5 +262,158 @@ export const parseTemplateItem = (
 		dependencies: data.dependencies ?? [],
 		environment: data.environment ?? [],
 		...(operations ? { operations } : {}),
+		triggers: parseTriggers(data, operations ?? []),
 	};
+};
+
+const TRIGGER_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const CRON_PATTERN = /^[0-9*][0-9*,/-]*(?: [0-9*][0-9*,/-]*){4}$/;
+const BUCKET_NAME_PATTERN = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
+const FUNCTION_PATH_PATTERN = /^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%/?]{0,2047}$/;
+const MAX_PREFIX_BYTES = 1024;
+
+const hasControlCharacter = (text: string): boolean =>
+	[...text].some((char) => {
+		const code = char.codePointAt(0) ?? 0;
+		return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+	});
+const TRIGGER_KEYS: Record<FunctionTemplateTrigger["type"], Set<string>> = {
+	schedule: new Set(["name", "type", "cron", "operation", "path"]),
+	storage_object_created: new Set([
+		"name",
+		"type",
+		"bucket",
+		"prefix",
+		"operation",
+		"path",
+	]),
+};
+
+const parseTriggers = (
+	data: TemplateDocument,
+	operations: readonly FunctionTemplateOperation[],
+): FunctionTemplateTrigger[] => {
+	if (data.triggers === undefined) return [];
+	const invalid = (index: number, reason: string): never => {
+		throw new Error(
+			`Invalid template.json for "${data.id}": triggers[${index}] ${reason}.`,
+		);
+	};
+	if (!Array.isArray(data.triggers)) {
+		throw new Error(
+			`Invalid template.json for "${data.id}": triggers must be an array.`,
+		);
+	}
+	const names = new Set<string>();
+	return data.triggers.map(
+		(item: unknown, index): FunctionTemplateTrigger => {
+			if (!isRecord(item)) return invalid(index, "is not an object");
+			const { name, type, operation, path } = item;
+			if (type !== "schedule" && type !== "storage_object_created") {
+				return invalid(
+					index,
+					'has a type other than "schedule" or "storage_object_created"',
+				);
+			}
+			const unknown = Object.keys(item).find(
+				(key) => !TRIGGER_KEYS[type].has(key),
+			);
+			if (unknown !== undefined) {
+				return invalid(
+					index,
+					`has a field ${type} triggers do not take`,
+				);
+			}
+			if (typeof name !== "string" || !TRIGGER_NAME_PATTERN.test(name)) {
+				return invalid(
+					index,
+					"needs a name of 1-63 lowercase letters, digits, and hyphens",
+				);
+			}
+			if (names.has(name)) return invalid(index, "repeats a name");
+			names.add(name);
+			if (
+				path !== undefined &&
+				(typeof path !== "string" || !FUNCTION_PATH_PATTERN.test(path))
+			) {
+				return invalid(
+					index,
+					"has a path that is not a URL path of at most 2048 characters starting with /",
+				);
+			}
+			if (operation === undefined) {
+				if (operations.length > 0) {
+					return invalid(index, "needs the operation it calls");
+				}
+			} else {
+				if (operations.length === 0) {
+					return invalid(
+						index,
+						"sets an operation, but the template has no operations",
+					);
+				}
+				if (typeof operation !== "string") {
+					return invalid(
+						index,
+						"has an operation that is not a string",
+					);
+				}
+				if (!operations.some(({ id }) => id === operation)) {
+					return invalid(
+						index,
+						"names an operation the template lacks",
+					);
+				}
+				if (data.layout === "router" && path !== undefined) {
+					return invalid(
+						index,
+						"sets a path, but a router trigger posts to its operation's route",
+					);
+				}
+			}
+			const target = {
+				name,
+				...(operation === undefined ? {} : { operation }),
+				...(path === undefined ? {} : { path }),
+			};
+			if (type === "schedule") {
+				const { cron } = item;
+				if (typeof cron !== "string" || !CRON_PATTERN.test(cron)) {
+					return invalid(
+						index,
+						"needs a numeric five-field cron expression separated by single spaces, each field starting with a digit or *",
+					);
+				}
+				return { ...target, type, cron };
+			}
+			const { bucket, prefix } = item;
+			if (
+				typeof bucket !== "string" ||
+				!BUCKET_NAME_PATTERN.test(bucket)
+			) {
+				return invalid(
+					index,
+					"needs a bucket name of 3-63 lowercase letters, digits, dots, and hyphens",
+				);
+			}
+			if (
+				prefix !== undefined &&
+				(typeof prefix !== "string" ||
+					prefix === "" ||
+					Buffer.byteLength(prefix) > MAX_PREFIX_BYTES ||
+					hasControlCharacter(prefix))
+			) {
+				return invalid(
+					index,
+					"needs a prefix of 1-1024 UTF-8 bytes with no control characters",
+				);
+			}
+			return {
+				...target,
+				type,
+				bucket,
+				...(prefix === undefined ? {} : { prefix }),
+			};
+		},
+	);
 };
