@@ -6,10 +6,7 @@ import {
 	type LoadedConfig,
 	loadConfigFromFile,
 } from "@neon/config";
-import { currentContextFile } from "./context.js";
-
-/** Config filenames the runtime loads (mirrors @neon/config's loader). */
-const NEON_CONFIG_FILENAMES = ["neon.ts", "neon.mts", "neon.js", "neon.mjs"];
+import { currentContextFile, NEON_CONFIG_FILENAMES } from "./context.js";
 
 export const neonConfigFilename = (dir: string): string | undefined =>
 	NEON_CONFIG_FILENAMES.find((name) => existsSync(join(dir, name)));

@@ -231,6 +231,14 @@ function argvEnablesMcpOauth(argv: readonly string[]): boolean {
 export const CONTEXT_FILE = ".neon";
 const GITIGNORE_FILE = ".gitignore";
 
+/** Config filenames the runtime loads (mirrors @neon/config's loader). */
+export const NEON_CONFIG_FILENAMES = [
+	"neon.ts",
+	"neon.mts",
+	"neon.js",
+	"neon.mjs",
+] as const;
+
 type ResolvePath = (...paths: string[]) => string;
 type CanAccessFile = (file: string) => boolean;
 
@@ -244,11 +252,26 @@ const canAccessFile = (file: string): boolean => {
 };
 
 /**
+ * A directory holding both `package.json` and a Neon config file is a project of its own,
+ * such as an app scaffolded by `neon bootstrap` inside an already-linked folder. Requiring
+ * `package.json` keeps a client module like `src/neon.ts` from counting as one.
+ */
+const isProjectRoot = (
+	dir: string,
+	resolvePath: ResolvePath,
+	canAccess: CanAccessFile,
+): boolean =>
+	canAccess(resolvePath(dir, "package.json")) &&
+	NEON_CONFIG_FILENAMES.some((name) => canAccess(resolvePath(dir, name)));
+
+/**
  * Walk upward to find an existing `.neon` file.
  *
  * The walk keeps the established home and POSIX-root boundaries, then also
  * stops when resolving a parent makes no progress. That second guard handles
  * Windows drive and UNC-share roots, whose paths do not equal `normalize("/")`.
+ * It also stops at a project root without a `.neon` ({@link isProjectRoot}), so an
+ * ancestor's link never applies to that project.
  */
 export const walkContextFile = (
 	cwd: string,
@@ -262,6 +285,9 @@ export const walkContextFile = (
 		const contextFile = resolvePath(currentDir, CONTEXT_FILE);
 		if (canAccess(contextFile)) {
 			return contextFile;
+		}
+		if (isProjectRoot(currentDir, resolvePath, canAccess)) {
+			break;
 		}
 
 		const parentDir = resolvePath(currentDir, "..");
@@ -279,8 +305,10 @@ export const walkContextFile = (
  *
  * Walks UP from `cwd` looking ONLY for an already-existing `.neon` file so
  * commands run from a sub-directory of a linked project still pick up the
- * project's context. If no `.neon` is found, the path defaults to
- * `<cwd>/.neon`, which makes `neonctl link` and `neonctl set-context`
+ * project's context. The walk ends early at a directory with its own
+ * `package.json` and `neon.ts`, so running `link` in an app nested inside a
+ * linked folder links the app instead of relinking the folder. If no `.neon`
+ * is found, the path defaults to `<cwd>/.neon`, which makes `neonctl link` and `neonctl set-context`
  * predictable: they always write the context file into the directory they
  * were invoked from.
  *

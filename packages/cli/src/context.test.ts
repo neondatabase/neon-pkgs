@@ -369,6 +369,7 @@ describe("walkContextFile with Windows path semantics", () => {
 
 		expect(inspectedFiles).toEqual([
 			"C:\\Users\\test-user\\workspace\\.neon",
+			"C:\\Users\\test-user\\workspace\\package.json",
 		]);
 		expect(terminalParentResolutions()).toBe(0);
 	});
@@ -411,6 +412,58 @@ describe("currentContextFile", () => {
 		const sub = join(workspace, "fresh-sub");
 		mkdirSync(sub);
 		expect(currentContextFile(sub)).toBe(join(sub, ".neon"));
+	});
+
+	describe("a project nested in a linked folder", () => {
+		const nestedApp = (configFile = "neon.ts"): string => {
+			writeFileSync(
+				join(workspace, ".neon"),
+				JSON.stringify({ projectId: "parent-project" }),
+			);
+			const app = join(workspace, "my-app");
+			mkdirSync(app);
+			writeFileSync(join(app, "package.json"), "{}");
+			writeFileSync(join(app, configFile), "export default {};\n");
+			return app;
+		};
+
+		test.each([
+			"neon.ts",
+			"neon.mts",
+			"neon.js",
+			"neon.mjs",
+		])("gets its own .neon when it has package.json and %s", (configFile) => {
+			const app = nestedApp(configFile);
+			expect(currentContextFile(app)).toBe(join(app, ".neon"));
+		});
+
+		test("ends the walk at the app, so its subdirectories are unlinked too", () => {
+			const src = join(nestedApp(), "src");
+			mkdirSync(src);
+			expect(currentContextFile(src)).toBe(join(src, ".neon"));
+		});
+
+		test("uses the app's own .neon once it is linked", () => {
+			const app = nestedApp();
+			writeFileSync(join(app, ".neon"), "{}");
+			expect(currentContextFile(app)).toBe(join(app, ".neon"));
+		});
+
+		test("still reaches the parent .neon from a workspace package without neon.ts", () => {
+			const web = join(workspace, "apps", "web");
+			mkdirSync(web, { recursive: true });
+			writeFileSync(join(workspace, ".neon"), "{}");
+			writeFileSync(join(web, "package.json"), "{}");
+			expect(currentContextFile(web)).toBe(join(workspace, ".neon"));
+		});
+
+		test("still reaches the parent .neon from a client module directory without package.json", () => {
+			const lib = join(workspace, "src", "lib");
+			mkdirSync(lib, { recursive: true });
+			writeFileSync(join(workspace, ".neon"), "{}");
+			writeFileSync(join(lib, "neon.ts"), "export const client = {};\n");
+			expect(currentContextFile(lib)).toBe(join(workspace, ".neon"));
+		});
 	});
 });
 
