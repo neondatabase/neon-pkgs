@@ -243,18 +243,19 @@ describe("checkout", () => {
 		removeFile(ctx);
 	});
 
-	test("surfaces why a project-scoped key cannot auto-detect the project", async ({
+	test("checks out a branch of the project a project-scoped key is limited to", async ({
 		testCliCommand,
-		removeFile,
+		readFile,
 		tmpContext,
 	}) => {
 		const ctx = tmpContext("project_key");
-		await testCliCommand(["checkout", "main", "--context-file", ctx], {
-			mockDir: "project-key",
-			code: 1,
-			stderr: 'ERROR: No Neon project is linked here, and a project-scoped API key cannot list projects to pick one (not allowed to perform actions outside the project this key is scoped to; subject_project_id:"test-project-123456"). Run the command from the directory you linked with `neon link`, or pass --project-id (and --branch for a branch other than the default).',
-		});
-		removeFile(ctx);
+		await testCliCommand(
+			["checkout", "main", "--no-env-pull", "--context-file", ctx],
+			{ mockDir: "project-key", snapshot: false },
+		);
+		const pin = parseContext(readFile(ctx));
+		expect(pin.projectId).toBe("test-project-123456");
+		expect(pin.branch).toBe("main");
 	});
 
 	test("fails with a helpful error when the branch is not found", async ({

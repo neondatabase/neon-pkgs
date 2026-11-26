@@ -1512,6 +1512,52 @@ describe("link", () => {
 			});
 		});
 
+		test("project-scoped key auto-links the project it is limited to", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_projectkey");
+			await testCliCommand(
+				["link", "-y", "--no-env-pull", "--context-file", ctx],
+				{ mockDir: "project-key", snapshot: false },
+			);
+			expect(JSON.parse(readFile(ctx))).toEqual({
+				orgId: "test-org-123",
+				projectId: "test-project-123456",
+				branch: "main",
+			});
+		});
+
+		test("project-scoped key asked to create a project names its project", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_projectkey_create");
+			await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--org-id",
+					"test-org-123",
+					"--project-name",
+					"new-app",
+					"--region-id",
+					"aws-us-east-2",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{
+					mockDir: "project-key",
+					code: 1,
+					snapshot: false,
+					stderr: "ERROR: This API key is limited to project test-project-123456: it cannot create projects, mint API keys, or read any other project. Pass --project-id test-project-123456 instead of --project-name to use that project, or use a personal or organization API key to create one.",
+				},
+			);
+			expect(existsSync(ctx)).toBe(false);
+		});
+
 		test("org-scoped key with no projects asks for --org-id", async ({
 			testCliCommand,
 			tmpContext,

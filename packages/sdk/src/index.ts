@@ -41,6 +41,7 @@ export {
 	NeonRequestTimeoutError,
 	NeonTimeoutError,
 	NeonWaitTimeoutError,
+	scopedKeyProjectId,
 } from "./neon/errors.js";
 export type { Page, Paginated } from "./neon/paginate.js";
 export type { ApiRequest, ApiRequestMethod } from "./neon/request.js";

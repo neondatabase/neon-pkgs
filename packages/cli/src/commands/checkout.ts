@@ -658,7 +658,7 @@ const tryAutoDetectProject = async (
 		// `fillSingleProject` throws on "No projects found" / "Multiple projects
 		// found" — both mean we can't pick a project automatically. Network/auth
 		// errors are real and should surface to the user, and so does a project-scoped
-		// key, which `link` cannot help with because it cannot list projects either.
+		// key whose refusal names no project, which `link` cannot help with either.
 		if (isNeonApiError(err) || err instanceof ProjectNotLinkedError) {
 			throw err;
 		}

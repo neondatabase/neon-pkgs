@@ -135,6 +135,12 @@ export function isNeonApiError(err: unknown): err is NeonApiError {
 	return err instanceof NeonApiError;
 }
 
+export const scopedKeyProject = (err: unknown): string | undefined =>
+	isNeonApiError(err) ? raw.scopedKeyProjectId(err.data) : undefined;
+
+export const projectKeyNote = (projectId: string): string =>
+	`This API key is limited to project ${projectId}: it cannot create projects, mint API keys, or read any other project.`;
+
 /** Extract a `message` string from a parsed error body, if present. */
 export function messageFromBody(body: unknown): string | undefined {
 	if (body && typeof body === "object" && "message" in body) {

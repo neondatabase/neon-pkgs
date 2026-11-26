@@ -1,0 +1,10 @@
+{
+  "project": {
+    "id": "test-project-123456",
+    "name": "scoped-project",
+    "org_id": "test-org-123",
+    "region_id": "aws-us-east-2",
+    "created_at": "2024-01-01T00:00:00.000Z",
+    "updated_at": "2024-01-01T00:00:00.000Z"
+  }
+}

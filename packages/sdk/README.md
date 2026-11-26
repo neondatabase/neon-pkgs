@@ -175,6 +175,19 @@ if (error instanceof NeonNetworkError) {
 }
 ```
 
+A project-scoped API key reaches one project. `GET /auth` reports it as `api_key_org`, the same
+as an organization key, and the API refuses it everything outside that project, listing projects
+included, with a `NeonNotFoundError` that names the project only in its message.
+`scopedKeyProjectId` reads it from the error's `body`:
+
+```ts
+import { scopedKeyProjectId } from "@neon/sdk";
+
+const { error } = await neon.projects.list().page();
+const projectId =
+  error?.kind === "not_found" ? scopedKeyProjectId(error.body) : undefined;
+```
+
 Validating ids and other path parameters before passing them in is the caller's
 responsibility. An empty path parameter builds a URL with an empty segment, which the Neon
 API answers with a redirect rather than a `400`; that can surface as a `"network"` error
