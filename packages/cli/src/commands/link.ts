@@ -7,7 +7,12 @@ import type {
 } from "@neon/sdk";
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
-import { isNeonApiError, messageFromBody } from "../api.js";
+import {
+	isNeonApiError,
+	messageFromBody,
+	projectKeyNote,
+	scopedKeyProject,
+} from "../api.js";
 import { isClaimableEnvTarget } from "../claimable/state.js";
 import { defaultDir } from "../config.js";
 import {
@@ -509,6 +514,12 @@ const verifyOrgAccess = async (
 		const status = httpStatus(err);
 		if (status === 401) {
 			throw err;
+		}
+		const scoped = scopedKeyProject(err);
+		if (scoped !== undefined) {
+			throw new LinkInputError(
+				`${projectKeyNote(scoped)} Pass --project-id ${scoped} instead of --project-name to use that project, or use a personal or organization API key to create one.`,
+			);
 		}
 		if (status === 403 || status === 404) {
 			throw new LinkInputError(
@@ -1059,7 +1070,7 @@ type ProjectChoice =
 	| { type: "create"; suggestedName?: string };
 
 const promptProjectChoice = async (
-	projects: ProjectListItem[],
+	projects: LinkableProject[],
 	suggestedName: string | undefined,
 	opts: { allowCreate: boolean },
 ): Promise<ProjectChoice> => {
@@ -1212,18 +1223,30 @@ const detectOrgIdFromProjects = async (
 	}
 };
 
+type LinkableProject = Pick<ProjectListItem, "id" | "name" | "region_id">;
+
+/** Every project in `orgId`; for a project-scoped key, which the API refuses the list, the one it reaches. */
 const listAllProjects = async (
 	props: CommonProps,
 	orgId: string,
-): Promise<ProjectListItem[]> => {
-	const result: ProjectListItem[] = [];
+): Promise<LinkableProject[]> => {
+	const result: LinkableProject[] = [];
 	let cursor: string | undefined;
 	while (true) {
-		const { data } = await props.apiClient.listProjects({
-			limit: PROJECTS_LIST_LIMIT,
-			org_id: orgId,
-			cursor,
-		});
+		let page: Awaited<ReturnType<typeof props.apiClient.listProjects>>;
+		try {
+			page = await props.apiClient.listProjects({
+				limit: PROJECTS_LIST_LIMIT,
+				org_id: orgId,
+				cursor,
+			});
+		} catch (err) {
+			const scoped = scopedKeyProject(err);
+			if (scoped === undefined) throw err;
+			const { data } = await props.apiClient.getProject(scoped);
+			return [data.project];
+		}
+		const { data } = page;
 		result.push(...data.projects);
 		cursor = data.pagination?.cursor;
 		if (data.projects.length < PROJECTS_LIST_LIMIT) {

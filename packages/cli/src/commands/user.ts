@@ -1,8 +1,14 @@
 import type { CurrentUserInfoResponse } from "@neon/sdk";
 import type yargs from "yargs";
 
-import { isNeonApiError, type NeonApiClient } from "../api.js";
+import {
+	isNeonApiError,
+	type NeonApiClient,
+	projectKeyNote,
+	scopedKeyProject,
+} from "../api.js";
 import { type AuthContext, getAuthContext } from "../auth_context.js";
+import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { writer } from "../writer.js";
 
@@ -43,12 +49,15 @@ const me = async (props: CommonProps) => {
 	const data = await currentUserOrOrgKey(props.apiClient);
 	if ("auth_method" in data) {
 		if (props.output === "json" || props.output === "yaml") {
-			writer(props).end(data, { fields: ["account_id", "auth_method"] });
-			return;
+			writer(props).end(data, {
+				fields: ["account_id", "auth_method", "project_id"],
+			});
+		} else {
+			writer(props).end(orgKeyDetails(data, auth), {
+				fields: ["organization", "project", "authentication"],
+			});
 		}
-		writer(props).end(orgKeyDetails(data, auth), {
-			fields: ["organization", "authentication"],
-		});
+		if (data.project_id) log.info(projectKeyNote(data.project_id));
 		return;
 	}
 	if (props.output === "json" || props.output === "yaml") {
@@ -62,13 +71,22 @@ const me = async (props: CommonProps) => {
 	});
 };
 
-type OrgKeyIdentity = { account_id: string; auth_method: "api_key_org" };
+type OrgKeyIdentity = {
+	account_id: string;
+	auth_method: "api_key_org";
+	/** Set when the key is limited to this one project. */
+	project_id?: string;
+};
 
 /**
  * The user, or the organization when the credential is an organization API key, which
  * `GET /users/me` refuses with 403 or 404. `GET /auth` is asked only after that refusal,
  * so user keys and OAuth still cost one request. Any other outcome rethrows the original
  * error object, which the top-level handler needs intact to recover from SSO step-up.
+ *
+ * `GET /auth` answers `api_key_org` for project-scoped keys too, so an organization key costs
+ * one more request: `GET /projects`, which the API refuses only to a project-scoped key,
+ * naming its project. Any other failure of that request is rethrown as is.
  */
 const currentUserOrOrgKey = async (
 	apiClient: NeonApiClient,
@@ -87,15 +105,27 @@ const currentUserOrOrgKey = async (
 			() => undefined,
 		);
 		if (details?.auth_method !== "api_key_org") throw err;
+		const projectId = await apiClient
+			.listProjects({ limit: 1, org_id: details.account_id })
+			.then(
+				() => undefined,
+				(listErr: unknown) => {
+					const scoped = scopedKeyProject(listErr);
+					if (scoped === undefined) throw listErr;
+					return scoped;
+				},
+			);
 		return {
 			account_id: details.account_id,
 			auth_method: details.auth_method,
+			...(projectId ? { project_id: projectId } : {}),
 		};
 	}
 };
 
 const orgKeyDetails = (identity: OrgKeyIdentity, auth: AuthContext | null) => ({
 	organization: identity.account_id,
+	project: identity.project_id,
 	authentication: auth ? authenticationLabel(auth) : undefined,
 });
 

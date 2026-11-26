@@ -24,6 +24,8 @@ export { client } from "./client/client.gen.js";
 export * from "./client/raw.gen.js";
 // Every generated request/response/schema type, flat.
 export type * from "./client/types.gen.js";
+// Reads the project out of a project-scoped key's refusal, the error body a raw call returns.
+export { scopedKeyProjectId } from "./neon/errors.js";
 // The wrapper primitive, for advanced users composing their own raw calls.
 export {
 	createClient,

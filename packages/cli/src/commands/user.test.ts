@@ -94,6 +94,37 @@ describe("me with an organization API key", () => {
 	});
 });
 
+describe("me with a project-scoped API key", () => {
+	test("names the project and what the key cannot do", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(["me"], {
+			mockDir: "project-key",
+			output: "table",
+			apiKey: false,
+			env: { NEON_API_KEY: "project-key" },
+			snapshot: false,
+			stderr: "This API key is limited to project test-project-123456: it cannot create projects, mint API keys, or read any other project.",
+		});
+		expect(stdout).toMatch(/^Organization\s+test-org-123$/m);
+		expect(stdout).toMatch(/^Project\s+test-project-123456$/m);
+		expect(stdout).toMatch(/^Authentication\s+API key \(NEON_API_KEY\)$/m);
+	});
+
+	test("adds project_id to the JSON", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand(["me"], {
+			mockDir: "project-key",
+			output: "json",
+			snapshot: false,
+		});
+		expect(JSON.parse(stdout)).toEqual({
+			account_id: "test-org-123",
+			auth_method: "api_key_org",
+			project_id: "test-project-123456",
+		});
+	});
+});
+
 describe("userDetails", () => {
 	it("joins the first and last name", () => {
 		expect(userDetails(user, null).name).toBe("Ada Lovelace");

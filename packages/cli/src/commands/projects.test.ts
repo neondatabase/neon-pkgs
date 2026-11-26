@@ -346,6 +346,22 @@ describe("projects", () => {
 		);
 	});
 
+	test("list with a project-scoped key shows the project it is limited to", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(["projects", "list"], {
+			mockDir: "project-key",
+			output: "json",
+			snapshot: false,
+			stderr: "This API key is limited to project test-project-123456: it cannot create projects, mint API keys, or read any other project.",
+		});
+		const listed = JSON.parse(stdout);
+		expect(listed.projects.map((p: { id: string }) => p.id)).toEqual([
+			"test-project-123456",
+		]);
+		expect(listed.shared_with_you).toEqual([]);
+	});
+
 	test("list keeps JSON free of the marker", async ({ testCliCommand }) => {
 		const linked = await testCliCommand(
 			[

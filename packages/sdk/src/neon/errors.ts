@@ -279,6 +279,24 @@ function readApiErrorBody(body: unknown): ApiErrorBody {
 	return out;
 }
 
+const SCOPED_KEY_PROJECT = /subject_project_id:"([^"]+)"/;
+
+/**
+ * The project a project-scoped API key is limited to, when `body` is the API's refusal of a
+ * request outside that project (`GET /projects` included); otherwise `undefined`. Pass a
+ * {@link NeonApiError}'s `body`.
+ *
+ * `GET /auth` reports a project-scoped key as `api_key_org`, the same as an organization key,
+ * and the refusal is a 404 that names the project only in its message. That message is the one
+ * place the API says which project the key reaches.
+ */
+export function scopedKeyProjectId(body: unknown): string | undefined {
+	const { message } = readApiErrorBody(body);
+	return message === undefined
+		? undefined
+		: SCOPED_KEY_PROJECT.exec(message)?.[1];
+}
+
 /**
  * Walk a transport failure's `cause` chain for the most specific description available.
  *

@@ -1,5 +1,10 @@
 import type { Branch, Database } from "@neon/sdk";
-import { codeFromBody, isNeonApiError, messageFromBody } from "../api.js";
+import {
+	codeFromBody,
+	isNeonApiError,
+	messageFromBody,
+	scopedKeyProject,
+} from "../api.js";
 import {
 	isConfigAdd,
 	isConfigInit,
@@ -363,10 +368,15 @@ export const fillSingleProject = async (
 				"Multiple projects found, please provide one with the --project-id option",
 			);
 		}
-		// Without a typed --org-id the org is the caller's only membership, so a code-less 404
-		// here means the key reaches one project and cannot list. A typed --org-id the user is
-		// not a member of also 404s, which is why that case is excluded. Coded errors (SSO)
-		// must reach the global handler.
+		// A project-scoped key reaches exactly one project, and its refusal names it.
+		const scoped = scopedKeyProject(error);
+		if (scoped !== undefined) {
+			return { ...props, projectId: scoped };
+		}
+		// When the refusal names no project: without a typed --org-id the org is the caller's
+		// only membership, so a code-less 404 here means the key reaches one project and cannot
+		// list. A typed --org-id the user is not a member of also 404s, which is why that case
+		// is excluded. Coded errors (SSO) must reach the global handler.
 		if (
 			!props.orgId &&
 			isNeonApiError(error) &&

@@ -16,6 +16,7 @@ import {
 	NeonRequestTimeoutError,
 	NeonTimeoutError,
 	NeonWaitTimeoutError,
+	scopedKeyProjectId,
 	toNeonError,
 } from "./errors.js";
 
@@ -268,5 +269,30 @@ describe("transport failures end to end", () => {
 		expect(res.error).toBeInstanceOf(NeonNetworkError);
 		expect(res.error?.message).toContain("(ECONNRESET)");
 		expect((res.error as NeonNetworkError).reason).toBe("ECONNRESET");
+	});
+});
+
+describe("scopedKeyProjectId", () => {
+	it("reads the project from the refusal of a project-scoped key", () => {
+		expect(
+			scopedKeyProjectId({
+				code: "",
+				message:
+					'not allowed to perform actions outside the project this key is scoped to; subject_project_id:"calm-sky-12345678"',
+			}),
+		).toBe("calm-sky-12345678");
+	});
+
+	it("is undefined for any other error body", () => {
+		expect(scopedKeyProjectId({ message: "project not found" })).toBe(
+			undefined,
+		);
+		expect(
+			scopedKeyProjectId({
+				message: "not allowed for organization API keys",
+			}),
+		).toBe(undefined);
+		expect(scopedKeyProjectId('subject_project_id:"x"')).toBe(undefined);
+		expect(scopedKeyProjectId(undefined)).toBe(undefined);
 	});
 });

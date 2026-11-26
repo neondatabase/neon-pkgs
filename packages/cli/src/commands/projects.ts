@@ -8,7 +8,12 @@ import type {
 import chalk from "chalk";
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
-import { isNeonApiError, messageFromBody } from "../api.js";
+import {
+	isNeonApiError,
+	messageFromBody,
+	projectKeyNote,
+	scopedKeyProject,
+} from "../api.js";
 import { readContextFile, updateContextFile } from "../context.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
@@ -280,10 +285,13 @@ const listAll = async (
 	return result;
 };
 
+/** A project list row, or the project a project-scoped key reaches, read with `GET /projects/{id}`. */
+type ListedProject = Omit<ProjectListItem, "active_time">;
+
 const projectColumns = (props: Pick<CommonProps, "contextFile">) => {
 	const current = readContextFile(props.contextFile).projectId;
 	return {
-		name: (project: ProjectListItem) =>
+		name: (project: ListedProject) =>
 			project.id === current
 				? `${chalk.green("[current]")} ${project.name}`
 				: project.name,
@@ -317,12 +325,23 @@ const list = async (
 	// Read after the owned list; this only stops an unread rejection from crashing the process.
 	sharedRequest?.catch(() => undefined);
 
-	let ownedProjects: ProjectListItem[];
+	let ownedProjects: ListedProject[];
 	try {
 		ownedProjects = await ownedRequest;
 	} catch (err) {
-		sharedAbort.abort();
-		throw err;
+		const scoped = props.recoverableOnly
+			? undefined
+			: scopedKeyProject(err);
+		try {
+			if (scoped === undefined) throw err;
+			ownedProjects = [
+				(await props.apiClient.getProject(scoped)).data.project,
+			];
+		} catch (ownedErr) {
+			sharedAbort.abort();
+			throw ownedErr;
+		}
+		log.info(projectKeyNote(scoped));
 	}
 	const sharedProjects = (await sharedRequest) ?? [];
 

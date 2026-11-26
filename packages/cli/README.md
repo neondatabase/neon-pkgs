@@ -83,7 +83,7 @@ neon projects list --api-key <neon_api_key>
 
 For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
 
-To check which account and credential a command uses, run `neon me` with the same `--profile` or `--api-key` option and environment as that command. The `Authentication` row names the source, such as `OAuth (profile DEFAULT)`, `API key (profile work)`, `API key (--api-key)`, or `API key (NEON_API_KEY)`. An organization API key has no user, so `neon me` shows its `Organization` id instead, and `-o json` prints `{"account_id": "org-…", "auth_method": "api_key_org"}`; check `auth_method` to tell it apart from a user. In a directory linked by `neon claim create`, `neon me` shows the Claimable project's `Project ID` and `Project Expires At` and an `Authentication` row of `Claimable project`, and `-o json` prints `{"auth_method": "claimable", "project_id": "…", "project_expires_at": "…"}`. When no credential is usable, `neon me` exits 1 with `Not signed in` and the `neon login` command to run; it never starts a sign-in itself.
+To check which account and credential a command uses, run `neon me` with the same `--profile` or `--api-key` option and environment as that command. The `Authentication` row names the source, such as `OAuth (profile DEFAULT)`, `API key (profile work)`, `API key (--api-key)`, or `API key (NEON_API_KEY)`. An organization API key has no user, so `neon me` shows its `Organization` id instead, and `-o json` prints `{"account_id": "org-…", "auth_method": "api_key_org"}`; check `auth_method` to tell it apart from a user. A [project-scoped key](#project-scoped-keys) also shows its `Project`, and `-o json` adds `project_id`. In a directory linked by `neon claim create`, `neon me` shows the Claimable project's `Project ID` and `Project Expires At` and an `Authentication` row of `Claimable project`, and `-o json` prints `{"auth_method": "claimable", "project_id": "…", "project_expires_at": "…"}`. When no credential is usable, `neon me` exits 1 with `Not signed in` and the `neon login` command to run; it never starts a sign-in itself.
 
 ## Create a project without an account
 
@@ -1573,7 +1573,7 @@ A key created with `--project-id` bounds what it can reach to one project. Verif
 | Read and write its own project | works |
 | Read any other project | `project not found` — not even an existence oracle |
 | `neon projects create` | `project-scoped keys are not allowed to create projects` |
-| `neon projects list` | refused |
+| `neon projects list` | lists only its own project. The API refuses the list, and the CLI reads the project from that refusal |
 | `neon api-keys create` / `list` | refused (true of any organization key, not only scoped ones) |
 | `neon orgs list` | **works** — it can see the id, name and handle of the organization it belongs to |
 | Anything else about that organization (`GET /organizations/{id}`, members) | refused |
@@ -1585,7 +1585,7 @@ neon link --project-id frosty-…       # once, as yourself — writes .neon
 NEON_API_KEY=napi_… neon deploy       # then the agent, reaching only that project
 ```
 
-`neon link` needs `--project-id` explicitly when using a scoped key: the interactive picker lists your projects, which a scoped key cannot do.
+With a scoped key, `neon me` adds a `Project` row (`project_id` in `-o json`) and says what the key cannot do. `neon link -y`, `neon init -y`, and project commands run outside a linked directory use the key's project. `neon link -y` and `neon init -y` with `--project-name`, which creates a project, fail with the `--project-id` to pass instead.
 
 `api-keys` deliberately ignores the `.neon` context file, unlike every other project command. Otherwise `neon api-keys create --name ci` inside a linked directory would silently mint a key scoped to that project instead of the account key you asked for. How far a credential reaches comes only from a flag you typed.
 
