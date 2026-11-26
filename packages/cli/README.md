@@ -571,7 +571,7 @@ The human-readable summary line goes to stderr and the diff body to stdout, so `
 
 ### env pull
 
-`env pull` writes the linked branch's Neon environment variables into a local dotenv file: an existing `.env` if you have one, otherwise `.env.local` (override with `--file <path>`). Only Neon-managed keys are written (see the table below); any other lines in the file are preserved. The branch comes from the closest `.neon` file, so no `--branch` is needed (pass `--branch <id|name>` to target another branch).
+`env pull` writes the linked branch's Neon environment variables into a local dotenv file: an existing `.env`, else an existing `.env.local`; with neither, `.env` in a Nuxt app (a `nuxt.config.*` file in the project directory), since Nuxt loads only `.env` by default, and `.env.local` everywhere else (override with `--file <path>`). Only Neon-managed keys are written (see the table below); any other lines in the file are preserved. The branch comes from the closest `.neon` file, so no `--branch` is needed (pass `--branch <id|name>` to target another branch).
 
 **What gets pulled**, in precedence order:
 
@@ -673,7 +673,7 @@ neon dev                       # loads .env, then .env.local (overrides .env)
 neon dev --env .env.staging    # loads only .env.staging
 ```
 
-`dev` writes nothing. To reuse the branch credential behind the AI Gateway and object storage, it reads only the file `env pull` writes (`.env` when it exists, otherwise `.env.local`), so an override in the other file cannot pair one credential's key ID with another's secret. Without a file to read from it issues one on every start and leaves the last one live — it has nowhere to keep it, and so cannot name it to revoke it. It says so when it happens; run `env pull` (or just `link` / `checkout`) once and restarts reuse the credential instead.
+`dev` writes nothing. To reuse the branch credential behind the AI Gateway and object storage, it reads only the file `env pull` writes (see [`env pull`](#env-pull)), so an override in the other file cannot pair one credential's key ID with another's secret. Without a file to read from it issues one on every start and leaves the last one live — it has nowhere to keep it, and so cannot name it to revoke it. It says so when it happens; run `env pull` (or just `link` / `checkout`) once and restarts reuse the credential instead.
 
 **Where `.neon` lives**: `link` writes `.neon` into the **current working directory** by default. If an existing `.neon` is found in any parent directory, that file is reused — so commands run from a sub-directory of a linked project still pick up the project's context. To pin the location explicitly, pass `--context-file <path>`. `neon init` always writes `.neon` into the current directory.
 

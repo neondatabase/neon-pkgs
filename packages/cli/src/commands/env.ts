@@ -37,7 +37,7 @@ import {
 import { formatPulledEnv, pulledBranch } from "./env_output.js";
 
 export type EnvPullProps = BranchScopeProps & {
-	/** Target dotenv file, relative to cwd. Defaults to the project directory's `.env`, else `.env.local`. */
+	/** Target dotenv file, relative to cwd. Defaults to {@link resolveEnvFilePath}'s choice in the project directory. */
 	file?: string;
 	/** Working directory to resolve neon.ts / write the .env file in. Defaults to cwd (tests). */
 	cwd?: string;
@@ -103,9 +103,10 @@ export const builder = (argv: yargs.Argv) =>
 						file: {
 							describe:
 								"Target .env file to write, relative to cwd. Defaults to an existing " +
-								".env, otherwise .env.local, in the project directory (next to " +
-								".neon, or cwd without one). Only Neon variables are updated; " +
-								"other lines are preserved.",
+								".env, else an existing .env.local, in the project directory (next to " +
+								".neon, or cwd without one); with neither, .env in a Nuxt app and " +
+								".env.local otherwise. Only Neon variables are updated; other lines " +
+								"are preserved.",
 							type: "string",
 						},
 						service: servicesOption({
@@ -166,7 +167,7 @@ export const builder = (argv: yargs.Argv) =>
 					)
 					.example(
 						"$0 env pull",
-						"Write the linked branch's Neon vars into .env.local (or .env if present)",
+						"Write the linked branch's Neon vars into the project's .env or .env.local",
 					)
 					.example(
 						"$0 env pull --branch preview --file .env.preview",
