@@ -15,7 +15,7 @@ describe("unattendedUnauthedNext", () => {
 			"neon login",
 			"neon link --org-id org-1",
 			"",
-			"No browser on this machine? Save an API key you already have instead of signing in:",
+			"No browser on this machine? Create an API key in any browser at https://console.neon.tech/app/settings/api-keys, then save it instead of signing in:",
 			saveKey,
 		]);
 	});
@@ -44,7 +44,7 @@ describe("offlinePinNext", () => {
 			"Then pull the branch's environment variables:",
 			"neon env pull",
 			"",
-			"No browser on this machine? Save an API key you already have instead of signing in:",
+			"No browser on this machine? Create an API key in any browser at https://console.neon.tech/app/settings/api-keys, then save it instead of signing in:",
 			saveKey,
 		]);
 	});

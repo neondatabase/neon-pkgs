@@ -306,7 +306,7 @@ describe("no usable credential", () => {
 		expect(result.stderr).toBe(
 			[
 				'Not signed in: profile "DEFAULT" has no stored credential.',
-				"Set NEON_API_KEY to an API key.",
+				"Set NEON_API_KEY to an API key from https://console.neon.tech/app/settings/api-keys.",
 				"Or create a temporary project without an account: `neon claim create` (it expires in 72 hours unless claimed)",
 				"",
 			].join("\n"),
@@ -335,7 +335,7 @@ describe("no usable credential", () => {
 
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain(
-			'Cannot run interactive auth in CI. Profile "DEFAULT" has no stored credential.\nSet NEON_API_KEY to an API key.',
+			'Cannot run interactive auth in CI. Profile "DEFAULT" has no stored credential.\nSet NEON_API_KEY to an API key from https://console.neon.tech/app/settings/api-keys.',
 		);
 	});
 
@@ -347,7 +347,25 @@ describe("no usable credential", () => {
 
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain(
-			`Cannot run interactive auth in CI. Save an API key to this profile: \`echo "$KEY" | neon profile create ${profile} --api-key -\``,
+			`Cannot run interactive auth in CI. Save an API key from https://console.neon.tech/app/settings/api-keys to this profile: \`echo "$KEY" | neon profile create ${profile} --api-key -\``,
+		);
+	});
+
+	it("points `login` in CI at NEON_API_KEY when no profile is chosen", async () => {
+		const result = await runCli(["login"]);
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(
+			"Cannot run interactive auth in CI. Set NEON_API_KEY to an API key from https://console.neon.tech/app/settings/api-keys.",
+		);
+	});
+
+	it("points `login` in CI at the profile NEON_PROFILE chose", async () => {
+		const result = await runCli(["login"], { NEON_PROFILE: "work" });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(
+			'Cannot run interactive auth in CI. Save an API key from https://console.neon.tech/app/settings/api-keys to this profile: `echo "$KEY" | neon profile create work --api-key -`',
 		);
 	});
 });
@@ -391,7 +409,7 @@ describe("no usable credential and no terminal, outside CI", () => {
 			[
 				'Not signed in: profile "DEFAULT" has no stored credential, and this shell has no terminal to start a browser sign-in from.',
 				"Sign in with a browser on this machine: `neon login`",
-				'Or save an API key you already have: `echo "$KEY" | neon profile create DEFAULT --api-key -`',
+				'Or create an API key in any browser at https://console.neon.tech/app/settings/api-keys and save it: `echo "$KEY" | neon profile create DEFAULT --api-key -`',
 				"Or create a temporary project without an account: `neon claim create` (it expires in 72 hours unless claimed)",
 			].join("\n"),
 		);

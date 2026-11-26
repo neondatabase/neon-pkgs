@@ -97,6 +97,20 @@ export const authFailureMessage = (context: AuthContext | null): string => {
 export const saveKeyCommand = (cli: string, profile: string): string =>
 	`echo "$KEY" | ${cli} profile create ${profile} --api-key -`;
 
+/** Personal keys reach every organization the user belongs to, so this page fits any linked org. */
+export const API_KEYS_CONSOLE_URL =
+	"https://console.neon.tech/app/settings/api-keys";
+
+/** --profile overrides NEON_API_KEY, so a key for an explicitly chosen profile is saved on that profile. */
+export const ciKeyGuidance = (
+	cli: string,
+	profile: string,
+	explicitProfile: boolean,
+): string =>
+	explicitProfile
+		? `Save an API key from ${API_KEYS_CONSOLE_URL} to this profile: \`${saveKeyCommand(cli, profile)}\``
+		: `Set NEON_API_KEY to an API key from ${API_KEYS_CONSOLE_URL}.`;
+
 /**
  * The ways to authenticate when the CLI has no usable credential, one per line. Claimable
  * Neon makes a separate, temporary project, so it is offered only when nothing was ever
@@ -115,15 +129,10 @@ export const signInGuidance = (input: {
 	const { cli, profile } = input;
 	return [
 		...(input.ci
-			? [
-					// A selected profile overrides NEON_API_KEY.
-					input.explicitProfile
-						? `Save an API key to this profile: \`${saveKeyCommand(cli, profile)}\``
-						: "Set NEON_API_KEY to an API key.",
-				]
+			? [ciKeyGuidance(cli, profile, input.explicitProfile)]
 			: [
 					`Sign in with a browser on this machine: \`${cli} login${input.explicitProfile ? ` --profile ${profile}` : ""}\``,
-					`Or save an API key you already have: \`${saveKeyCommand(cli, profile)}\``,
+					`Or create an API key in any browser at ${API_KEYS_CONSOLE_URL} and save it: \`${saveKeyCommand(cli, profile)}\``,
 				]),
 		...(input.offerClaimable
 			? [

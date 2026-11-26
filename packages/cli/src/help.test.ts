@@ -276,6 +276,9 @@ const assertAuthHelpTeachesCredentials = (
 	expect(flat).toContain("profile create ci --mint");
 	expect(flat).toContain("Non-interactive (CI, scripts, agents):");
 	expect(flat).toContain("projects list --profile agent");
+	expect(flat).toContain(
+		"Create an API key in any browser at: https://console.neon.tech/app/settings/api-keys",
+	);
 	expect(flat).toContain("--org-id");
 	expect(flat).toContain("--project-id");
 	expect(flat).toContain("NEON_PROFILE");

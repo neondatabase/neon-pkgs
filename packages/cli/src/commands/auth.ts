@@ -44,7 +44,8 @@ import {
 	refreshToken,
 } from "../auth.js";
 import {
-	saveKeyCommand,
+	API_KEYS_CONSOLE_URL,
+	ciKeyGuidance,
 	setAuthContext,
 	signInGuidance,
 } from "../auth_context.js";
@@ -147,6 +148,8 @@ const authHelpEpilogue = (): string => {
 		wrapAuthHelp("Non-interactive (CI, scripts, agents):"),
 		wrapAuthHelp("Use an existing API key or an API-key profile."),
 		`  ${cli} projects list --profile agent`,
+		wrapAuthHelp("Create an API key in any browser at:"),
+		`  ${API_KEYS_CONSOLE_URL}`,
 		wrapAuthHelp(
 			`${cli} profile create <name> --mint needs a browser during setup, then stores an API key and drops the session. It cannot run in CI. Default key is account-wide; --org-id or --project-id (not both) restricts it.`,
 		),
@@ -246,10 +249,11 @@ export const authFlow = async ({
 	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
 	if (!allowInteractiveAuth && isCi()) {
 		throw new Error(
-			// A selected profile overrides NEON_API_KEY.
-			profile?.trim() || process.env.NEON_PROFILE?.trim()
-				? `Cannot run interactive auth in CI. Save an API key to this profile: \`${saveKeyCommand(getCliName(), profileName)}\``
-				: "Cannot run interactive auth in CI. Set NEON_API_KEY to an API key.",
+			`Cannot run interactive auth in CI. ${ciKeyGuidance(
+				getCliName(),
+				profileName,
+				Boolean(profile?.trim() || process.env.NEON_PROFILE?.trim()),
+			)}`,
 		);
 	}
 

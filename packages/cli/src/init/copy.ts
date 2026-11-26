@@ -1,3 +1,4 @@
+import { API_KEYS_CONSOLE_URL } from "../auth_context.js";
 import {
 	pluginsCommandProblemText,
 	type UnusablePluginsCommand,
@@ -165,7 +166,7 @@ export const PROGRESS = {
 
 const saveKeyNext = (saveKey: string): string[] => [
 	"",
-	"No browser on this machine? Save an API key you already have instead of signing in:",
+	`No browser on this machine? Create an API key in any browser at ${API_KEYS_CONSOLE_URL}, then save it instead of signing in:`,
 	saveKey,
 ];
 
