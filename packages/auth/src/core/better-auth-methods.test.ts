@@ -3,7 +3,7 @@ import { deriveBetterAuthMethodFromUrl } from "./better-auth-methods";
 
 describe("deriveBetterAuthMethodFromUrl", () => {
 	test.each([
-		["https://a.example.com/api/auth/token", "getSession"],
+		["https://a.example.com/api/auth/token", "token"],
 		["https://a.example.com/api/auth/get-session", "getSession"],
 		["https://a.example.com/api/auth/token/anonymous", "anonymousToken"],
 		["https://a.example.com/api/auth/sign-in/email", "signIn"],
@@ -35,7 +35,7 @@ describe("deriveBetterAuthMethodFromUrl", () => {
 			deriveBetterAuthMethodFromUrl(
 				"https://oauth2.example.com/api/auth/token",
 			),
-		).toBe("getSession");
+		).toBe("token");
 	});
 
 	test("/oauth2/ in the query string does not suppress classification", () => {
@@ -43,7 +43,7 @@ describe("deriveBetterAuthMethodFromUrl", () => {
 			deriveBetterAuthMethodFromUrl(
 				"https://a.example.com/api/auth/token?next=/oauth2/x",
 			),
-		).toBe("getSession");
+		).toBe("token");
 	});
 
 	test.each([
@@ -65,7 +65,7 @@ describe("deriveBetterAuthMethodFromUrl", () => {
 			deriveBetterAuthMethodFromUrl(
 				"https://ep.example.com/oauth2/auth/token",
 			),
-		).toBe("getSession");
+		).toBe("token");
 	});
 
 	test.each([

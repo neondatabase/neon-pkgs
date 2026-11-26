@@ -38,6 +38,8 @@ export const agentUnusableCommandDescription = (
 	`Detected, but "${row.command.name}" ${pluginsCommandProblemText(row)}. Its plugin cannot install.`;
 export const AGENT_PLUGIN_SKIP_MESSAGE =
 	"No agents selected. Continue without installing the Neon plugin?";
+export const CURSOR_PLUGIN_LOAD_NOTE =
+	'Cursor loads the Neon plugin from ~/.claude/plugins when "Include Third-Party Plugins, Skills, and Other Configs" is on in Cursor Settings > Agents > Third-Party Imports. If Cursor does not list it, turn that on and restart Cursor, or run /add-plugin neon-postgres in Cursor chat.';
 export const AGENT_SKILLS_PICKER_MESSAGE =
 	"Which coding agents should receive Neon skills? (space to toggle, enter to confirm)";
 export const AGENT_MCP_PICKER_MESSAGE =

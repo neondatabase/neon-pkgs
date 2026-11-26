@@ -1,7 +1,10 @@
 import type yargs from "yargs";
 import { recordCommandSuccessExtras } from "../analytics.js";
 import { getAgentDisplayName } from "../init/agents.js";
-import { AGENT_PLUGIN_SKIP_MESSAGE } from "../init/copy.js";
+import {
+	AGENT_PLUGIN_SKIP_MESSAGE,
+	CURSOR_PLUGIN_LOAD_NOTE,
+} from "../init/copy.js";
 import { log } from "../log.js";
 import { NEON_MCP_URL } from "../mcp/install.js";
 import { pluginsGitError, resolvePluginsPlan } from "../plugins/plan.js";
@@ -14,6 +17,7 @@ import {
 	runPluginsCli,
 } from "../plugins/run.js";
 import {
+	getPluginsTargetName,
 	pluginsCommandProblemText,
 	pluginsGitProblem,
 	pluginsInstallableAgents,
@@ -256,6 +260,17 @@ export const reportPluginsInstall = (
 		log.info("No Neon plugins installed.");
 	} else if (outcome.failed.length === 0) {
 		log.info("Installed the Neon plugin (user).");
+	}
+	// The plugins CLI installs the cursor target into Claude Code's plugin directory.
+	const cursorInstalled = outcome.rows.some(
+		(row) =>
+			row.status === "installed" &&
+			row.agent
+				.split(", ")
+				.some((agent) => getPluginsTargetName(agent) === "cursor"),
+	);
+	if (cursorInstalled) {
+		log.info(CURSOR_PLUGIN_LOAD_NOTE);
 	}
 };
 

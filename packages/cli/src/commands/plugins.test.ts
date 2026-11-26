@@ -15,6 +15,7 @@ import { spawn as spawnPty } from "node-pty";
 import strip from "strip-ansi";
 import { afterEach, describe, expect, test as vitestTest } from "vitest";
 
+import { CURSOR_PLUGIN_LOAD_NOTE } from "../init/copy.js";
 import { NEON_MCP_URL } from "../mcp/install.js";
 import { PLUGIN_SKILLS, PLUGINS_CLI_VERSION } from "../plugins/run.js";
 import { pluginsInstallableAgents } from "../plugins/targets.js";
@@ -574,6 +575,48 @@ describe("neon plugins", () => {
 		expect(stderr).toMatch(
 			/Retry with: neon plugins --agent claude-code -y/,
 		);
+	});
+
+	test("a Cursor install says where Cursor loads the plugin from, after the summary", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch();
+		mkdirSync(join(cwd, ".claude"));
+		const { stderr } = await testCliCommand(
+			["plugins", "-y"],
+			runOptions(home, cwd, bin),
+		);
+		const summary = stderr.indexOf("Installed the Neon plugin (user).");
+		expect(summary).toBeGreaterThan(-1);
+		expect(stderr.indexOf(CURSOR_PLUGIN_LOAD_NOTE)).toBeGreaterThan(
+			summary,
+		);
+		expect(stderr.split(CURSOR_PLUGIN_LOAD_NOTE)).toHaveLength(2);
+	});
+
+	test("no Cursor note when Cursor is not installed into", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch({ projectCursor: false });
+		const { stderr } = await testCliCommand(
+			["plugins", "--agent", "claude-code", "-y"],
+			runOptions(home, cwd, bin),
+		);
+		expect(stderr).toMatch(/Installed the Neon plugin \(user\)\./);
+		expect(stderr).not.toContain(CURSOR_PLUGIN_LOAD_NOTE);
+	});
+
+	test("no Cursor note when the Cursor install fails", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch();
+		mkdirSync(join(cwd, ".claude"));
+		const { stderr } = await testCliCommand(["plugins", "-y"], {
+			...runOptions(home, cwd, bin, { PLUGINS_FAIL_TARGET: "cursor" }),
+			code: 1,
+		});
+		expect(stderr).toMatch(/Retry with: neon plugins --agent cursor -y/);
+		expect(stderr).not.toContain(CURSOR_PLUGIN_LOAD_NOTE);
 	});
 
 	test("silent child failure does not print the npx argv", async ({

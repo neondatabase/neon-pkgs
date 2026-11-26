@@ -135,6 +135,32 @@ async function handleSocialSignInViaPopup(
 	return Response.json(data, { status: response.status });
 }
 
+function forwardSessionVerifier(ctx: RequestContext) {
+	if (!isBrowser()) {
+		return;
+	}
+
+	const urlSearchParams = new URLSearchParams(
+		globalThis.window.location.search,
+	);
+	const neonAuthSessionVerifierParam = urlSearchParams.get(
+		NEON_AUTH_SESSION_VERIFIER_PARAM_NAME,
+	);
+
+	if (neonAuthSessionVerifierParam) {
+		const url = typeof ctx.url === "string" ? new URL(ctx.url) : ctx.url;
+		url.searchParams.set(
+			NEON_AUTH_SESSION_VERIFIER_PARAM_NAME,
+			neonAuthSessionVerifierParam,
+		);
+
+		return {
+			...ctx,
+			url,
+		};
+	}
+}
+
 export const BETTER_AUTH_METHODS_HOOKS: Record<string, MethodHook> = {
 	signUp: {
 		onRequest: () => {},
@@ -221,32 +247,7 @@ export const BETTER_AUTH_METHODS_HOOKS: Record<string, MethodHook> = {
 				status: 200,
 			});
 		},
-		onRequest: (ctx) => {
-			if (!isBrowser()) {
-				return;
-			}
-
-			const urlSearchParams = new URLSearchParams(
-				globalThis.window.location.search,
-			);
-			const neonAuthSessionVerifierParam = urlSearchParams.get(
-				NEON_AUTH_SESSION_VERIFIER_PARAM_NAME,
-			);
-
-			if (neonAuthSessionVerifierParam) {
-				const url =
-					typeof ctx.url === "string" ? new URL(ctx.url) : ctx.url;
-				url.searchParams.set(
-					NEON_AUTH_SESSION_VERIFIER_PARAM_NAME,
-					neonAuthSessionVerifierParam,
-				);
-
-				return {
-					...ctx,
-					url,
-				};
-			}
-		},
+		onRequest: forwardSessionVerifier,
 		onSuccess: (responseData) => {
 			if (isSessionResponseData(responseData)) {
 				const sessionData = {
@@ -276,6 +277,11 @@ export const BETTER_AUTH_METHODS_HOOKS: Record<string, MethodHook> = {
 				}
 			}
 		},
+	},
+	// `/token` answers `{ token }`, so the cached `{ session, user }` must never stand in for it.
+	token: {
+		onRequest: forwardSessionVerifier,
+		onSuccess: () => {},
 	},
 	anonymousToken: {
 		beforeFetch: () => {
@@ -424,7 +430,7 @@ export function deriveBetterAuthMethodFromUrl(
 	url: string,
 ): keyof typeof BETTER_AUTH_METHODS_HOOKS | undefined {
 	// The OAuth provider's `/oauth2/token` would otherwise match the `/token`
-	// session check below and be answered from the session cache. Only the path
+	// check below and be treated as the JWT plugin's endpoint. Only the path
 	// tail is matched, so an `oauth2` host, query string, or earlier path segment
 	// does not suppress classification.
 	if (OAUTH2_ENDPOINT_TAIL.test(new URL(url, "http://localhost").pathname)) {
@@ -449,11 +455,11 @@ export function deriveBetterAuthMethodFromUrl(
 	if (url.includes(BETTER_AUTH_ENDPOINTS.updateUser)) {
 		return "updateUser";
 	}
-	if (
-		url.includes(BETTER_AUTH_ENDPOINTS.getSession) ||
-		url.includes(BETTER_AUTH_ENDPOINTS.token)
-	) {
+	if (url.includes(BETTER_AUTH_ENDPOINTS.getSession)) {
 		return "getSession";
+	}
+	if (url.includes(BETTER_AUTH_ENDPOINTS.token)) {
+		return "token";
 	}
 	return undefined;
 }
