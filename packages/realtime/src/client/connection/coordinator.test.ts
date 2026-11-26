@@ -930,6 +930,68 @@ describe("ConnectionCoordinator", () => {
 		expect(FakeWebSocket.instances).toHaveLength(3);
 	});
 
+	it("resubscribes after renewal_failed on the socket that replaces one stuck closing", async () => {
+		vi.useFakeTimers();
+		const callbacks = target();
+		const coordinator = createCoordinator({
+			heartbeat: { idleMs: 20, timeoutMs: 10 },
+		});
+		const handle = coordinator.subscribe(
+			{ capability: "legacy" },
+			callbacks,
+		);
+		const stuck = admit();
+		let renewed = false;
+		void handle.renew({ capability: "envelope" }).then(() => {
+			renewed = true;
+		});
+		expect(stuck.sent.at(-1)).toEqual({
+			type: "renew",
+			live_id: "41",
+			authorization: "envelope",
+		});
+
+		// The transport stops being open without a close event, and the
+		// proxy's refusal of the scheme switch still arrives on it. The
+		// resubscribe that follows can't be sent.
+		stuck.emitCloseOnClose = false;
+		stuck.close();
+		stuck.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code: "renewal_failed",
+			message: "renewal must keep the subscription's scheme",
+		});
+		expect(
+			stuck.sent.filter((message) => message.type === "subscribe"),
+		).toHaveLength(1);
+
+		// The heartbeat retires the stuck socket, and the reconnect resubscribes
+		// with the envelope the renewal carried.
+		await vi.advanceTimersByTimeAsync(31);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		const replacement = defined(FakeWebSocket.instances[1]);
+		replacement.open();
+		replacement.receive({ type: "ready" });
+		const resubscribe = defined(
+			replacement.sent.find((message) => message.type === "subscribe"),
+		);
+		expect(resubscribe.authorization).toBe("envelope");
+		replacement.receive({
+			type: "subscribed",
+			request_id: resubscribe.request_id,
+			live_id: "42",
+			epoch: "2",
+			first_sequence: "1",
+			columns: [],
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(renewed).toBe(true);
+		expect(callbacks.admitted).toHaveBeenCalledTimes(2);
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		coordinator.close();
+	});
+
 	it("handles an inbound response delivered synchronously from ping", async () => {
 		vi.useFakeTimers();
 		const coordinator = createCoordinator({
