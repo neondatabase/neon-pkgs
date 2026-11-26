@@ -51,10 +51,21 @@ export type ConfigEdit =
 			slug: string;
 			name: string;
 			source: string;
-			env?: readonly string[];
+			env?: readonly FunctionEnvEntry[];
+			/**
+			 * `"process-env"` writes `KEY: process.env.KEY!` for a project whose `@neon/config`
+			 * predates `{ value, required }` declarations (1.13.0).
+			 */
+			envForm?: "declaration" | "process-env";
 			typescript?: boolean;
 	  }
 	| { kind: "bucket"; name: string; access: "private" | "public_read" };
+
+/** A Function env variable to declare: `{ value: process.env.<name>, required }`. */
+export type FunctionEnvEntry = {
+	name: string;
+	required: boolean | "default-branch";
+};
 
 export type ConfigEditResult = {
 	source: string;
@@ -550,9 +561,10 @@ const apply = (source: string, edit: ConfigEdit): ConfigEditResult => {
 			const assertion = edit.typescript === false ? "" : "!";
 			const env = edit.env?.length
 				? `, env: { ${edit.env
-						.map(
-							(name) =>
-								`${renderKey(name)}: process.env.${name}${assertion}`,
+						.map(({ name, required }) =>
+							edit.envForm === "process-env"
+								? `${renderKey(name)}: process.env.${name}${assertion}`
+								: `${renderKey(name)}: { value: process.env.${name}, required: ${JSON.stringify(required)} }`,
 						)
 						.join(", ")} }`
 				: "";

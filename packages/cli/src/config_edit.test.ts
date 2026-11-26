@@ -106,13 +106,32 @@ describe("editNeonConfig on the starter policy", () => {
 		);
 	});
 
-	it("declares a function's env from process.env", () => {
+	it("declares a function's env with value and required", () => {
 		const sendemail = {
 			kind: "function",
 			slug: "sendemail",
 			name: "Send Email",
 			source: "./functions/sendemail.ts",
-			env: ["RESEND_API_KEY"],
+			env: [
+				{ name: "RESEND_API_KEY", required: true },
+				{ name: "RESEND_REPLY_TO", required: false },
+				{ name: "SENTRY_DSN", required: "default-branch" },
+			],
+		} as const;
+		const { source } = editNeonConfig(STARTER, sendemail);
+		expect(source).toContain(
+			'sendemail: { name: "Send Email", source: "./functions/sendemail.ts", env: { RESEND_API_KEY: { value: process.env.RESEND_API_KEY, required: true }, RESEND_REPLY_TO: { value: process.env.RESEND_REPLY_TO, required: false }, SENTRY_DSN: { value: process.env.SENTRY_DSN, required: "default-branch" } } },',
+		);
+	});
+
+	it("reads env from process.env for an @neon/config without declarations", () => {
+		const sendemail = {
+			kind: "function",
+			slug: "sendemail",
+			name: "Send Email",
+			source: "./functions/sendemail.ts",
+			env: [{ name: "RESEND_API_KEY", required: true }],
+			envForm: "process-env",
 		} as const;
 		const ts = editNeonConfig(STARTER, sendemail);
 		expect(ts.source).toContain(
