@@ -1,4 +1,5 @@
 import { cancelled, type Deadline, runBounded } from "./deadline.js";
+import { describeTransportFailure } from "./errors.js";
 
 /**
  * How a SQL transaction ended, as far as the client can tell. `rolled_back` is a
@@ -49,10 +50,14 @@ export async function runSqlTransaction(input: {
 			}),
 		);
 	} catch (error) {
+		const cancellation = cancelled(deadline);
 		return {
 			kind: "uncertain",
-			reason: "the SQL request failed before a response arrived",
-			cause: cancelled(deadline) ?? error,
+			reason:
+				cancellation === undefined
+					? `the SQL request failed before a response arrived (${describeTransportFailure(error)})`
+					: "the SQL request failed before a response arrived",
+			cause: cancellation ?? error,
 		};
 	}
 	if (response === undefined) {

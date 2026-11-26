@@ -72,13 +72,17 @@ describe("roles.create with scoped access", () => {
 		const { neon } = scopedClient({
 			...preflight,
 			"POST /sql": () => {
-				throw new TypeError("fetch failed");
+				throw new TypeError("fetch failed", {
+					cause: Object.assign(new Error("read ECONNRESET"), {
+						code: "ECONNRESET",
+					}),
+				});
 			},
 		});
 		const { error } = await neon.postgres.roles.create(input);
 		expect(error).toBeInstanceOf(NeonClientError);
 		expect(error?.message).toContain(
-			'Could not confirm whether role "app_reader" was created',
+			'Could not confirm whether role "app_reader" was created: the SQL request failed before a response arrived (ECONNRESET).',
 		);
 		expect(error?.message).toContain(
 			"may also have existed before the call",
