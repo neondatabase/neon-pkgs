@@ -6,7 +6,21 @@ these files so their changes remain easy to review:
 | Contract | Canonical source and package export | Current identity |
 | --- | --- | --- |
 | WebSocket messages | `realtime-protocol.schema.json` | Protocol v3 |
-| Decoded query capabilities | `realtime-query-capability.schema.json` | Capability v2 |
+| Decoded query capabilities, legacy secret | `realtime-query-capability.schema.json` | Capability v2 |
+| Decoded query capabilities, HPKE envelope | `realtime-query-capability-v3.schema.json` | Capability v3 |
+
+Capability v3 has its own file because v2 stays active: v3 envelopes carry
+Postgres credentials sealed to the branch's HPKE public key, and v2 tokens are
+signed with the legacy secret. `x-hpkeCompact` records the compact form and the
+HPKE suite.
+
+`realtime-envelope-v3.fixtures.json` holds sealed v3 envelopes, valid and
+invalid, for the proxy's parser tests. Hadron vendors it the same way as the
+schemas. `scripts/generate-envelope-fixtures.mjs` regenerates it
+deterministically (`pnpm --filter @neon/realtime generate:fixtures`), using
+`@hpke/core` directly rather than the SDK. The build and tests fail when the
+committed file is stale. The fixtures hold test keys only and are not
+published to npm.
 
 Import them through `@neon/realtime/schema/<filename>`. The version remains in
 `$id` and `title`; `$schema` identifies the JSON Schema dialect. Protocol and
