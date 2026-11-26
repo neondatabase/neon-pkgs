@@ -303,6 +303,7 @@ describe("init handler", () => {
 		expect(takeCommandSuccessExtras()).toEqual({
 			init_kind: "empty-skip",
 			agent_setup: "skills",
+			tooling_installed: ["skills"],
 		});
 	});
 
@@ -446,6 +447,7 @@ describe("init handler", () => {
 		expect(takeCommandSuccessExtras()).toEqual({
 			init_kind: "existing",
 			agent_setup: "skip",
+			tooling_installed: [],
 		});
 	});
 
@@ -590,6 +592,7 @@ describe("init handler", () => {
 					link: "linked",
 					config: "created",
 					agents_installed: [],
+					tooling_installed: [],
 					error_step: "plugins",
 					error_code: "PLUGINS_CLI_FAILED",
 					error_message: expect.stringMatching(
@@ -642,6 +645,7 @@ describe("init handler", () => {
 					outcome: "error",
 					link: "linked",
 					agents_installed: ["opencode"],
+					tooling_installed: ["skills", "mcp"],
 					error_step: "plugins",
 				}),
 			);
@@ -772,6 +776,7 @@ describe("init handler", () => {
 				expect.objectContaining({
 					outcome: "error",
 					agents_installed: ["cursor"],
+					tooling_installed: ["plugins"],
 					error_step: "link",
 					error_message: "link failed",
 					error_steps: ["link"],
@@ -825,6 +830,9 @@ describe("init handler", () => {
 		expect(out).toContain(
 			"mcp -y --project-id prj-new --agent mcporter --oauth",
 		);
+		expect(takeCommandSuccessExtras()).toMatchObject({
+			tooling_installed: [],
+		});
 	});
 
 	test("an offline pin with only Postgres names env pull as the step after login", async () => {
@@ -965,6 +973,11 @@ describe("init handler", () => {
 		);
 		expect(linkProject).toHaveBeenCalled();
 		expect(initConfig).toHaveBeenCalled();
+		expect(takeCommandSuccessExtras()).toEqual({
+			init_kind: "existing",
+			agent_setup: "mixed",
+			tooling_installed: ["plugins", "skills", "mcp"],
+		});
 	});
 
 	test("--mcp-auth api-key finishes the other steps, then reports the mint failure", async () => {
@@ -977,6 +990,8 @@ describe("init handler", () => {
 		const initConfig = vi.fn().mockResolvedValue(undefined);
 		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { handler } = await import("./init.js");
+		const { trackEvent } = await import("../analytics.js");
+		vi.mocked(trackEvent).mockClear();
 
 		await expect(
 			handler(
@@ -989,10 +1004,23 @@ describe("init handler", () => {
 					projectId: "prj-example",
 					linkProject,
 					initConfig,
+					analytics: true,
 					contextFile: join(cwd, ".neon"),
 				}),
 			),
 		).rejects.toThrow(CannotMintApiKeyError);
+
+		expect(
+			vi
+				.mocked(trackEvent)
+				.mock.calls.find((call) => call[0] === "cli_init_end")?.[1],
+		).toEqual(
+			expect.objectContaining({
+				outcome: "error",
+				agent_setup: "skills-mcp",
+				tooling_installed: ["skills"],
+			}),
+		);
 
 		expect(ops.installMcp).toHaveBeenCalledTimes(1);
 		expect(ops.installSkills).toHaveBeenCalledTimes(1);
@@ -1084,6 +1112,9 @@ describe("init handler", () => {
 		expect(linkProject).toHaveBeenCalled();
 		expect(ops.installMcp).toHaveBeenCalledTimes(1);
 		expect(ops.installMcp.mock.calls[0]?.[0].oauth).toBeFalsy();
+		expect(takeCommandSuccessExtras()).toMatchObject({
+			tooling_installed: ["skills", "mcp"],
+		});
 	});
 
 	test("an MCP-only agent whose key cannot be minted reports no agent tooling", async () => {
@@ -1143,6 +1174,7 @@ describe("init handler", () => {
 		expect(takeCommandSuccessExtras()).toEqual({
 			init_kind: "existing",
 			agent_setup: "plugin",
+			tooling_installed: ["plugins"],
 		});
 	});
 
@@ -1838,6 +1870,7 @@ describe("init handler", () => {
 		expect(takeCommandSuccessExtras()).toEqual({
 			init_kind: "existing",
 			agent_setup: result,
+			tooling_installed: [...steps],
 		});
 	});
 
@@ -3090,6 +3123,7 @@ describe("init CLI", () => {
 		expect(takeCommandSuccessExtras()).toEqual({
 			init_kind: "empty-skip",
 			agent_setup: "skip",
+			tooling_installed: [],
 		});
 	});
 
@@ -3116,6 +3150,7 @@ describe("init CLI", () => {
 		expect(takeCommandSuccessExtras()).toEqual({
 			init_kind: "existing",
 			agent_setup: "skills-mcp",
+			tooling_installed: ["skills", "mcp"],
 		});
 	});
 });
