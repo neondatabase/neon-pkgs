@@ -1432,6 +1432,103 @@ describe("config commands", () => {
 		expect(read()).toContain("Utilized services: Postgres");
 	});
 
+	describe("Neon Auth wiring steps after apply", () => {
+		const captureStderr = async (run: () => Promise<void>) => {
+			const chunks: string[] = [];
+			const origErr = process.stderr.write.bind(process.stderr);
+			process.stderr.write = ((chunk: string | Uint8Array) => {
+				chunks.push(chunk.toString());
+				return true;
+			}) as typeof process.stderr.write;
+			try {
+				await run();
+			} finally {
+				process.stderr.write = origErr;
+			}
+			return chunks.join("");
+		};
+		const writePackageJson = (dependencies: Record<string, string>) => {
+			writeFileSync(
+				join(cwd, "package.json"),
+				JSON.stringify({ dependencies }),
+			);
+			writeFileSync(join(cwd, "package-lock.json"), "{}\n");
+		};
+
+		it("prints them on stderr for a Next.js app with no Neon Auth SDK", async () => {
+			const api = new FakeNeonApi();
+			const { stream, read } = captureOut();
+			writePackageJson({ next: "16.0.0" });
+			const config = writeConfig("export default { auth: true };\n");
+
+			const stderr = await captureStderr(() =>
+				applyCmd({ ...baseProps(api, stream), config }),
+			);
+
+			expect(JSON.parse(read()).applied).toBeDefined();
+			expect(stderr).toContain(
+				"WARNING: Neon Auth is enabled on the branch, but this Next.js app does not depend on @neon/auth, so /api/auth/get-session returns 404 until these steps are done:",
+			);
+			expect(stderr).toContain("npm install @neon/auth");
+			expect(stderr).toContain(
+				'lib/auth/server.ts: import { createNeonAuth } from "@neon/auth/next/server";',
+			);
+			expect(stderr).toContain("  4. app/api/auth/[...path]/route.ts: ");
+			expect(stderr).toContain("GET /api/auth/get-session");
+		});
+
+		it("puts the files under src/ when the app uses a src directory", async () => {
+			const api = new FakeNeonApi();
+			const { stream } = captureOut();
+			writePackageJson({ next: "16.0.0" });
+			mkdirSync(join(cwd, "src", "app"), { recursive: true });
+			const config = writeConfig("export default { auth: true };\n");
+
+			const stderr = await captureStderr(() =>
+				applyCmd({ ...baseProps(api, stream), config }),
+			);
+
+			expect(stderr).toContain("  3. src/lib/auth/server.ts: ");
+			expect(stderr).toContain(
+				"  4. src/app/api/auth/[...path]/route.ts: ",
+			);
+		});
+
+		it.each([
+			[
+				"the app already depends on @neon/auth",
+				{ next: "16.0.0", "@neon/auth": "^0.8.0" },
+				"export default { auth: true };\n",
+			],
+			[
+				"the app already depends on @neon/oauth",
+				{ next: "16.0.0", "@neon/oauth": "^0.1.0" },
+				"export default { auth: true };\n",
+			],
+			[
+				"the app is not a Next.js app",
+				{ react: "19.0.0" },
+				"export default { auth: true };\n",
+			],
+			[
+				"neon.ts does not declare Neon Auth",
+				{ next: "16.0.0" },
+				"export default {};\n",
+			],
+		])("prints nothing when %s", async (_case, dependencies, body) => {
+			const api = new FakeNeonApi();
+			const { stream } = captureOut();
+			writePackageJson(dependencies);
+			const config = writeConfig(body);
+
+			const stderr = await captureStderr(() =>
+				applyCmd({ ...baseProps(api, stream), config }),
+			);
+
+			expect(stderr).not.toContain("Neon Auth is enabled on the branch");
+		});
+	});
+
 	it("plans a custom-domain register without inventing a CNAME target", async () => {
 		const api = new FakeNeonApi();
 		const { stream, read } = captureOut();
