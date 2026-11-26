@@ -2,6 +2,7 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createNeonTools } from "../../index.js";
+import { NeonToolCallerError } from "../caller-error.js";
 import { searchDocsHeaders } from "./docs.js";
 
 describe("searchDocsHeaders", () => {
@@ -101,7 +102,14 @@ const PAGES: Record<string, string> = {
 };
 
 describe("docs.get", () => {
+	const requests: string[] = [];
 	const server = createServer((req, res) => {
+		requests.push(req.url ?? "");
+		// neon.com answers 400 for a path with an encoded NUL.
+		if (req.url?.includes("%00")) {
+			res.writeHead(400).end();
+			return;
+		}
 		const page = PAGES[req.url ?? ""];
 		if (page === undefined) {
 			res.writeHead(404).end();
@@ -173,5 +181,18 @@ describe("docs.get", () => {
 		expect(await getMarkdown("docs/changelog")).toBe(
 			PAGES["/docs/changelog.md"],
 		);
+	});
+
+	test.each([
+		"docs/functions/templates/hono\u0000",
+		"docs/\u0000functions/templates/hono.md",
+	])("rejects slug %j with a NUL as the caller's mistake without fetching it", async (slug) => {
+		requests.length = 0;
+		const result = tools["docs.get"].execute({ slug });
+		await expect(result).rejects.toBeInstanceOf(NeonToolCallerError);
+		await expect(result).rejects.toThrow(
+			"Invalid doc slug: NUL characters are not allowed",
+		);
+		expect(requests).toEqual([]);
 	});
 });
