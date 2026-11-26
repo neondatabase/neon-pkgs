@@ -11,7 +11,12 @@ import { credentialsPath } from "./config.js";
 import { isCurrentBranchProbe } from "./context.js";
 import { storeFor } from "./credential_io.js";
 import { getCliAgent, getGithubEnvVars, getTty, isCi } from "./env.js";
-import { type ErrorCode, isUnexpectedError } from "./errors.js";
+import {
+	type ErrorCode,
+	isUnexpectedError,
+	REDACTED_INVALID_VALUE,
+} from "./errors.js";
+import { UsageError } from "./help.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
 import type { SkillsTelemetry } from "./skills/freshness.js";
@@ -128,7 +133,6 @@ type AnalyticsEventArgs = {
 	configDir?: string;
 	output?: string;
 	currentBranch?: boolean;
-	prompt?: string;
 	url?: string;
 };
 
@@ -440,12 +444,37 @@ const getErrorAnalyticsEventContext = (
 	tty: getTty(),
 });
 
-// `nak_live_…` is the credential token id (also AWS_ACCESS_KEY_ID). CLI Started
-// joins argv, so `credentials reveal <tokenId>` would otherwise ship the key id.
+// `nak_live_…` is the credential token id (also AWS_ACCESS_KEY_ID), which an error
+// message or stack can name.
 const CREDENTIAL_TOKEN_ID = /\bnak_live_[0-9a-f]+\b/gi;
 
 export const redactCredentialTokenIds = (text: string): string =>
 	text.replace(CREDENTIAL_TOKEN_ID, "nak_live_<redacted>");
+
+const UNKNOWN_COMMANDS = /^Unknown commands?: /;
+
+/**
+ * yargs answers extra positionals with `Unknown command(s): <words>` (English: `index.ts` pins
+ * `.locale("en")`). An unquoted question or message is split into those words, so telemetry
+ * gets the prefix only; the user still sees the words on stderr.
+ */
+const withoutPositionalWords = (
+	err: Error,
+): { message: string; stack: string | undefined } => {
+	const prefix =
+		err instanceof UsageError
+			? UNKNOWN_COMMANDS.exec(err.message)?.[0]
+			: undefined;
+	if (prefix === undefined) {
+		return { message: err.message, stack: err.stack };
+	}
+	const message = `${prefix}${REDACTED_INVALID_VALUE}`;
+	const header = `${err.name}: ${err.message}`;
+	const frames = err.stack?.startsWith(header)
+		? err.stack.slice(header.length)
+		: "";
+	return { message, stack: `${err.name}: ${message}${frames}` };
+};
 
 export const getErrorAnalyticsEventProperties = (
 	err: Error,
@@ -454,11 +483,12 @@ export const getErrorAnalyticsEventProperties = (
 ) => {
 	const apiError = isNeonApiError(err) ? err : undefined;
 	const requestId = apiError?.headers?.["x-neon-ret-request-id"];
+	const { message, stack } = withoutPositionalWords(err);
 
 	return {
 		...context,
-		message: redactCredentialTokenIds(err.message),
-		stack: err.stack ? redactCredentialTokenIds(err.stack) : err.stack,
+		message: redactCredentialTokenIds(message),
+		stack: stack ? redactCredentialTokenIds(stack) : stack,
 		errCode,
 		statusCode: apiError?.status,
 		requestId,
@@ -610,14 +640,13 @@ export const commandSuccessProperties = (
 	...takeCommandSuccessExtras(),
 });
 
-const analyticsCommand = (args: AnalyticsEventArgs): string => {
-	const command = args._.join(" ");
-	const raw =
-		args._[0] !== "ask" || typeof args.prompt !== "string"
-			? command
-			: `${command} ${args.prompt}`;
-	return redactCredentialTokenIds(raw);
-};
+/**
+ * The typed command path (`branches list`, `cs`). yargs moves declared positionals out of
+ * `_`, and `.strictCommands()` fails validation on any other positional before an event
+ * carrying `command` is sent. Token ids are redacted as a backstop to that.
+ */
+const analyticsCommand = (args: AnalyticsEventArgs): string =>
+	redactCredentialTokenIds(args._.join(" "));
 
 export const getAnalyticsEventProperties = (
 	args: AnalyticsEventArgs,
