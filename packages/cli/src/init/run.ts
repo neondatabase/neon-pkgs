@@ -7,6 +7,7 @@ import {
 } from "../analytics.js";
 import { DEFAULT_CLAIMABLE_ORIGIN } from "../claimable/api.js";
 import { readLinkedClaimableCredentials } from "../claimable/state.js";
+import { expiredSessionProfile } from "../commands/auth.js";
 import { create as createClaimableProject } from "../commands/claim.js";
 import {
 	type ConfigInitProps,
@@ -78,6 +79,7 @@ import {
 	configInitNext,
 	envPullFailedNext,
 	existingConfigNext,
+	expiredSessionWarning,
 	installFailedNext,
 	MCP_API_KEY_NEEDS_AUTH,
 	MCP_SCOPED_NEEDS_PROJECT,
@@ -620,7 +622,10 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			...(props.detectAgent ? { detectAgent: props.detectAgent } : {}),
 			...(props.hasLocalCredentials
 				? { hasLocalCredentials: props.hasLocalCredentials }
-				: {}),
+				: {
+						expiredSessionProfile: () =>
+							expiredSessionProfile({ ...auth, configDir }),
+					}),
 			interactive: yes ? false : undefined,
 		};
 		const detection = await detectInitEnvironment(detectOpts);
@@ -638,6 +643,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		if (shouldPrintInitBanner(yes)) {
 			printInitBanner();
+		}
+		if (detection.expiredSession !== null) {
+			log.warning(expiredSessionWarning(detection.expiredSession));
 		}
 
 		const skipAgents = props.agentSetup === false;

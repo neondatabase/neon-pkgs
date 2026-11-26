@@ -695,6 +695,62 @@ export const existingApiClient = async (props: {
 	};
 };
 
+/**
+ * The selected profile, when its stored OAuth session cannot authenticate again without a new
+ * sign-in: the access token expired with no refresh token, or the authorization server rejected
+ * the refresh grant as invalid or expired. A session that refreshes is saved, so the next
+ * {@link ensureAuth} reuses it.
+ *
+ * Every other failure (an unreachable server, a server error, a credentials file that declares
+ * an unusable kind) returns `undefined`, so the command that needs the session reports it.
+ */
+export const expiredSessionProfile = async (props: {
+	configDir: string;
+	apiHost: string;
+	profile?: string;
+	oauthHost?: string;
+	clientId?: string;
+	allowUnsafeTls?: boolean;
+}): Promise<string | undefined> => {
+	const selection = selectCredential({
+		...credentialInputs(),
+		profileFlag: props.profile,
+	});
+	if (selection.source !== "profile") return undefined;
+
+	try {
+		const at = locationForAuth(props.configDir, selection.profile);
+		const loaded = storeFor(props.configDir).read(at);
+		if (loaded === null) return undefined;
+		const credential = interpretCredentials(
+			loaded.credentials,
+			at,
+			loaded.backend,
+		);
+		if (credential.kind === API_KEY) return undefined;
+
+		const resolved = await handleExistingToken(
+			loaded.credentials,
+			{
+				configDir: props.configDir,
+				apiHost: props.apiHost,
+				oauthHost:
+					props.oauthHost ??
+					process.env.NEON_OAUTH_HOST ??
+					"https://oauth2.neon.tech",
+				clientId: props.clientId ?? defaultClientID,
+				allowUnsafeTls: props.allowUnsafeTls,
+			},
+			at,
+		);
+		return resolved === null ? selection.profile : undefined;
+	} catch (err) {
+		return err instanceof AuthRefreshError && err.terminal
+			? selection.profile
+			: undefined;
+	}
+};
+
 export const ensureAuth = async (
 	props: AuthProps & {
 		apiKey: string;
