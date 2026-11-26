@@ -101,7 +101,7 @@
 	"auth.trustedDomains.list": "Lists the domains a branch's Neon Auth may redirect to after sign-in.",
 	"auth.trustedDomains.add": "Adds a domain a branch's Neon Auth may redirect to after sign-in.",
 	"auth.trustedDomains.delete": "Removes a domain from the ones a branch's Neon Auth may redirect to.",
-	"auth.users.create": "Creates a Neon Auth user on a branch who can sign in right away.",
+	"auth.users.create": "Creates a Neon Auth user on a branch. The user has no password, so it cannot sign in with email and password.",
 	"auth.users.delete": "Deletes a Neon Auth user from a branch. Irreversible.",
 	"auth.users.updateRole": "Sets the roles of a Neon Auth user on a branch.",
 	"auth.allowLocalhost.get": "Gets whether a branch's Neon Auth accepts localhost origins.",
