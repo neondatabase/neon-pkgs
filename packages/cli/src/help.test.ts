@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import express from "express";
 import { describe, expect, it } from "vitest";
+import { unknownCommandHint } from "./help.js";
 
 // A key shaped like a real one, so a regression can't pass by the value looking harmless.
 const API_KEY = "napi_test_help_leak_guard_9f3a1c";
@@ -366,5 +367,78 @@ describe("auth and login help teach API keys and profiles", () => {
 		expect(
 			Math.max(...descLines.map((line) => line.length)),
 		).toBeLessThanOrEqual(40);
+	});
+});
+
+const top = {
+	path: [],
+	commands: ["me", "projects", "project", "branches", "api-keys", "psql"],
+};
+
+describe("unknownCommandHint", () => {
+	it("names the command for a known guess", () => {
+		expect(unknownCommandHint("Unknown command: whoami", top, "neon")).toBe(
+			"Did you mean `neon me`?",
+		);
+		expect(
+			unknownCommandHint("Unknown commands: keys, list", top, "neonctl"),
+		).toBe("Did you mean `neonctl api-keys`?");
+	});
+
+	it("matches a guess by its full path", () => {
+		const functions = { path: ["functions"], commands: ["list", "deploy"] };
+		expect(
+			unknownCommandHint(
+				"Unknown commands: logs, digest",
+				functions,
+				"neon",
+			),
+		).toBe(
+			"Function logs are under `neon logs`, for example: neon logs query --source function",
+		);
+		// `logs` is only a guess under `functions`.
+		expect(
+			unknownCommandHint(
+				"Unknown command: logs",
+				{ path: ["realtime"], commands: ["enable"] },
+				"neon",
+			),
+		).toBeUndefined();
+	});
+
+	it("suggests the nearest command for a misspelling, with its path", () => {
+		expect(
+			unknownCommandHint("Unknown command: projcts", top, "neon"),
+		).toBe("Did you mean `neon projects`?");
+		expect(
+			unknownCommandHint(
+				"Unknown command: lst",
+				{ path: ["projects"], commands: ["list", "create", "get"] },
+				"neon",
+			),
+		).toBe("Did you mean `neon projects list`?");
+	});
+
+	it("prefers the closest of several candidates", () => {
+		expect(unknownCommandHint("Unknown command: projec", top, "neon")).toBe(
+			"Did you mean `neon project`?",
+		);
+	});
+
+	it("says nothing when no command is close", () => {
+		expect(
+			unknownCommandHint("Unknown command: frobnicate", top, "neon"),
+		).toBeUndefined();
+		// One edit away, but a different command, not a misspelling.
+		expect(
+			unknownCommandHint(
+				"Unknown command: get",
+				{ path: ["roles"], commands: ["set", "list"] },
+				"neon",
+			),
+		).toBeUndefined();
+		expect(
+			unknownCommandHint("Missing required argument: name", top, "neon"),
+		).toBeUndefined();
 	});
 });

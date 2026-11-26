@@ -30,11 +30,13 @@ import {
 	NETWORK_ERROR_MESSAGE,
 } from "./errors.js";
 import {
+	commandScope,
 	failOnUsageError,
 	isBareParentCommand,
 	showHelp,
 	showUsageErrorHelp,
 	UsageError,
+	unknownCommandHint,
 } from "./help.js";
 import { invocationHosts } from "./hosts.js";
 import { rewriteUnknownAgentArg } from "./init/unknown_agent_arg.js";
@@ -262,7 +264,9 @@ builder = builder
 		"For more information, visit https://neon.com/docs/reference/neon-cli",
 	)
 	.wrap(null)
-	.fail(failOnUsageError);
+	.fail((msg, err, usage) =>
+		failOnUsageError(msg, err, usage, () => commandScope(builder)),
+	);
 
 async function handleError(
 	msg: string,
@@ -380,6 +384,20 @@ async function handleError(
 		// The completion summary already reported this failure.
 		if (code !== "NEON_INIT_FAILED") {
 			log.error(error.message);
+		}
+		if (
+			err instanceof UsageError &&
+			err.scope !== undefined &&
+			err.message.startsWith("Unknown command")
+		) {
+			const hint = unknownCommandHint(
+				err.message,
+				err.scope,
+				getCliName(),
+			);
+			if (hint !== undefined) {
+				log.info(hint);
+			}
 		}
 		return false;
 	}
