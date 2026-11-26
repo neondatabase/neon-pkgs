@@ -143,7 +143,9 @@ describe("postgres computes", () => {
 				onRequest: seen.onRequest,
 				code: 1,
 				snapshot: false,
-				stderr: 'ERROR: Operation op-compute-fail (start_compute) ended with status "failed": compute failed to start.',
+				stderr:
+					'ERROR: Operation op-compute-fail (start_compute) on project test, branch br-sunny-branch-123456, compute ep-compute-failing-123456 ended with status "failed": compute failed to start. ' +
+					"Neon accepted the request, so part of the change may already be applied. Wait for the project's other operations to finish, then check the current state of these resources before retrying.",
 			},
 		);
 		expect(seen.calls()).toEqual([

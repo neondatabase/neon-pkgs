@@ -1448,6 +1448,45 @@ describe("special mappings", () => {
 		]);
 	});
 
+	test("postgres.endpoints.restart rejects with the resource and next step when Neon cancels an operation", async () => {
+		const operation = (status: string) => ({
+			id: "op-1",
+			project_id: "p",
+			branch_id: "br",
+			endpoint_id: "ep",
+			action: "promote_replica",
+			status,
+			failures_count: 0,
+			created_at: "2026-01-01T00:00:00Z",
+			updated_at: "2026-01-01T00:00:00Z",
+			total_duration_ms: 0,
+		});
+		const tool = createNeonTool("postgres.endpoints.restart", {
+			apiKey: "test-key",
+			wait: { pollIntervalMs: 1 },
+			fetch: async (input, init) => {
+				const request = new Request(input, init);
+				if (request.url.includes("/operations/")) {
+					return jsonResponse({ operation: operation("cancelled") });
+				}
+				return jsonResponse({
+					endpoint: { id: "ep" },
+					operations: [operation("running")],
+				});
+			},
+		});
+
+		await expect(
+			tool.execute({ project_id: "p", endpoint_id: "ep" }),
+		).rejects.toMatchObject({
+			kind: "operation",
+			status: "cancelled",
+			message: expect.stringContaining(
+				"on project p, branch br, compute ep ended with status",
+			),
+		});
+	});
+
 	test("branches.delete returns the deleted branch, or null when Neon answers 204", async () => {
 		const branch = {
 			id: "br",
