@@ -131,6 +131,12 @@ export const searchDocsHeaders = (
 };
 
 const validateDocSlug = (slug: string) => {
+	// neon.com answers 400 for an encoded NUL, which would read as a server failure.
+	if (slug.includes("\u0000")) {
+		throw new NeonToolCallerError(
+			"Invalid doc slug: NUL characters are not allowed",
+		);
+	}
 	if (slug.includes("..")) {
 		throw new NeonToolCallerError(
 			'Invalid doc slug: path traversal ("..") is not allowed',
