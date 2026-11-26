@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	type ConfigEdit,
+	declaredValue,
 	declaresEntry,
 	editNeonConfig,
 } from "./config_edit.js";
@@ -300,6 +301,39 @@ ${block}
 				"buckets",
 				"uploads",
 			),
+		).toBeUndefined();
+	});
+});
+
+describe("declaredValue", () => {
+	const config = (
+		block: string,
+	) => `import { defineConfig } from "@neon/config/v1";
+
+export default defineConfig({
+${block}
+});
+`;
+
+	it("returns the source text of a top-level entry's value", () => {
+		expect(
+			declaredValue(
+				config(
+					'  triggers: {\n    tick: { type: "schedule", function: "x", cron: "0 * * * *" },\n  },',
+				),
+				"triggers",
+				"tick",
+			),
+		).toBe('{ type: "schedule", function: "x", cron: "0 * * * *" }');
+	});
+
+	it("returns undefined when the entry is missing or hidden", () => {
+		expect(declaredValue(STARTER, "triggers", "tick")).toBeUndefined();
+		expect(
+			declaredValue(config("  triggers: shared,"), "triggers", "tick"),
+		).toBeUndefined();
+		expect(
+			declaredValue(config("  triggers: { tick },"), "triggers", "tick"),
 		).toBeUndefined();
 	});
 });

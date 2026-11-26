@@ -272,10 +272,17 @@ export const parseTemplateItem = (
 };
 
 const TRIGGER_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
-const CRON_PATTERN = /^[0-9*,/-]+(?: [0-9*,/-]+){4}$/;
+const CRON_PATTERN = /^[0-9*][0-9*,/-]*(?: [0-9*][0-9*,/-]*){4}$/;
 const BUCKET_NAME_PATTERN = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
-const FUNCTION_PATH_PATTERN = /^\/[A-Za-z0-9\-._~/]*$/;
-const MAX_PREFIX_LENGTH = 1024;
+const FUNCTION_PATH_PATTERN = /^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%/?]{0,2047}$/;
+const MAX_PREFIX_BYTES = 1024;
+
+/** The API's rule for a prefix: no C0 or C1 control characters, which also keeps terminal escapes out of the CLI's output. */
+const hasControlCharacter = (text: string): boolean =>
+	[...text].some((char) => {
+		const code = char.codePointAt(0) ?? 0;
+		return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+	});
 const TRIGGER_KEYS: Record<FunctionTemplateTrigger["type"], Set<string>> = {
 	schedule: new Set(["name", "type", "cron", "operation", "path"]),
 	storage_object_created: new Set([
@@ -341,7 +348,7 @@ const parseTriggers = (
 			) {
 				return invalid(
 					index,
-					"has a path that is not a URL path starting with /",
+					"has a path that is not a URL path of at most 2048 characters starting with /",
 				);
 			}
 			if (operation === undefined) {
@@ -384,7 +391,7 @@ const parseTriggers = (
 				if (typeof cron !== "string" || !CRON_PATTERN.test(cron)) {
 					return invalid(
 						index,
-						"needs a numeric five-field cron expression separated by single spaces",
+						"needs a numeric five-field cron expression separated by single spaces, each field starting with a digit or *",
 					);
 				}
 				return { ...target, type, cron };
@@ -403,9 +410,13 @@ const parseTriggers = (
 				prefix !== undefined &&
 				(typeof prefix !== "string" ||
 					prefix === "" ||
-					prefix.length > MAX_PREFIX_LENGTH)
+					Buffer.byteLength(prefix) > MAX_PREFIX_BYTES ||
+					hasControlCharacter(prefix))
 			) {
-				return invalid(index, "needs a prefix of 1-1024 characters");
+				return invalid(
+					index,
+					"needs a prefix of 1-1024 UTF-8 bytes with no control characters",
+				);
 			}
 			return {
 				...target,

@@ -599,7 +599,11 @@ const apply = (source: string, edit: ConfigEdit): ConfigEditResult => {
 };
 
 /** The one line a trigger edit writes inside `triggers`, trailing comma included. */
-export const renderTriggerEntry = (trigger: TriggerDeclaration): string => {
+export const renderTriggerEntry = (trigger: TriggerDeclaration): string =>
+	`${renderKey(trigger.name)}: ${renderTriggerValue(trigger)},`;
+
+/** The object literal a trigger edit writes as the value of its `triggers` key. */
+export const renderTriggerValue = (trigger: TriggerDeclaration): string => {
 	const fields: Array<[string, string | undefined]> =
 		trigger.type === "schedule"
 			? [
@@ -620,7 +624,30 @@ export const renderTriggerEntry = (trigger: TriggerDeclaration): string => {
 			value === undefined ? [] : [`${key}: ${JSON.stringify(value)}`],
 		)
 		.join(", ");
-	return `${renderKey(trigger.name)}: { ${body} },`;
+	return `{ ${body} }`;
+};
+
+/**
+ * The source text of `name`'s value in the top-level `container`. `undefined` when it is not
+ * declared there, or the layout hides it.
+ */
+export const declaredValue = (
+	source: string,
+	container: NamedContainer,
+	name: string,
+): string | undefined => {
+	try {
+		const parsed = parse(source);
+		const entry = findEntry(parsed.root, container);
+		const object = entry ? objectOf(parsed, entry) : undefined;
+		const declared = object ? findEntry(object, name) : undefined;
+		return declared?.keyed
+			? source.slice(declared.valueStart, declared.valueEnd)
+			: undefined;
+	} catch (error) {
+		if (error instanceof ConfigEditError) return undefined;
+		throw error;
+	}
 };
 
 /**

@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import prompts from "prompts";
 import { recordScaffoldedTemplate } from "../analytics.js";
 import { renderTriggerEntry, type TriggerDeclaration } from "../config_edit.js";
+import { renderKey } from "../config_template.js";
 import { isInteractiveTerminal } from "../env.js";
 import { resolveEnvFilePath } from "../env_file.js";
 import { didYouMean, REDACTED_INVALID_VALUE } from "../errors.js";
@@ -223,7 +224,7 @@ const triggerCreateCommand = (
 					`--bucket ${shellQuote(trigger.bucket)}`,
 					...(trigger.prefix === undefined
 						? []
-						: [`--prefix ${shellQuote(trigger.prefix)}`]),
+						: [`--prefix=${shellQuote(trigger.prefix)}`]),
 				]),
 		...(trigger.functionPath === undefined
 			? []
@@ -434,13 +435,21 @@ export const scaffoldFromTemplate = async (
 				(trigger) =>
 					trigger.status === "added" &&
 					trigger.type === "storage_object_created" &&
-					trigger.bucket === bucket,
+					trigger.bucket === bucket.name,
 			)
 			.map(({ name }) => name)
 			.join(", ");
-		const command = `${cli} config add bucket ${shellQuote(bucket)}${configFlag}`;
+		if (bucket.byHand) {
+			const snippet = `${renderKey(bucket.name)}: { access: "private" },`;
+			nextSteps.push(
+				`Make sure neon.ts declares bucket ${bucket.name}, which trigger ${watching} watches. neon.ts does not load until it does, and \`${cli} config add bucket\` cannot edit this file's buckets, so add it by hand if it is missing: \`${snippet}\` (\`access: "public_read"\` if the bucket allows anonymous reads).`,
+			);
+			next.push(`Add to buckets in neon.ts if missing: ${snippet}`);
+			continue;
+		}
+		const command = `${cli} config add bucket ${shellQuote(bucket.name)}${configFlag}`;
 		nextSteps.push(
-			`Declare bucket ${bucket}, which trigger ${watching} watches: \`${command}\`. neon.ts does not load until it is declared. Add \`--access public_read\` if the bucket allows anonymous reads.`,
+			`Declare bucket ${bucket.name}, which trigger ${watching} watches: \`${command}\`. neon.ts does not load until it is declared. Add \`--access public_read\` if the bucket allows anonymous reads.`,
 		);
 		next.push(command);
 	}
@@ -466,8 +475,9 @@ export const scaffoldFromTemplate = async (
 			`Routes: ${plan.routes.join(", ")}. Other paths return 404.`,
 		);
 	}
+	const triggersConflicting = new Set(registration?.triggersConflicting);
 	for (const trigger of triggers) {
-		if (trigger.status !== "already_declared") continue;
+		if (!triggersConflicting.has(trigger.name)) continue;
 		const { status: _, ...declaration } = trigger;
 		const snippet = renderTriggerEntry(declaration);
 		nextSteps.push(
@@ -497,8 +507,12 @@ export const scaffoldFromTemplate = async (
 		}
 		for (const trigger of triggers) {
 			const command = triggerCreateCommand(cli, trigger);
+			const bucket =
+				trigger.type === "storage_object_created"
+					? ` (bucket ${trigger.bucket} must exist on the branch first)`
+					: "";
 			nextSteps.push(
-				`After deploying ${trigger.function}, create trigger ${trigger.name}: \`${command}\``,
+				`After deploying ${trigger.function}, create trigger ${trigger.name}${bucket}: \`${command}\``,
 			);
 			next.push(command);
 		}
@@ -633,6 +647,16 @@ const pickTemplate = async (
 	return typeof answer.value === "string" ? answer.value : undefined;
 };
 
+export const triggerJson = ({
+	functionPath,
+	status,
+	...trigger
+}: ScaffoldedTrigger) => ({
+	...trigger,
+	...(functionPath === undefined ? {} : { function_path: functionPath }),
+	status,
+});
+
 export const handleNew = async (props: NewFunctionProps): Promise<void> => {
 	const interactive =
 		props.yes !== true && !structured(props) && isInteractiveTerminal();
@@ -686,15 +710,7 @@ export const handleNew = async (props: NewFunctionProps): Promise<void> => {
 				operations: result.operations,
 				routes: result.routes ?? null,
 				functions: result.functions,
-				triggers: result.triggers.map(
-					({ functionPath, status, ...trigger }) => ({
-						...trigger,
-						...(functionPath === undefined
-							? {}
-							: { function_path: functionPath }),
-						status,
-					}),
-				),
+				triggers: result.triggers.map(triggerJson),
 				directory: result.directory,
 				config: result.config
 					? { path: result.config.path, action: result.config.action }

@@ -2,8 +2,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import {
 	asRelativeModulePath,
+	ConfigEditError,
+	declaredValue,
 	declaresEntry,
 	editNeonConfig,
+	renderTriggerValue,
 	type TriggerDeclaration,
 	TYPESCRIPT_EXTENSION,
 } from "../config_edit.js";
@@ -196,6 +199,16 @@ export const planScaffold = (
 			`Invalid function slug "${slug}". ${FUNCTION_SLUG_HELP}`,
 		);
 	}
+	if (template.layout === "separate") {
+		for (const operation of operations) {
+			const operationSlug = slugOf(operation);
+			if (!FUNCTION_SLUG_PATTERN.test(operationSlug)) {
+				throw new Error(
+					`Template "${template.id}" gives operation ${JSON.stringify(operation.id)} the invalid function slug ${JSON.stringify(operationSlug)}. ${FUNCTION_SLUG_HELP}`,
+				);
+			}
+		}
+	}
 	const triggers = resolveTriggers(template, operations, slug);
 	if ((template.operations?.length ?? 0) === 0) {
 		return {
@@ -273,12 +286,32 @@ export type ConfigRegistration = {
 	alreadyDeclared: string[];
 	/** Trigger names `neon.ts` already declared. Those declarations are left as they are. */
 	triggersDeclared: string[];
+	/** The subset of `triggersDeclared` whose declaration differs from the template's trigger. */
+	triggersConflicting: string[];
 	/**
 	 * Buckets that a trigger this registration added watches and that `neon.ts` does not
 	 * declare, or might not (its layout hides it). Never added here: declaring a bucket that
 	 * already exists on the branch would set its access to whatever the declaration says.
+	 * `byHand` when `neon config add bucket` cannot edit this file's buckets.
 	 */
-	undeclaredBuckets: string[];
+	undeclaredBuckets: Array<{ name: string; byHand: boolean }>;
+};
+
+const sameDeclaration = (declared: string, rendered: string): boolean => {
+	const normalize = (text: string) =>
+		text.replace(/\s+/g, "").replace(/,\}$/, "}");
+	return normalize(declared) === normalize(rendered);
+};
+
+const canAddBucket = (source: string, name: string): boolean => {
+	if (declaresEntry(source, "buckets", name) !== false) return false;
+	try {
+		editNeonConfig(source, { kind: "bucket", name, access: "private" });
+		return true;
+	} catch (error) {
+		if (error instanceof ConfigEditError) return false;
+		throw error;
+	}
 };
 
 export const planConfigRegistration = (
@@ -314,11 +347,19 @@ export const planConfigRegistration = (
 		changes.push(...result.changes);
 	}
 	const triggersDeclared: string[] = [];
+	const triggersConflicting: string[] = [];
 	const watched = new Set<string>();
 	for (const trigger of triggers) {
 		const result = editNeonConfig(source, { kind: "trigger", ...trigger });
 		if (result.changes.length === 0) {
 			triggersDeclared.push(trigger.name);
+			const declared = declaredValue(source, "triggers", trigger.name);
+			if (
+				declared === undefined ||
+				!sameDeclaration(declared, renderTriggerValue(trigger))
+			) {
+				triggersConflicting.push(trigger.name);
+			}
 			continue;
 		}
 		source = result.source;
@@ -332,9 +373,10 @@ export const planConfigRegistration = (
 		changes,
 		alreadyDeclared,
 		triggersDeclared,
-		undeclaredBuckets: [...watched].filter(
-			(bucket) => declaresEntry(source, "buckets", bucket) !== true,
-		),
+		triggersConflicting,
+		undeclaredBuckets: [...watched]
+			.filter((name) => declaresEntry(source, "buckets", name) !== true)
+			.map((name) => ({ name, byHand: !canAddBucket(source, name) })),
 	};
 };
 

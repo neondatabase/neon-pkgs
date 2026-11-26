@@ -6,6 +6,7 @@ import { loadConfigFromFile } from "@neon/config-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { editNeonConfig } from "../config_edit";
 import { renderNeonConfig } from "../config_template";
+import { planScaffold } from "../functions/scaffold";
 import {
 	DEFAULT_REGISTRY_URL,
 	openRegistry,
@@ -16,6 +17,7 @@ import {
 	formatNewFunctionDone,
 	type ScaffoldFromTemplateOptions,
 	scaffoldFromTemplate,
+	triggerJson,
 } from "./functions_new";
 
 const SCHEMA_URL = new URL("schemas/", DEFAULT_REGISTRY_URL).href;
@@ -279,8 +281,11 @@ describe("functions new with template triggers", () => {
 		expect(result.next).toEqual(
 			expect.arrayContaining([
 				"neon triggers create --function-slug uploads --name cleanup --cron '0 * * * *' --function-path /cleanup",
-				"neon triggers create --function-slug uploads --name describe-uploads --bucket uploads --prefix images/ --function-path /describe-image",
+				"neon triggers create --function-slug uploads --name describe-uploads --bucket uploads --prefix=images/ --function-path /describe-image",
 			]),
+		);
+		expect(result.nextSteps.join("\n")).toContain(
+			"create trigger describe-uploads (bucket uploads must exist on the branch first):",
 		);
 		const deploy = result.next.findIndex((line) =>
 			line.startsWith("neon functions deploy"),
@@ -289,5 +294,133 @@ describe("functions new with template triggers", () => {
 			line.startsWith("neon triggers create"),
 		);
 		expect(deploy).toBeLessThan(create);
+	});
+
+	it("stays quiet about triggers it already wrote when rerun with --force", async () => {
+		writeFileSync(join(project, "neon.ts"), withBuckets("inbox"));
+		await run({ template: "ticker" });
+		const written = read();
+
+		const result = await run({ template: "ticker", force: true });
+
+		expect(read()).toBe(written);
+		expect(result.triggers.map(({ status }) => status)).toEqual([
+			"already_declared",
+			"already_declared",
+		]);
+		expect(result.nextSteps.join("\n")).not.toContain(
+			"already declares a trigger",
+		);
+	});
+
+	it("counts a reformatted copy of the template's trigger as the same declaration", async () => {
+		writeFileSync(
+			join(project, "neon.ts"),
+			editNeonConfig(withBuckets("inbox"), {
+				kind: "trigger",
+				name: "tick",
+				type: "schedule",
+				function: "ticker",
+				cron: "0 * * * *",
+				functionPath: "/__scheduled",
+			}).source.replace(
+				'tick: { type: "schedule", function: "ticker", cron: "0 * * * *", functionPath: "/__scheduled" },',
+				'tick: {\n      type: "schedule",\n      function: "ticker",\n      cron: "0 * * * *",\n      functionPath: "/__scheduled",\n    },',
+			),
+		);
+
+		const result = await run({ template: "ticker" });
+
+		expect(result.triggers[0]).toMatchObject({
+			status: "already_declared",
+		});
+		expect(result.nextSteps.join("\n")).not.toContain(
+			"already declares a trigger",
+		);
+	});
+
+	it("passes --config through to the bucket command", async () => {
+		const result = await run({ template: "ticker", config: "neon.ts" });
+
+		expect(result.next[0]).toBe(
+			"neon config add bucket inbox --config neon.ts",
+		);
+	});
+
+	it.each([
+		[
+			"buckets set to an expression",
+			"const shared = {};\n\nexport default defineConfig({\n  buckets: shared,\n",
+		],
+		[
+			"buckets declared under preview without this bucket",
+			'export default defineConfig({\n  preview: {\n    buckets: { other: { access: "private" } },\n  },\n',
+		],
+	])("asks to check the bucket by hand when neon config add bucket cannot edit %s", async (_, header) => {
+		writeFileSync(
+			join(project, "neon.ts"),
+			renderNeonConfig([]).replace(
+				"export default defineConfig({\n",
+				header,
+			),
+		);
+
+		const result = await run({ template: "ticker" });
+
+		expect(result.nextSteps.join("\n")).not.toContain(
+			"config add bucket inbox",
+		);
+		expect(result.nextSteps).toContain(
+			'Make sure neon.ts declares bucket inbox, which trigger on-upload watches. neon.ts does not load until it does, and `neon config add bucket` cannot edit this file\'s buckets, so add it by hand if it is missing: `inbox: { access: "private" },` (`access: "public_read"` if the bucket allows anonymous reads).',
+		);
+		expect(result.next[0]).toBe(
+			'Add to buckets in neon.ts if missing: inbox: { access: "private" },',
+		);
+	});
+
+	it("refuses a separate template whose operation slug is not a valid function slug", async () => {
+		const entry = registry.entries.find(({ id }) => id === "pipeline");
+		if (!entry) throw new Error("missing pipeline fixture");
+		const loaded = await registry.load(entry);
+		const operations = (loaded.template.operations ?? []).map(
+			(operation, index) =>
+				index === 0
+					? { ...operation, slug: "pipe ingest; rm" }
+					: operation,
+		);
+
+		expect(() =>
+			planScaffold(
+				{ ...loaded, template: { ...loaded.template, operations } },
+				operations,
+				"pipeline",
+			),
+		).toThrow(
+			/Template "pipeline" gives operation "ingest" the invalid function slug "pipe ingest; rm"/,
+		);
+	});
+
+	it("names functionPath function_path in JSON output", async () => {
+		writeFileSync(join(project, "neon.ts"), withBuckets("inbox"));
+
+		const result = await run({ template: "ticker" });
+
+		expect(result.triggers.map(triggerJson)).toEqual([
+			{
+				name: "tick",
+				type: "schedule",
+				function: "ticker",
+				cron: "0 * * * *",
+				function_path: "/__scheduled",
+				status: "added",
+			},
+			{
+				name: "on-upload",
+				type: "storage_object_created",
+				function: "ticker",
+				bucket: "inbox",
+				status: "added",
+			},
+		]);
 	});
 });

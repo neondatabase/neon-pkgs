@@ -231,6 +231,50 @@ describe("parseTemplateItem triggers", () => {
 			/needs a prefix/,
 		],
 		[
+			"a prefix with a terminal escape",
+			[
+				{
+					name: "x",
+					type: "storage_object_created",
+					bucket: "uploads",
+					prefix: "images/\u001b[2J",
+					operation: "cleanup",
+				},
+			],
+			/needs a prefix of 1-1024 UTF-8 bytes with no control characters/,
+		],
+		[
+			"a prefix with a C1 control character",
+			[
+				{
+					name: "x",
+					type: "storage_object_created",
+					bucket: "uploads",
+					prefix: "images/\u009b",
+					operation: "cleanup",
+				},
+			],
+			/no control characters/,
+		],
+		[
+			"a prefix of 1024 characters but more than 1024 bytes",
+			[
+				{
+					name: "x",
+					type: "storage_object_created",
+					bucket: "uploads",
+					prefix: "é".repeat(513),
+					operation: "cleanup",
+				},
+			],
+			/needs a prefix of 1-1024 UTF-8 bytes/,
+		],
+		[
+			"a cron field starting with a hyphen",
+			[{ ...cleanup, cron: "-5 * * * *" }],
+			/each field starting with a digit or \*/,
+		],
+		[
 			"a missing operation",
 			[{ ...cleanup, operation: undefined }],
 			/needs the operation it calls/,
@@ -276,7 +320,13 @@ describe("parseTemplateItem triggers", () => {
 		expect(single.triggers[0]).toMatchObject({ path: "/" });
 	});
 
-	it.each(["__scheduled", "/a b", '/"x'])("rejects the path %s", (path) => {
+	it.each([
+		"__scheduled",
+		"/a b",
+		'/"x',
+		"/\u001b[2J",
+		`/${"a".repeat(2048)}`,
+	])("rejects the path %s", (path) => {
 		expect(() =>
 			parse(
 				[{ name: "tick", type: "schedule", cron: "0 * * * *", path }],
@@ -285,5 +335,31 @@ describe("parseTemplateItem triggers", () => {
 				},
 			),
 		).toThrow(/has a path that is not a URL path/);
+	});
+
+	it.each([
+		"/run?mode=full&dry=1",
+		"/files/%20report",
+		`/${"a".repeat(2047)}`,
+	])("takes the path %s", (path) => {
+		const { triggers } = parse(
+			[{ name: "tick", type: "schedule", cron: "0 * * * *", path }],
+			{ operations: undefined },
+		);
+		expect(triggers[0]).toMatchObject({ path });
+	});
+
+	it("takes a prefix of exactly 1024 bytes", () => {
+		const prefix = "é".repeat(512);
+		const { triggers } = parse([
+			{
+				name: "x",
+				type: "storage_object_created",
+				bucket: "uploads",
+				prefix,
+				operation: "cleanup",
+			},
+		]);
+		expect(triggers[0]).toMatchObject({ prefix });
 	});
 });
