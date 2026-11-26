@@ -35,7 +35,9 @@ function endpointsClient<Throw extends boolean = false>(
 const ENDPOINT = "/api/v2/projects/p/endpoints/ep-1";
 const OPERATION = "/api/v2/projects/p/operations/op-1";
 
-const operation = (status: "running" | "finished" | "failed") => ({
+const operation = (
+	status: "running" | "finished" | "failed" | "cancelled",
+) => ({
 	id: "op-1",
 	project_id: "p",
 	action: "restart_compute",
@@ -176,6 +178,55 @@ describe("endpoint mutations with readiness polling", () => {
 		);
 		expect(error).toBeInstanceOf(NeonOperationError);
 		expect(calls).not.toContain(`GET ${ENDPOINT}`);
+	});
+
+	it.each([
+		{
+			status: "cancelled" as const,
+			ids: { branch_id: "br-1", endpoint_id: "ep-1" },
+			reason: undefined,
+			expected:
+				'on project p, branch br-1, compute ep-1 ended with status "cancelled".',
+		},
+		{
+			status: "failed" as const,
+			ids: { branch_id: "br-1", endpoint_id: "ep-1" },
+			reason: "compute failed to start",
+			expected:
+				'on project p, branch br-1, compute ep-1 ended with status "failed": compute failed to start.',
+		},
+		{
+			status: "failed" as const,
+			ids: {},
+			reason: undefined,
+			expected: 'on project p ended with status "failed".',
+		},
+	])("names where an operation ended $status and the next step: $expected", async ({
+		status,
+		ids,
+		reason,
+		expected,
+	}) => {
+		const ended = {
+			...operation(status),
+			action: "promote_replica",
+			...ids,
+			...(reason === undefined ? {} : { error: reason }),
+		};
+		const { neon } = endpointsClient({
+			...restartSteps,
+			[`GET ${OPERATION}`]: () => json({ operation: ended }),
+		});
+		const { error } = await neon.postgres.endpoints.restart(
+			{ projectId: "p", endpointId: "ep-1" },
+			{ waitForReadiness: true },
+		);
+		expect(error).toBeInstanceOf(NeonOperationError);
+		expect(error).toMatchObject({ operationId: "op-1", status });
+		expect(error?.message).toBe(
+			`Operation op-1 (promote_replica) ${expected} ` +
+				"Neon accepted the request, so part of the change may already be applied. Wait for the project's other operations to finish, then check the current state of these resources before retrying.",
+		);
 	});
 
 	it("reports a failed read instead of the accepted endpoint", async () => {

@@ -224,8 +224,16 @@ export async function pollUntil<T>(
 
 function operationFailed(op: Operation): NeonOperationError {
 	const detail = op.error ? `: ${op.error}` : "";
+	const target = [
+		`project ${op.project_id}`,
+		op.branch_id ? `branch ${op.branch_id}` : undefined,
+		op.endpoint_id ? `compute ${op.endpoint_id}` : undefined,
+	]
+		.filter((part) => part !== undefined)
+		.join(", ");
 	return new NeonOperationError(
-		`Operation ${op.id} (${op.action}) ended with status "${op.status}"${detail}.`,
+		`Operation ${op.id} (${op.action}) on ${target} ended with status "${op.status}"${detail}. ` +
+			"Neon accepted the request, so part of the change may already be applied. Wait for the project's other operations to finish, then check the current state of these resources before retrying.",
 		{ operationId: op.id, status: op.status },
 	);
 }
