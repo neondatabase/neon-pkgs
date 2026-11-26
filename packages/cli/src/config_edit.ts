@@ -57,7 +57,6 @@ export type ConfigEdit =
 	| { kind: "bucket"; name: string; access: "private" | "public_read" }
 	| ({ kind: "trigger" } & TriggerDeclaration);
 
-/** A trigger as `neon.ts` declares it under `triggers`, keyed by `name`. */
 export type TriggerDeclaration = {
 	name: string;
 	function: string;
@@ -495,7 +494,6 @@ const dataApiIsExternal = (parsed: Parsed): boolean => {
 
 type NamedContainer = "functions" | "buckets" | "triggers";
 
-/** A named entry (a function, a bucket, or a trigger) inside `functions` / `buckets` / `triggers`. */
 const addNamed = (
 	parsed: Parsed,
 	container: NamedContainer,
@@ -598,11 +596,9 @@ const apply = (source: string, edit: ConfigEdit): ConfigEditResult => {
 	};
 };
 
-/** The one line a trigger edit writes inside `triggers`, trailing comma included. */
 export const renderTriggerEntry = (trigger: TriggerDeclaration): string =>
 	`${renderKey(trigger.name)}: ${renderTriggerValue(trigger)},`;
 
-/** The object literal a trigger edit writes as the value of its `triggers` key. */
 export const renderTriggerValue = (trigger: TriggerDeclaration): string => {
 	const fields: Array<[string, string | undefined]> =
 		trigger.type === "schedule"
@@ -627,10 +623,6 @@ export const renderTriggerValue = (trigger: TriggerDeclaration): string => {
 	return `{ ${body} }`;
 };
 
-/**
- * The source text of `name`'s value in the top-level `container`. `undefined` when it is not
- * declared there, or the layout hides it.
- */
 export const declaredValue = (
 	source: string,
 	container: NamedContainer,
@@ -650,11 +642,6 @@ export const declaredValue = (
 	}
 };
 
-/**
- * Whether a `neon.ts` declares `name` in `container`, at the top level or under the deprecated
- * `preview` block. `undefined` when the file's layout hides the answer, such as a container set
- * to an expression.
- */
 export const declaresEntry = (
 	source: string,
 	container: NamedContainer,

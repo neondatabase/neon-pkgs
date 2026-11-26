@@ -84,10 +84,6 @@ const routeOf = (operation: FunctionTemplateOperation): string =>
 const slugOf = (operation: FunctionTemplateOperation): string =>
 	operation.slug ?? deriveFunctionSlug(operation.id);
 
-/**
- * The template's triggers whose function is scaffolded, pointed at that function. A router
- * operation's trigger posts to the operation's route; `/` is the API's default and is left out.
- */
 const resolveTriggers = (
 	template: FunctionTemplate,
 	operations: readonly FunctionTemplateOperation[],
@@ -284,16 +280,8 @@ export type ConfigRegistration = {
 	created: boolean;
 	changes: string[];
 	alreadyDeclared: string[];
-	/** Trigger names `neon.ts` already declared. Those declarations are left as they are. */
 	triggersDeclared: string[];
-	/** The subset of `triggersDeclared` whose declaration differs from the template's trigger. */
 	triggersConflicting: string[];
-	/**
-	 * Buckets that a trigger this registration added watches and that `neon.ts` does not
-	 * declare, or might not (its layout hides it). Never added here: declaring a bucket that
-	 * already exists on the branch would set its access to whatever the declaration says.
-	 * `byHand` when `neon config add bucket` cannot edit this file's buckets.
-	 */
 	undeclaredBuckets: Array<{ name: string; byHand: boolean }>;
 };
 

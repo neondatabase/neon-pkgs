@@ -97,10 +97,6 @@ export type ScaffoldedFunction = Pick<
 	"slug" | "name" | "operation"
 > & { source: string };
 
-/**
- * `added`: written to `neon.ts`. `already_declared`: `neon.ts` already had a trigger with this
- * name and was left alone. `not_added`: `--no-add-to-config`.
- */
 export type ScaffoldedTrigger = TriggerDeclaration & {
 	status: "added" | "already_declared" | "not_added";
 };

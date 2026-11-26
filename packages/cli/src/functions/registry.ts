@@ -35,11 +35,6 @@ export type FunctionTemplateOperation = {
 	recommended: boolean;
 };
 
-/**
- * A Function Trigger the CLI declares in `neon.ts` next to the scaffolded function. `operation`
- * names the operation whose function it calls; the trigger is declared only when that operation
- * is scaffolded. A router operation's trigger always posts to the operation's route.
- */
 export type FunctionTemplateTrigger = {
 	name: string;
 	operation?: string;
@@ -277,7 +272,6 @@ const BUCKET_NAME_PATTERN = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
 const FUNCTION_PATH_PATTERN = /^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%/?]{0,2047}$/;
 const MAX_PREFIX_BYTES = 1024;
 
-/** The API's rule for a prefix: no C0 or C1 control characters, which also keeps terminal escapes out of the CLI's output. */
 const hasControlCharacter = (text: string): boolean =>
 	[...text].some((char) => {
 		const code = char.codePointAt(0) ?? 0;
@@ -295,10 +289,6 @@ const TRIGGER_KEYS: Record<FunctionTemplateTrigger["type"], Set<string>> = {
 	]),
 };
 
-/**
- * The CLI writes these values into the project's `neon.ts`, so it checks them itself instead of
- * trusting that the published schema rejected anything unsafe.
- */
 const parseTriggers = (
 	data: TemplateDocument,
 	operations: readonly FunctionTemplateOperation[],

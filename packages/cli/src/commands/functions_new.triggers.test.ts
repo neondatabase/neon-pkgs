@@ -39,8 +39,6 @@ const withBuckets = (...names: string[]) =>
 		renderNeonConfig([]),
 	);
 
-// The published template schema predates `triggers` and sets additionalProperties: false, so it
-// would reject these fixtures. The CLI's own parser is what these tests exercise.
 describe("functions new with template triggers", () => {
 	let project: string;
 	let registry: Registry;
