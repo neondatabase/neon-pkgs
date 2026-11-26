@@ -1,0 +1,10 @@
+{
+	"id": "ticker",
+	"title": "Ticker",
+	"description": "No operations, with triggers.",
+	"layout": "router",
+	"triggers": [
+		{ "name": "tick", "type": "schedule", "cron": "0 * * * *", "path": "/__scheduled" },
+		{ "name": "on-upload", "type": "storage_object_created", "bucket": "inbox", "path": "/" }
+	]
+}

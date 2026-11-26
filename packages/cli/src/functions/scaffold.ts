@@ -2,7 +2,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import {
 	asRelativeModulePath,
+	declaresEntry,
 	editNeonConfig,
+	type TriggerDeclaration,
 	TYPESCRIPT_EXTENSION,
 } from "../config_edit.js";
 import { renderNeonConfig } from "../config_template.js";
@@ -16,6 +18,7 @@ import {
 	type FunctionTemplate,
 	type FunctionTemplateEnvironment,
 	type FunctionTemplateOperation,
+	type FunctionTemplateTrigger,
 	resolveOperationById,
 	type TemplateLayout,
 } from "./registry.js";
@@ -69,10 +72,66 @@ export type ScaffoldPlan = {
 	files: ScaffoldFile[];
 	functions: ScaffoldFunction[];
 	routes?: string[];
+	triggers: TriggerDeclaration[];
 };
 
 const routeOf = (operation: FunctionTemplateOperation): string =>
 	operation.route ?? `/${operation.id}`;
+
+const slugOf = (operation: FunctionTemplateOperation): string =>
+	operation.slug ?? deriveFunctionSlug(operation.id);
+
+/**
+ * The template's triggers whose function is scaffolded, pointed at that function. A router
+ * operation's trigger posts to the operation's route; `/` is the API's default and is left out.
+ */
+const resolveTriggers = (
+	template: FunctionTemplate,
+	operations: readonly FunctionTemplateOperation[],
+	slug: string,
+): TriggerDeclaration[] =>
+	template.triggers.flatMap((trigger: FunctionTemplateTrigger) => {
+		let target: { function: string; functionPath?: string };
+		if (trigger.operation === undefined) {
+			target = { function: slug, functionPath: trigger.path };
+		} else {
+			const operation = operations.find(
+				({ id }) => id === trigger.operation,
+			);
+			if (!operation) return [];
+			target =
+				template.layout === "separate"
+					? {
+							function: slugOf(operation),
+							functionPath: trigger.path,
+						}
+					: { function: slug, functionPath: routeOf(operation) };
+		}
+		const path =
+			target.functionPath === undefined || target.functionPath === "/"
+				? {}
+				: { functionPath: target.functionPath };
+		const declaration: TriggerDeclaration =
+			trigger.type === "schedule"
+				? {
+						name: trigger.name,
+						type: trigger.type,
+						function: target.function,
+						cron: trigger.cron,
+						...path,
+					}
+				: {
+						name: trigger.name,
+						type: trigger.type,
+						function: target.function,
+						bucket: trigger.bucket,
+						...(trigger.prefix === undefined
+							? {}
+							: { prefix: trigger.prefix }),
+						...path,
+					};
+		return [declaration];
+	});
 
 const routerSource = (
 	operations: readonly FunctionTemplateOperation[],
@@ -137,6 +196,7 @@ export const planScaffold = (
 			`Invalid function slug "${slug}". ${FUNCTION_SLUG_HELP}`,
 		);
 	}
+	const triggers = resolveTriggers(template, operations, slug);
 	if ((template.operations?.length ?? 0) === 0) {
 		return {
 			layout: template.layout,
@@ -147,6 +207,7 @@ export const planScaffold = (
 				},
 			],
 			functions: [{ slug, name: template.title, file: "index.ts", env }],
+			triggers,
 		};
 	}
 	if (operations.length === 0) {
@@ -161,12 +222,13 @@ export const planScaffold = (
 			layout: "separate",
 			files: modules,
 			functions: operations.map((operation) => ({
-				slug: operation.slug ?? deriveFunctionSlug(operation.id),
+				slug: slugOf(operation),
 				name: operation.title,
 				operation: operation.id,
 				file: `${operation.id}.ts`,
 				env,
 			})),
+			triggers,
 		};
 	}
 	return {
@@ -177,6 +239,7 @@ export const planScaffold = (
 		],
 		functions: [{ slug, name: template.title, file: "index.ts", env }],
 		routes: operations.map(routeOf),
+		triggers,
 	};
 };
 
@@ -208,12 +271,21 @@ export type ConfigRegistration = {
 	created: boolean;
 	changes: string[];
 	alreadyDeclared: string[];
+	/** Trigger names `neon.ts` already declared. Those declarations are left as they are. */
+	triggersDeclared: string[];
+	/**
+	 * Buckets that a trigger this registration added watches and that `neon.ts` does not
+	 * declare, or might not (its layout hides it). Never added here: declaring a bucket that
+	 * already exists on the branch would set its access to whatever the declaration says.
+	 */
+	undeclaredBuckets: string[];
 };
 
 export const planConfigRegistration = (
 	configPath: string,
 	targetDir: string,
 	functions: readonly ScaffoldFunction[],
+	triggers: readonly TriggerDeclaration[],
 ): ConfigRegistration => {
 	const created = !existsSync(configPath);
 	let source = created
@@ -241,11 +313,28 @@ export const planConfigRegistration = (
 		source = result.source;
 		changes.push(...result.changes);
 	}
+	const triggersDeclared: string[] = [];
+	const watched = new Set<string>();
+	for (const trigger of triggers) {
+		const result = editNeonConfig(source, { kind: "trigger", ...trigger });
+		if (result.changes.length === 0) {
+			triggersDeclared.push(trigger.name);
+			continue;
+		}
+		source = result.source;
+		changes.push(...result.changes);
+		if (trigger.type === "storage_object_created")
+			watched.add(trigger.bucket);
+	}
 	return {
 		...(created || changes.length > 0 ? { source } : {}),
 		created,
 		changes,
 		alreadyDeclared,
+		triggersDeclared,
+		undeclaredBuckets: [...watched].filter(
+			(bucket) => declaresEntry(source, "buckets", bucket) !== true,
+		),
 	};
 };
 

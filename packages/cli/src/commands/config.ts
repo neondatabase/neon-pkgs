@@ -740,7 +740,7 @@ type PlannedAdd = {
 	next: string;
 };
 
-const shellQuote = (value: string): string =>
+export const shellQuote = (value: string): string =>
 	/^[\w@%+=:,./-]+$/.test(value)
 		? value
 		: `'${value.replace(/'/g, "'\\''")}'`;

@@ -54,7 +54,18 @@ export type ConfigEdit =
 			env?: readonly string[];
 			typescript?: boolean;
 	  }
-	| { kind: "bucket"; name: string; access: "private" | "public_read" };
+	| { kind: "bucket"; name: string; access: "private" | "public_read" }
+	| ({ kind: "trigger" } & TriggerDeclaration);
+
+/** A trigger as `neon.ts` declares it under `triggers`, keyed by `name`. */
+export type TriggerDeclaration = {
+	name: string;
+	function: string;
+	functionPath?: string;
+} & (
+	| { type: "schedule"; cron: string }
+	| { type: "storage_object_created"; bucket: string; prefix?: string }
+);
 
 export type ConfigEditResult = {
 	source: string;
@@ -482,10 +493,12 @@ const dataApiIsExternal = (parsed: Parsed): boolean => {
 	]);
 };
 
-/** A named entry (a function or a bucket) inside `functions` / `buckets`. */
+type NamedContainer = "functions" | "buckets" | "triggers";
+
+/** A named entry (a function, a bucket, or a trigger) inside `functions` / `buckets` / `triggers`. */
 const addNamed = (
 	parsed: Parsed,
-	container: "functions" | "buckets",
+	container: NamedContainer,
 	name: string,
 	entryLines: readonly string[],
 ): Step => {
@@ -570,12 +583,74 @@ const apply = (source: string, edit: ConfigEdit): ConfigEditResult => {
 				]),
 			);
 			break;
+		case "trigger":
+			run((parsed) =>
+				addNamed(parsed, "triggers", edit.name, [
+					renderTriggerEntry(edit),
+				]),
+			);
+			break;
 	}
 
 	return {
 		source: current,
 		changes: steps.flatMap((step) => (step.change ? [step.change] : [])),
 	};
+};
+
+/** The one line a trigger edit writes inside `triggers`, trailing comma included. */
+export const renderTriggerEntry = (trigger: TriggerDeclaration): string => {
+	const fields: Array<[string, string | undefined]> =
+		trigger.type === "schedule"
+			? [
+					["type", trigger.type],
+					["function", trigger.function],
+					["cron", trigger.cron],
+					["functionPath", trigger.functionPath],
+				]
+			: [
+					["type", trigger.type],
+					["function", trigger.function],
+					["bucket", trigger.bucket],
+					["prefix", trigger.prefix],
+					["functionPath", trigger.functionPath],
+				];
+	const body = fields
+		.flatMap(([key, value]) =>
+			value === undefined ? [] : [`${key}: ${JSON.stringify(value)}`],
+		)
+		.join(", ");
+	return `${renderKey(trigger.name)}: { ${body} },`;
+};
+
+/**
+ * Whether a `neon.ts` declares `name` in `container`, at the top level or under the deprecated
+ * `preview` block. `undefined` when the file's layout hides the answer, such as a container set
+ * to an expression.
+ */
+export const declaresEntry = (
+	source: string,
+	container: NamedContainer,
+	name: string,
+): boolean | undefined => {
+	const declaresIn = (parsed: Parsed, scan: ObjectScan) => {
+		const entry = findEntry(scan, container);
+		if (!entry) return false;
+		const object = objectOf(parsed, entry);
+		return object ? findEntry(object, name) !== undefined : undefined;
+	};
+	try {
+		const parsed = parse(source);
+		const top = declaresIn(parsed, parsed.root);
+		if (top !== false) return top;
+		const preview = findEntry(parsed.root, "preview");
+		if (!preview) return false;
+		const object = objectOf(parsed, preview);
+		return object ? declaresIn(parsed, object) : undefined;
+	} catch (error) {
+		if (error instanceof ConfigEditError) return undefined;
+		throw error;
+	}
 };
 
 /**
