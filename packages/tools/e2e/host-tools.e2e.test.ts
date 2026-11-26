@@ -157,6 +157,34 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		]);
 	});
 
+	it("SQL tools return dates and timestamps a JavaScript Date cannot hold as Postgres text", async () => {
+		const sql = `SELECT '294276-12-31 23:59:59'::timestamp AS last_timestamp,
+			'5874897-12-31'::date AS last_date,
+			'infinity'::timestamptz AS forever,
+			ARRAY['294276-12-31 23:59:59+00'::timestamptz, NULL] AS stamps,
+			'2026-11-25 10:00:00+00'::timestamptz AS today`;
+		const expected = [
+			{
+				last_timestamp: "294276-12-31 23:59:59",
+				last_date: "5874897-12-31",
+				forever: "infinity",
+				stamps: ["294276-12-31 23:59:59+00", null],
+				today: "2026-11-25T10:00:00.000Z",
+			},
+		];
+		expect((await run(sql)).data.rows).toEqual(expected);
+		const readOnly = await tools["sql.run"].execute(
+			{ project_id: projectId, sql },
+			{ readOnly: true },
+		);
+		expect(readOnly.data.rows).toEqual(expected);
+		const transaction = await tools["sql.runTransaction"].execute({
+			project_id: projectId,
+			sql_statements: [sql],
+		});
+		expect(transaction.data[0].rows).toEqual(expected);
+	});
+
 	it("sql.run rejects a syntax error with the Postgres NeonDbError", async () => {
 		const failure = run("SELEC 1");
 		await expect(failure).rejects.toBeInstanceOf(NeonDbError);
