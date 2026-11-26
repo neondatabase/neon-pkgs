@@ -305,11 +305,20 @@ function originsEqual(
 	desired: readonly string[],
 	current: readonly string[] | undefined,
 ): boolean {
-	if (current === undefined || desired.length !== current.length)
-		return false;
-	const left = [...desired].sort();
-	const right = [...current].sort();
-	return left.every((origin, index) => origin === right[index]);
+	if (current === undefined) return false;
+	const left = canonicalOrigins(desired);
+	const right = canonicalOrigins(current);
+	return (
+		left.length === right.length &&
+		left.every((origin, index) => origin === right[index])
+	);
+}
+
+/** The Neon API stores `["*"]` as `[]`; both allow every origin. */
+function canonicalOrigins(origins: readonly string[]): string[] {
+	return origins.length === 1 && origins[0] === "*"
+		? []
+		: [...origins].sort();
 }
 
 /**
