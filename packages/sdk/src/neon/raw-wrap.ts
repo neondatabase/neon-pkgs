@@ -43,13 +43,34 @@ export function validatePathParams(path: unknown): NeonClientError | undefined {
 }
 
 /**
+ * No Neon API route answers a success with HTML. A host that does is something else, such as
+ * the console's web app or a proxy page, and the generated client would hand its markup back
+ * as the typed body.
+ */
+async function rejectHtmlSuccess(
+	response: Response,
+	request: Request,
+): Promise<Response> {
+	const contentType = response.headers.get("Content-Type") ?? "";
+	if (!response.ok || !/^\s*text\/html\s*(;|$)/i.test(contentType)) {
+		return response;
+	}
+	await response.body?.cancel().catch(() => undefined);
+	const url = new URL(request.url);
+	throw new NeonClientError(
+		`${url.origin} answered ${request.method} ${url.pathname} with an HTML page (HTTP ${response.status}) instead of a Neon API response. Check that the API base URL points at the Neon API, https://console.neon.tech/api/v2, and that no proxy is answering in its place.`,
+	);
+}
+
+/**
  * The generated `createClient`, plus {@link validatePathParams} on every request made through
- * the client, including direct calls such as `client.get({ url, path })`. A caller-supplied
- * `requestValidator` runs after it.
+ * the client, including direct calls such as `client.get({ url, path })`, and
+ * {@link rejectHtmlSuccess} on every response. A caller-supplied `requestValidator` runs after
+ * {@link validatePathParams}.
  */
 export function createClient(config: Config = {}): Client {
 	const callerValidator = config.requestValidator;
-	return createGeneratedClient({
+	const client = createGeneratedClient({
 		...config,
 		requestValidator: async (options) => {
 			if (
@@ -63,6 +84,8 @@ export function createClient(config: Config = {}): Client {
 			await callerValidator?.(options);
 		},
 	});
+	client.interceptors.response.use(rejectHtmlSuccess);
+	return client;
 }
 
 /**

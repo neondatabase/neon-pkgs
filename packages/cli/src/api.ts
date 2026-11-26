@@ -539,7 +539,8 @@ export const getApiClient = ({
 		} catch (err) {
 			throw networkError(err);
 		}
-		// The SDK rejected the input before sending; its message is the one to show.
+		// The SDK rejected the input before sending, or a 2xx HTML page; its message is the
+		// one to show.
 		if (
 			result.error instanceof Error &&
 			"kind" in result.error &&

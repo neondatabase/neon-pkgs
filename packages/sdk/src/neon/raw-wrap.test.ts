@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import * as rawGen from "../client/raw.gen.js";
-import { deleteProjectBranchDatabase, getProject } from "../client/raw.gen.js";
+import {
+	deleteProjectBranchDatabase,
+	getProject,
+	listProjects,
+} from "../client/raw.gen.js";
 import * as gen from "../client/sdk.gen.js";
 import { createNeonClient } from "./client.js";
-import { NeonNotFoundError } from "./errors.js";
+import { NeonApiError, NeonClientError, NeonNotFoundError } from "./errors.js";
 
 /**
  * Build a real configured client whose only stubbed boundary is the network: `fetch`
@@ -70,6 +74,47 @@ describe("wrapRaw result contract", () => {
 			path: { project_id: "p-1", branch_id: "br-1", database_name: "db" },
 		});
 		expect(res.error).toBeUndefined();
+	});
+});
+
+describe("a host that answers with an HTML page", () => {
+	const PAGE = "<!DOCTYPE html><html><body>Neon Console</body></html>";
+
+	function neonServingHtml(status: number) {
+		return createNeonClient({
+			apiKey: "test",
+			baseUrl: "https://console.neon.tech/app",
+			retries: 0,
+			fetch: async () =>
+				new Response(PAGE, {
+					status,
+					headers: { "content-type": "text/html; charset=utf-8" },
+				}),
+		});
+	}
+
+	it("fails a raw call instead of returning the page as data", async () => {
+		const res = await listProjects({
+			client: neonServingHtml(200).client,
+			query: { limit: 100 },
+		});
+		expect(res.data).toBeUndefined();
+		expect(res.error).toBeInstanceOf(NeonClientError);
+		expect(res.error?.message).toBe(
+			"https://console.neon.tech answered GET /app/projects with an HTML page (HTTP 200) instead of a Neon API response. Check that the API base URL points at the Neon API, https://console.neon.tech/api/v2, and that no proxy is answering in its place.",
+		);
+	});
+
+	it("fails a list instead of returning no items", async () => {
+		const res = await neonServingHtml(200).projects.list().all();
+		expect(res.data).toBeUndefined();
+		expect(res.error).toBeInstanceOf(NeonClientError);
+	});
+
+	it("keeps an HTML error page an API error with its status", async () => {
+		const res = await listProjects({ client: neonServingHtml(502).client });
+		expect(res.error).toBeInstanceOf(NeonApiError);
+		expect(res.error).toMatchObject({ status: 502 });
 	});
 });
 
