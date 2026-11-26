@@ -381,11 +381,13 @@ const listObjects = async (
 			{ fields: ["name"], title: "folders" },
 		);
 	}
-	w.write(data.objects, {
-		fields: OBJECT_FIELDS,
-		title: "objects",
-		emptyMessage: "No objects found.",
-	});
+	if (data.objects.length > 0 || data.folders.length === 0) {
+		w.write(data.objects, {
+			fields: OBJECT_FIELDS,
+			title: "objects",
+			emptyMessage: "No objects found.",
+		});
+	}
 	w.end();
 
 	if (data.is_truncated && data.next_cursor) {

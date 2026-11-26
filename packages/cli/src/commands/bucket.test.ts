@@ -167,6 +167,34 @@ describe("bucket", () => {
 		);
 	});
 
+	test("object list with table output shows only folders when every object is nested", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["bucket", "object", "list", "folders-only", ...SCOPE],
+			{
+				mockDir: "single_org",
+				outputTable: true,
+				snapshot: false,
+				stdout: "folders Name hello/",
+			},
+		);
+	});
+
+	test("object list with table output reports an empty bucket", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["bucket", "object", "list", "empty-bucket", ...SCOPE],
+			{
+				mockDir: "single_org",
+				outputTable: true,
+				snapshot: false,
+				stdout: "No objects found.",
+			},
+		);
+	});
+
 	test("object ls alias", async ({ testCliCommand }) => {
 		await testCliCommand(
 			["bucket", "object", "ls", "my-bucket", ...SCOPE],
