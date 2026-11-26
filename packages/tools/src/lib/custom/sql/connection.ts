@@ -77,25 +77,51 @@ export interface ResolvedConnection {
 	computeId?: string;
 }
 
+type BranchDatabase = { name: string; owner_name: string };
+
 /** `neondb` when the branch has it, otherwise the first database. */
 export const defaultDatabase = async (
 	neonClient: NeonClient<true>,
 	ids: { projectId: string; branchId: string },
 	signal?: AbortSignal,
-) => {
-	const databases = await neonClient.postgres.databases.list(ids, {
-		signal,
-	});
+) =>
+	pickDefaultDatabase(
+		await neonClient.postgres.databases.list(ids, { signal }),
+	);
+
+const noDatabases = () =>
+	new NeonToolCallerError("No databases found in your project branch");
+
+const pickDefaultDatabase = (
+	databases: readonly BranchDatabase[],
+): BranchDatabase => {
 	const first = databases[0];
-	if (first === undefined) {
-		throw new NeonToolCallerError(
-			"No databases found in your project branch",
-		);
-	}
+	if (first === undefined) throw noDatabases();
 	return (
 		databases.find(
 			(database) => database.name === NEON_DEFAULT_DATABASE_NAME,
 		) ?? first
+	);
+};
+
+/**
+ * Every branch has a `postgres` database that `pg_database` lists and the Neon
+ * API does not, so the API cannot name its owner.
+ */
+const findNamedDatabase = (
+	databases: readonly BranchDatabase[],
+	databaseName: string,
+): BranchDatabase => {
+	const database = databases.find(({ name }) => name === databaseName);
+	if (database !== undefined) return database;
+	if (databases.length === 0) throw noDatabases();
+	const listed = databases.map(({ name }) => `"${name}"`).join(", ");
+	const problem =
+		databaseName === "postgres"
+			? 'Neon reserves the "postgres" database and does not list it on this branch, so the tools cannot look up its owner to log in as. Pass role_name to connect to it anyway.'
+			: `The Neon API does not list database "${databaseName}" on this branch.`;
+	throw new NeonToolCallerError(
+		`${problem} The branch's databases: ${listed}.`,
 	);
 };
 
@@ -127,20 +153,16 @@ export const resolveConnection = async (
 		branchId ??= (
 			await neonClient.branches.getDefault({ projectId }, { signal })
 		).id;
+		const databases = await neonClient.postgres.databases.list(
+			{ projectId, branchId },
+			{ signal },
+		);
 		if (databaseName === undefined) {
-			const database = await defaultDatabase(
-				neonClient,
-				{ projectId, branchId },
-				signal,
-			);
+			const database = pickDefaultDatabase(databases);
 			databaseName = database.name;
 			roleName ??= database.owner_name;
 		} else {
-			const database = await neonClient.postgres.databases.get(
-				{ projectId, branchId, databaseName },
-				{ signal },
-			);
-			roleName = database.owner_name;
+			roleName = findNamedDatabase(databases, databaseName).owner_name;
 		}
 	}
 

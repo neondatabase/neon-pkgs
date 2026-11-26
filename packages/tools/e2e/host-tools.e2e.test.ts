@@ -308,6 +308,51 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		}
 	});
 
+	it("the SQL tools name the branch's databases for postgres, which pg_database lists and the Neon API does not", async () => {
+		const { data } = await run(
+			"SELECT datname FROM pg_database WHERE datname = 'postgres'",
+		);
+		expect(data.rows).toEqual([{ datname: "postgres" }]);
+
+		const target = {
+			project_id: projectId,
+			branch_id: mainBranchId,
+			database_name: "postgres",
+		};
+		for (const call of [
+			() => tools["sql.run"].execute({ ...target, sql: "SELECT 1" }),
+			() =>
+				tools["database.inspect"].execute({
+					...target,
+					check: "locks",
+				}),
+			() => tools["queries.listSlow"].execute(target),
+		]) {
+			const failure = call();
+			await expect(failure).rejects.toBeInstanceOf(NeonClientError);
+			await expect(failure).rejects.toThrow(
+				`Neon reserves the "postgres" database and does not list it on this branch, so the tools cannot look up its owner to log in as. Pass role_name to connect to it anyway. The branch's databases: "neondb".`,
+			);
+		}
+
+		const { data: withRole } = await tools["sql.run"].execute({
+			...target,
+			role_name: "neondb_owner",
+			sql: "SELECT current_database() AS name",
+		});
+		expect(withRole.rows).toEqual([{ name: "postgres" }]);
+
+		const typo = tools["sql.run"].execute({
+			...target,
+			database_name: "nedb",
+			sql: "SELECT 1",
+		});
+		await expect(typo).rejects.toBeInstanceOf(NeonClientError);
+		await expect(typo).rejects.toThrow(
+			`The Neon API does not list database "nedb" on this branch. The branch's databases: "neondb".`,
+		);
+	});
+
 	it("sql.runTransaction returns rows per statement", async () => {
 		const { data } = await tools["sql.runTransaction"].execute({
 			project_id: projectId,
