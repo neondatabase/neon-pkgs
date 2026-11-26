@@ -1,4 +1,5 @@
 import { Writable } from "node:stream";
+import { ErrorCode, PlatformError } from "@neon/config";
 import type {
 	LiveQueryChange,
 	LiveQuerySnapshot,
@@ -7,12 +8,14 @@ import type {
 	RawLiveQueryRow,
 	RawLiveQueryUpdate,
 } from "@neon/realtime";
-import { describe, expect, it, vi } from "vitest";
+import { createRealtime, rawSql } from "@neon/realtime";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import YAML from "yaml";
 import yargs from "yargs";
 import { stripAnsi } from "../human_table.js";
 import {
 	builder,
+	realtimeServerOptions,
 	type SubscribeDependencies,
 	type SubscribeProps,
 	subscribe,
@@ -141,7 +144,7 @@ const realtimeEnv = {
 		DATABASE_URL:
 			"postgresql://user:password@ep-example.us-east-2.aws.neon.tech/neondb?sslmode=require",
 		NEON_REALTIME_URL: "wss://realtime.example/v1",
-		NEON_REALTIME_SECRET: "secret",
+		NEON_REALTIME_SECRET: "legacy-secret",
 	},
 	credential: {
 		issued: false,
@@ -241,11 +244,17 @@ describe("subscribe command", () => {
 			branchId: "branch-1",
 			apiKey: "api-key",
 			apiHost: "https://console-stage.example/api/v2",
-			services: ["postgres", "realtime"],
+			envKeys: [
+				"DATABASE_URL",
+				"NEON_REALTIME_URL",
+				"NEON_REALTIME_SECRET",
+			],
 		});
+		expect(setupResult.resolveEnv).toHaveBeenCalledOnce();
 		expect(setupResult.connectionOptions()).toEqual({
 			url: "wss://realtime.example/v1",
-			secret: "secret",
+			databaseUrl: realtimeEnv.vars.DATABASE_URL,
+			secret: "legacy-secret",
 			database: "neondb",
 			debugMode: false,
 		});
@@ -271,6 +280,83 @@ describe("subscribe command", () => {
 		]);
 		expect(subscription.unsubscribed).toBe(true);
 		expect(setupResult.closeCount()).toBe(1);
+	});
+
+	it("subscribes with DATABASE_URL alone when the branch's secret is off", async () => {
+		const subscription = new FakeSubscription();
+		const setupResult = setup(subscription);
+		const { vars } = realtimeEnv;
+		setupResult.resolveEnv
+			.mockRejectedValueOnce(
+				new PlatformError(
+					ErrorCode.NotFound,
+					"getProjectBranchRealtimeSecret failed: resource not found on Neon.",
+				),
+			)
+			.mockResolvedValueOnce({
+				...realtimeEnv,
+				vars: {
+					DATABASE_URL: vars.DATABASE_URL,
+					NEON_REALTIME_URL: vars.NEON_REALTIME_URL,
+				},
+			} as unknown as typeof realtimeEnv);
+		const controller = new AbortController();
+		const run = subscribe(
+			props(false, controller.signal, capture().out),
+			setupResult.dependencies,
+		);
+		await setupResult.ready;
+		controller.abort();
+		await run;
+
+		expect(setupResult.resolveEnv).toHaveBeenCalledTimes(2);
+		expect(setupResult.resolveEnv).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				envKeys: ["DATABASE_URL", "NEON_REALTIME_URL"],
+			}),
+		);
+		expect(setupResult.connectionOptions()).toEqual({
+			url: "wss://realtime.example/v1",
+			databaseUrl: vars.DATABASE_URL,
+			database: "neondb",
+			debugMode: false,
+		});
+	});
+
+	it("does not hide other errors while resolving the secret", async () => {
+		const setupResult = setup(new FakeSubscription());
+		setupResult.resolveEnv.mockRejectedValueOnce(
+			new PlatformError(ErrorCode.Unauthorized, "API key rejected"),
+		);
+		const controller = new AbortController();
+
+		await expect(
+			subscribe(
+				props(false, controller.signal, capture().out),
+				setupResult.dependencies,
+			),
+		).rejects.toThrow("API key rejected");
+		expect(setupResult.resolveEnv).toHaveBeenCalledOnce();
+		expect(setupResult.connectionOptions()).toBeUndefined();
+	});
+
+	it("needs DATABASE_URL, whose login authenticates the subscription", async () => {
+		const setupResult = setup(new FakeSubscription());
+		setupResult.resolveEnv.mockResolvedValueOnce({
+			...realtimeEnv,
+			vars: { NEON_REALTIME_URL: "wss://realtime.example/v1" },
+		} as unknown as typeof realtimeEnv);
+		const controller = new AbortController();
+
+		await expect(
+			subscribe(
+				props(false, controller.signal, capture().out),
+				setupResult.dependencies,
+			),
+		).rejects.toThrow(
+			"Could not resolve DATABASE_URL for the selected branch.",
+		);
+		expect(setupResult.connectionOptions()).toBeUndefined();
 	});
 
 	it("renders raw rows and changes events with --changes", async () => {
@@ -596,5 +682,85 @@ describe("subscribe command", () => {
 		expect(output.text()).toContain(
 			'Subscription failed — column "title" does not exist (SQLSTATE 42703)',
 		);
+	});
+});
+
+describe("subscribe command against Realtime servers", () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	// Built at runtime: secret scanners flag literal user:password@host URLs.
+	const userinfo = ["neondb_owner", "test-password"].join(":");
+	const connection = (host: string, secret?: string) => ({
+		url: `wss://${host}/v1`,
+		databaseUrl: `postgresql://${userinfo}@ep-example.neon.tech/neondb`,
+		...(secret ? { secret } : {}),
+		database: "neondb",
+		debugMode: false,
+	});
+	const legacySecret = `nrt_live_1${Buffer.alloc(32, 7).toString("base64url")}`;
+	const headerOf = (capability: string) =>
+		JSON.parse(
+			Buffer.from(capability.split(".")[0] ?? "", "base64url").toString(),
+		);
+	// What a proxy from before envelopes answers for its keys path.
+	const oldProxyResponse = () =>
+		new Response("Connection header did not include 'upgrade'", {
+			status: 400,
+			headers: { "content-type": "text/plain; charset=utf-8" },
+		});
+
+	it("seals a legacy token with the secret when an old proxy has no keys endpoint", async () => {
+		const fetch = vi.fn(async () => oldProxyResponse());
+		vi.stubGlobal("fetch", fetch);
+		const realtime = createRealtime(
+			realtimeServerOptions(
+				connection("old-proxy.example", legacySecret),
+			),
+		);
+
+		const sealed = await realtime.seal({ query: rawSql("SELECT 1") });
+
+		expect(fetch).toHaveBeenCalledWith(
+			"https://old-proxy.example/.well-known/neon-realtime-keys",
+			expect.anything(),
+		);
+		expect(headerOf(sealed.capability)).toEqual({
+			alg: "dir",
+			enc: "A256GCM",
+			v: 2,
+		});
+		realtime.close();
+	});
+
+	it("explains the missing key when the branch's secret is off", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => oldProxyResponse()),
+		);
+		const realtime = createRealtime(
+			realtimeServerOptions(connection("old-proxy-no-secret.example")),
+		);
+
+		await expect(
+			realtime.seal({ query: rawSql("SELECT 1") }),
+		).rejects.toThrow("This branch has no Realtime key yet");
+		realtime.close();
+	});
+
+	it("does not use the secret when the keys endpoint fails", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response("", { status: 500 })),
+		);
+		const realtime = createRealtime(
+			realtimeServerOptions(
+				connection("failing-proxy.example", legacySecret),
+			),
+		);
+
+		await expect(
+			realtime.seal({ query: rawSql("SELECT 1") }),
+		).rejects.toThrow("HTTP 500");
+		realtime.close();
 	});
 });

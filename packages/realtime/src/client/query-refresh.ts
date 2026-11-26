@@ -24,13 +24,15 @@ interface QueryRefreshControllerOptions<Row> {
 	 * Subscription whose diagnostic context receives refresh lifecycle events.
 	 * Renewal behavior remains defined by `renewSubscription`, which also
 	 * supports integrations that construct the controller before subscribing.
-	 * Refreshes stop once this subscription is in error or closed.
+	 * The controller refreshes as soon as this subscription becomes `stale`,
+	 * and stops once it is in error or closed.
 	 */
 	readonly subscription?: RawLiveQuerySubscription<NoInferCompat<Row>>;
 }
 
 interface StatefulSubscription {
 	getState(): LiveQueryState;
+	onStateChange?(listener: (state: LiveQueryState) => void): () => void;
 }
 
 /**
@@ -57,14 +59,16 @@ export class QueryRefreshController<Row> {
 	private appliedReplacementId = 0;
 	private refreshEvents: QueryRefreshEventSink;
 	private subscription?: StatefulSubscription;
+	private detachStateListener?: () => void;
+	private lastRefreshStartedAt = Number.NEGATIVE_INFINITY;
 
 	constructor(private readonly options: QueryRefreshControllerOptions<Row>) {
 		this.query = options.query;
 		this.refreshQuery = options.refreshQuery;
-		this.subscription = options.subscription;
 		this.refreshEvents = subscriptionEventsFor(
 			options.subscription,
 		).refresh;
+		this.watch(options.subscription);
 	}
 
 	/** Return the capability currently managed by this controller. */
@@ -86,6 +90,7 @@ export class QueryRefreshController<Row> {
 		if (this.active && !this.refreshInFlight && !this.refreshStopped) {
 			this.scheduleRefresh();
 		}
+		this.refreshIfStale();
 	}
 
 	/**
@@ -95,8 +100,8 @@ export class QueryRefreshController<Row> {
 	setSubscription(
 		subscription: RawLiveQuerySubscription<Row> | undefined,
 	): void {
-		this.subscription = subscription;
 		this.refreshEvents = subscriptionEventsFor(subscription).refresh;
+		this.watch(subscription);
 	}
 
 	/**
@@ -128,6 +133,7 @@ export class QueryRefreshController<Row> {
 		this.active = true;
 		this.refreshStopped = false;
 		this.scheduleRefresh();
+		this.refreshIfStale();
 	}
 
 	/** Stop scheduling refreshes and ignore any refresh already in flight. */
@@ -137,6 +143,49 @@ export class QueryRefreshController<Row> {
 		this.clearTimer();
 		this.refreshInFlight = false;
 		this.refreshStopped = false;
+	}
+
+	private watch(subscription: StatefulSubscription | undefined): void {
+		this.detachStateListener?.();
+		this.detachStateListener = undefined;
+		this.subscription = subscription;
+		if (typeof subscription?.onStateChange !== "function") return;
+		this.detachStateListener = subscription.onStateChange((state) => {
+			if (state.status === "stale") this.refreshForReplacement();
+		});
+		this.refreshIfStale();
+	}
+
+	/**
+	 * State listeners hear only later transitions. A subscription that was
+	 * already `stale` when watched, started or given a callback still needs
+	 * its replacement now, not at the scheduled refresh.
+	 */
+	private refreshIfStale(): void {
+		if (this.subscription?.getState().status === "stale") {
+			this.refreshForReplacement();
+		}
+	}
+
+	/**
+	 * A `stale` subscription waits for a replacement: its capability expired,
+	 * or the client needs a fresh one after the backend session ended. Refresh
+	 * now rather than at the scheduled time, at most once per second.
+	 */
+	private refreshForReplacement(): void {
+		if (
+			!this.active ||
+			!this.refreshQuery ||
+			this.refreshInFlight ||
+			this.refreshStopped
+		)
+			return;
+		this.scheduleRefresh(
+			Math.max(
+				0,
+				this.lastRefreshStartedAt + REFRESH_RETRY_MS - Date.now(),
+			),
+		);
 	}
 
 	private scheduleRefresh(delay?: number): void {
@@ -166,6 +215,7 @@ export class QueryRefreshController<Row> {
 			return;
 		}
 		this.refreshInFlight = true;
+		this.lastRefreshStartedAt = Date.now();
 		const generation = this.generation;
 		this.refreshEvents.callbackStarted();
 		try {

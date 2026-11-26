@@ -6,6 +6,10 @@ parameterized query into a short-lived encrypted bearer capability. The
 browser presents that capability over a multiplexed WebSocket and receives an
 authoritative result followed by atomic change batches.
 
+The capability is an envelope sealed to the branch's public key. It carries
+the query and the backend's Postgres login, which Realtime checks with a real
+Postgres login. The browser can neither read nor change it.
+
 > **Status:** Realtime is experimental. Its APIs and wire protocol may change
 > before a stable release.
 
@@ -16,11 +20,12 @@ npm install @neon/realtime
 ```
 
 > **Requirements:** Node.js >= 20.19 for backend sealing. You also need a
-> PostgreSQL database connected to a compatible Realtime endpoint, a server-only
-> Realtime secret, and the endpoint WebSocket URL.
+> PostgreSQL database connected to a compatible Realtime endpoint, its
+> connection string (`DATABASE_URL`) for the `neondb_owner` role, and the
+> endpoint WebSocket URL (`NEON_REALTIME_URL`).
 
-The package has no runtime dependencies. Import browser and backend code from
-their dedicated entry points so server secrets cannot enter a browser bundle:
+Import browser and backend code from their dedicated entry points so server
+credentials cannot enter a browser bundle:
 
 ```ts
 import { createRealtimeClient } from "@neon/realtime/client";
@@ -47,8 +52,8 @@ interface Message {
 }
 
 const realtime = createRealtime({
-  secret: process.env.NEON_REALTIME_SECRET!,
-  db: "app",
+  databaseUrl: process.env.DATABASE_URL!,
+  url: process.env.NEON_REALTIME_URL!,
 });
 
 app.post("/api/messages/live", async (request, response) => {
@@ -64,7 +69,8 @@ app.post("/api/messages/live", async (request, response) => {
 });
 ```
 
-`seal()` performs local Web Crypto work and makes no network request. The
+`seal()` performs local Web Crypto work. Its only network request fetches the
+branch's public key, which it caches (see [Credentials](#credentials)). The
 application remains responsible for authentication, input validation, access
 checks, and putting every trusted caller-specific restriction into the query.
 Anyone holding the returned capability can subscribe to that exact query until
@@ -77,9 +83,78 @@ errors can expose schema, table, and column names, so never enable this for
 untrusted clients in production. When PostgreSQL supplies a SQLSTATE, it is
 available as `error.sqlState` on the subscription error.
 
-`db` is embedded in each encrypted capability. The first capability accepted
+The database is embedded in each encrypted capability. It defaults to the one
+in `databaseUrl`; pass `db` to choose another. The first capability accepted
 on a browser client binds its WebSocket to that database; later subscriptions
 on that client must target the same database.
+
+### Credentials
+
+`databaseUrl` is a Postgres connection string, such as `DATABASE_URL`. Each
+capability is a v3 envelope, sealed with HPKE (P-256) to the branch's public
+key, that carries the URL's user and password. Realtime opens it and checks
+that login against Postgres, so password changes, `NOLOGIN` and role settings
+apply to Realtime too. No Realtime secret is involved.
+
+- **Role.** Realtime supports only `neondb_owner` for now. Another user is a
+  configuration error when `createRealtime()` runs.
+- **Vercel OIDC.** When the URL has no password, as in Vercel projects that use
+  OIDC, the credential is an OIDC token. By default the SDK reads Vercel's
+  runtime token: the request's `x-vercel-oidc-token` header, then
+  `VERCEL_OIDC_TOKEN`. Pass `oidcToken` to supply tokens yourself. An empty
+  password never means "send no credential". The SDK reuses a token until 60
+  seconds before its `exp`, so Realtime's login cache keeps working.
+
+  ```ts
+  const realtime = createRealtime({
+    databaseUrl: "postgresql://neondb_owner@ep-example.neon.tech/neondb",
+    url: process.env.NEON_REALTIME_URL!,
+    oidcToken: () => getTokenFromMyProvider(),
+  });
+  ```
+
+- **Public key.** The SDK fetches the branch's keys from
+  `/.well-known/neon-realtime-keys` on the `url` host (`wss://` becomes
+  `https://`) and caches them per process as the response's `Cache-Control`
+  allows, at most 10 minutes. The request opts out of framework fetch caches.
+  During a rotation the list holds the current key and the next one, each with
+  a `use_since` time. At each seal the SDK takes the newest key whose
+  `use_since` is at least a minute old, or the earliest if none is, so a fast
+  clock doesn't switch before Realtime does. It switches on time without
+  refetching.
+  It may start the branch's Realtime VM, so each attempt has 30 seconds, and
+  a timeout or a `502`, `503` or `504` is retried once after a second.
+  Concurrent seals share one request. Pass `fetch` to use your own, for
+  example for a custom CA, or on a runtime that rejects `cache: "no-store"`.
+- **Legacy secret.** Without `databaseUrl`, `createRealtime({ secret, db })`
+  keeps sealing the previous token format with the shared Realtime secret, and
+  makes no network request.
+
+### Migrating from the Realtime secret
+
+Configure both while your branches move to Postgres credentials, and the SDK
+picks the scheme for each branch:
+
+```ts
+const realtime = createRealtime({
+  databaseUrl: process.env.DATABASE_URL!,
+  secret: process.env.NEON_REALTIME_SECRET,
+  url: process.env.NEON_REALTIME_URL!,
+});
+```
+
+| The branch's keys endpoint answers | The SDK seals |
+| --- | --- |
+| A current key | An envelope with the Postgres login |
+| `400` or `404` (a Realtime server from before envelopes answers `400`), or an empty key list | A legacy token with `secret`; without a secret, it throws "This branch has no Realtime key yet" |
+| A network error, a timeout, `5xx` or an unreadable answer | Nothing: `seal()` throws, and the secret is not used |
+
+The SDK rechecks a branch without a key at most a minute later, so it starts
+sealing envelopes soon after the branch's key is published. It never retries a
+failed or rejected envelope with the secret, so a branch whose secret is
+turned off is not exposed to it. Once every branch publishes a key, drop
+`secret`. Servers keep accepting tokens from older SDKs, and the browser
+client accepts both kinds.
 
 ### Raw SQL parameters
 
@@ -125,14 +200,13 @@ adapter names or versions.
 ## Subscribe directly from a trusted environment
 
 A trusted, long-lived process can let the SDK hide capability issuance and
-renewal. Add the same WebSocket URL accepted by `createRealtimeClient()`, then
-pass a concrete query directly to `subscribe()`:
+renewal. With `url`, the same WebSocket URL accepted by
+`createRealtimeClient()`, pass a concrete query directly to `subscribe()`:
 
 ```ts
 const realtime = createRealtime({
-  secret: process.env.NEON_REALTIME_SECRET!,
-  db: "app",
-  url: "wss://live.neon.tech/...",
+  databaseUrl: process.env.DATABASE_URL!,
+  url: process.env.NEON_REALTIME_URL!,
   logLevel: "warn",
 });
 
@@ -162,7 +236,7 @@ reconnecting with backoff. If the capability expires, the subscription is
 creates a new wire subscription behind the same public object. It returns to
 `live` after receiving a fresh authoritative result.
 
-This mode holds the Realtime secret and can seal arbitrary queries. Use
+This mode holds the database credentials and can seal arbitrary queries. Use
 it only in trusted runtimes, never in browser code. Direct subscriptions use
 the optional `ws` peer dependency so stalled close handshakes can be terminated.
 Install `ws` in applications that call `createRealtime()`; browser and
@@ -206,9 +280,32 @@ The client opens one WebSocket lazily and multiplexes subscriptions. Lifecycle
 states are `connecting`, `live`, `stale`, `error`, and `closed`. During
 initial connection, reconnection, or resubscription, existing materialized data
 remains available with status `connecting`. `stale` specifically means that the
-capability has expired and the low-level client is waiting for the application
-to call `renew()`. Recoverable connection failures retry with capped jittered
-backoff until the connection recovers or the client is closed.
+client is waiting for the application to call `renew()` with a replacement
+capability: the previous one expired, or the client needs a fresh one after
+the backend session ended (below). Recoverable connection failures retry with
+capped jittered backoff until the connection recovers or the client is closed.
+
+### Credential changes
+
+Realtime checks the Postgres login inside each envelope, so the client recovers
+from two credential events on its own:
+
+- **Backend session lost.** A password or role change ends Realtime's session
+  for the database, and the server reports `backend_session_lost` before the
+  connection closes. The client reconnects and resubscribes with the
+  envelope it holds, or with a fresh one if that has 30 seconds or less left.
+  If the resubscribe gets `authorization_failed`, the subscription becomes
+  `stale` for one fresh envelope and one retry. A second `authorization_failed`
+  is final and reaches the application as the subscription's error.
+- **`renewal_failed`.** A renewal must keep its subscription's scheme, so the
+  first renewal after the backend moves from the Realtime secret to Postgres
+  credentials fails. The client resubscribes once with the envelope that
+  renewal carried. If that fails too, the error reaches the application.
+
+React's `useLiveQuery()`, TanStack DB collections and direct subscriptions
+supply fresh envelopes through `refreshQuery`, which runs as soon as a
+subscription becomes `stale`. With the low-level client, call `renew()` when
+the state turns `stale`.
 
 ### React Native WebSocket origins
 
@@ -236,9 +333,10 @@ Some subscription errors also retry automatically:
 - `backend_overloaded` (`subscribe_rejected` or `subscription_error`): the
   service instance is shedding load or is full. The response carries
   `retry_after_ms`, the time until it admits that database again.
-- `subscribe_rejected` with `backend_unavailable` or `resource_exhausted` (a
-  service limit on this connection or process), and `subscription_error` with
-  `upstream_cancelled`.
+- `subscribe_rejected` with `backend_unavailable`, `resource_exhausted` (a
+  service limit on this connection or process) or `service_unavailable` (for
+  example, the replica is still starting or Postgres logins are throttled), and
+  `subscription_error` with `upstream_cancelled`.
 
 After `backend_overloaded`, the service may also close a connection that has no
 other subscriptions, so the client can reconnect to another instance. The
@@ -568,7 +666,31 @@ application's API boundary.
 
 Treat sealed queries as bearer credentials: deliver them over HTTPS and keep
 them out of URLs, logs, and persistent browser storage. Never expose
-`NEON_REALTIME_SECRET` to browser code.
+`DATABASE_URL` or `NEON_REALTIME_SECRET` to browser code.
+
+## Tooling and tests
+
+Two low-level helpers on `@neon/realtime/server` serve tooling and end-to-end
+tests. Applications use `createRealtime()` instead.
+
+- `fetchRealtimeKey(url, { fetch? })` fetches the branch's public key to seal
+  to now, `{ kid, x, y }`, without caching. Fetch again after a rotation.
+- `sealRealtimeEnvelope({ key, db, user, credential, query, debugMode? })`
+  seals one envelope for any user and credential, without the `neondb_owner`
+  check, for example to confirm that Realtime itself rejects another role:
+
+```ts
+import { fetchRealtimeKey, rawSql, sealRealtimeEnvelope } from "@neon/realtime/server";
+
+const key = await fetchRealtimeKey(process.env.NEON_REALTIME_URL!);
+const sealedQuery = await sealRealtimeEnvelope({
+  key,
+  db: "neondb",
+  user: "app_user",
+  credential: "a-password",
+  query: rawSql("select 1"),
+});
+```
 
 ## Upgrading to 0.2
 
@@ -593,10 +715,12 @@ subscription opt-in, or mode acknowledgment.
 ## Protocol schemas
 
 The package exports the active protocol and decoded capability schemas at
-`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v3) and
-`@neon/realtime/schema/realtime-query-capability.schema.json` (currently capability
-v2). Their filenames stay stable across revisions; `$id` and `title` retain each
-contract's version.
+`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v3),
+`@neon/realtime/schema/realtime-query-capability.schema.json` (capability v2,
+the legacy secret's tokens) and
+`@neon/realtime/schema/realtime-query-capability-v3.schema.json` (capability v3,
+the HPKE envelope). Their filenames stay stable across revisions; `$id` and
+`title` retain each contract's version.
 
 Existing versioned exports continue to resolve to their original contracts.
 Protocol v1, protocol v2 and capability v1 resolve to frozen legacy snapshots;

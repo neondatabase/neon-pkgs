@@ -14,8 +14,17 @@ import type {
 	RealtimeAdapterSource,
 } from "./adapter.js";
 import {
+	type CapabilityIssuer,
+	cachedRealtimeKey,
 	createCapabilityIssuer,
+	createEnvelopeIssuer,
+	createLoginSource,
+	noRealtimeKeyError,
+	type OidcTokenSource,
+	parseDatabaseUrl,
 	parseRealtimeSecret,
+	type RealtimeFetch,
+	realtimeKeysUrl,
 } from "./capability/index.js";
 import { DirectLiveQueryClient } from "./direct-client.js";
 import {
@@ -31,6 +40,10 @@ export type {
 	RealtimeAdapter,
 	RealtimeAdapterSource,
 } from "./adapter.js";
+export type {
+	OidcTokenSource,
+	RealtimeFetch,
+} from "./capability/index.js";
 export type {
 	PostgresParameterHelpers,
 	TypedRawSqlParameter,
@@ -130,12 +143,15 @@ export interface RealtimeDirectServer<Query> extends RealtimeServer<Query> {
 }
 
 /**
- * Configuration for a server-only Realtime capability issuer.
+ * Configuration for a seal-only Realtime SDK that uses the legacy secret.
+ *
+ * To seal envelopes with Postgres credentials instead, pass `databaseUrl` and
+ * the Realtime `url` ({@link RealtimeDirectServerOptions}).
  *
  * @typeParam Query - Query object accepted by the optional adapter.
  */
 export interface RealtimeServerOptions<Query> {
-	/** Opaque server-only credential issued by Realtime. */
+	/** Legacy shared secret issued by Realtime. */
 	readonly secret: string;
 	/**
 	 * Include full database error details in subscription errors.
@@ -156,36 +172,102 @@ export interface RealtimeServerOptions<Query> {
 	readonly adapter?: RealtimeAdapter<Query>;
 }
 
-/** Configuration that enables trusted direct-query subscriptions. */
-export interface RealtimeDirectServerOptions<Query>
-	extends RealtimeServerOptions<Query> {
+/** Shared options of an SDK that knows the Realtime endpoint. */
+export interface RealtimeEndpointOptions<Query> {
 	/**
 	 * Realtime WebSocket endpoint URL. Supplying it adds `subscribe()` and
-	 * `close()` to the returned SDK.
+	 * `close()` to the returned SDK. With `databaseUrl`, the SDK also fetches
+	 * the branch's public key from this host.
 	 */
 	readonly url: string;
+	/** Include full database error details in subscription errors. */
+	readonly debugMode?: boolean;
+	/** Adapter for ORM-native queries; omit when sealing only raw SQL. */
+	readonly adapter?: RealtimeAdapter<Query>;
 	/** PostgreSQL result-parser overrides for trusted direct subscriptions. */
 	readonly parsers?: PostgreSQLParsers;
 	/** Minimum diagnostic level for the internal direct-subscription client. */
 	readonly logLevel?: RealtimeLogLevel;
 	/** Structured diagnostic sink for the internal direct-subscription client. */
 	readonly logger?: RealtimeLogger;
+	/**
+	 * `fetch` used to get the branch's public key. Defaults to the global
+	 * `fetch`. Pass one for custom TLS, or for runtimes that reject the
+	 * request's `cache: "no-store"`.
+	 */
+	readonly fetch?: RealtimeFetch;
 }
+
+/** Seal envelopes with the Postgres login from a connection string. */
+export interface RealtimeDatabaseUrlOptions {
+	/**
+	 * Postgres connection string, such as `DATABASE_URL`. Its user and
+	 * password go into each envelope, and the proxy checks them with a
+	 * Postgres login. Without a password, the credential is an OIDC token
+	 * (see `oidcToken`). Only `neondb_owner` is supported for now.
+	 */
+	readonly databaseUrl: string;
+	/**
+	 * Returns the OIDC token to send when `databaseUrl` has no password.
+	 * Defaults to Vercel's runtime OIDC token. The SDK reuses a token until
+	 * 60 seconds before its `exp`.
+	 */
+	readonly oidcToken?: OidcTokenSource;
+	/** PostgreSQL database. Defaults to the one in `databaseUrl`. */
+	readonly db?: string;
+	/**
+	 * Legacy shared secret, for migration. When the branch publishes no key,
+	 * because its Realtime server predates envelopes or its key is not
+	 * provisioned yet, the SDK seals legacy tokens with it. It is never used
+	 * after an envelope fails.
+	 */
+	readonly secret?: string;
+}
+
+/** Seal legacy tokens with the shared Realtime secret. */
+export interface RealtimeSecretOptions {
+	/** Legacy shared secret issued by Realtime. */
+	readonly secret: string;
+	/** PostgreSQL database embedded in every capability. */
+	readonly db: string;
+	readonly databaseUrl?: undefined;
+	readonly oidcToken?: undefined;
+}
+
+/**
+ * Configuration with a Realtime endpoint: enables direct subscriptions and,
+ * with `databaseUrl`, sealing with Postgres credentials, alone or together
+ * with the legacy secret during migration.
+ */
+export type RealtimeDirectServerOptions<Query> =
+	RealtimeEndpointOptions<Query> &
+		(RealtimeDatabaseUrlOptions | RealtimeSecretOptions);
+
+type AnyRealtimeOptions<Query> = RealtimeServerOptions<Query> &
+	Partial<RealtimeEndpointOptions<Query>> & {
+		readonly databaseUrl?: string;
+		readonly oidcToken?: OidcTokenSource;
+	};
 
 /**
  * Create a server-only Realtime SDK.
  *
- * `seal()` performs local encryption and no network requests. Supplying a
- * WebSocket `url` additionally enables trusted direct subscriptions that mint
- * and refresh their own capabilities. Keep the project secret out of browser
- * bundles.
+ * With `databaseUrl`, the SDK looks up the branch's public key at `url` and
+ * caches the answer. If the branch publishes a key, each capability is a v3
+ * envelope sealed to it, carrying the Postgres login. If it publishes none
+ * (an older Realtime server, or a key not provisioned yet), the SDK uses
+ * `secret` when one is configured and raises an error otherwise. With only
+ * the legacy `secret`, `seal()` encrypts locally and makes no network
+ * requests. A WebSocket `url` also enables
+ * trusted direct subscriptions that mint and refresh their own capabilities.
+ * Keep credentials out of browser bundles.
  *
  * @typeParam Query - Query object accepted by the configured adapter.
- * @param options - Server-only secret, database name, and optional query
- * adapter.
+ * @param options - Credentials, database name, and optional query adapter.
  * @returns A reusable capability issuer, extended with direct subscriptions
  * when `url` is present.
- * @throws If the secret or database name is invalid.
+ * @throws If the credentials, URL or database name are invalid, or if the
+ * database URL's user is not `neondb_owner`.
  */
 export function createRealtime<Query = RawSqlQuery<unknown>>(
 	options: RealtimeDirectServerOptions<Query>,
@@ -197,12 +279,7 @@ export function createRealtime<Query = RawSqlQuery<unknown>>(
 	options: RealtimeServerOptions<Query> | RealtimeDirectServerOptions<Query>,
 ): RealtimeServer<Query> | RealtimeDirectServer<Query> {
 	const adapter = options.adapter;
-	validateDatabaseName(options.db);
-	const issueCapability = createCapabilityIssuer(
-		parseRealtimeSecret(options.secret),
-		options.db,
-		options.debugMode === true ? "full" : "safe",
-	);
+	const issueCapability = createIssuer(options as AnyRealtimeOptions<Query>);
 	const prepare = <ConcreteQuery extends SealableQuery<Query>>(
 		query: ConcreteQuery,
 	): PreparedQuery => {
@@ -261,6 +338,61 @@ export function createRealtime<Query = RawSqlQuery<unknown>>(
 	});
 }
 
+/**
+ * With a credential, seal v3 when the branch publishes a key, and use the
+ * secret only when it definitely publishes none. Without a credential, use
+ * the secret. A failed or unreadable key lookup never falls back.
+ */
+function createIssuer<Query>(
+	options: AnyRealtimeOptions<Query>,
+): CapabilityIssuer {
+	const errorDetails = options.debugMode === true ? "full" : "safe";
+	if (options.databaseUrl === undefined) {
+		if (options.oidcToken !== undefined) {
+			throw new Error("Realtime uses oidcToken only with databaseUrl");
+		}
+		if (options.secret === undefined) {
+			throw new Error("Realtime requires databaseUrl or secret");
+		}
+		validateDatabaseName(options.db);
+		return createCapabilityIssuer(
+			parseRealtimeSecret(options.secret),
+			options.db,
+			errorDetails,
+		);
+	}
+	const login = parseDatabaseUrl(options.databaseUrl);
+	const loginSource = createLoginSource(login, options.oidcToken);
+	const database = options.db ?? login.database;
+	validateDatabaseName(database);
+	if (typeof options.url !== "string" || options.url === "") {
+		throw new Error(
+			"Realtime requires url with databaseUrl, to fetch the branch key",
+		);
+	}
+	const legacy =
+		options.secret === undefined
+			? undefined
+			: createCapabilityIssuer(
+					parseRealtimeSecret(options.secret),
+					database,
+					errorDetails,
+				);
+	const sealEnvelope = createEnvelopeIssuer({
+		login: loginSource,
+		database,
+		errorDetails,
+	});
+	const keysUrl = realtimeKeysUrl(options.url);
+	const fetchImpl = options.fetch;
+	return async (query, querySource = "custom") => {
+		const key = await cachedRealtimeKey(keysUrl, fetchImpl);
+		if (key) return sealEnvelope(query, querySource, key);
+		if (legacy) return legacy(query, querySource);
+		throw noRealtimeKeyError(keysUrl);
+	};
+}
+
 function normalizeAdapterSource(source: unknown): RealtimeAdapterSource {
 	return source === "drizzle" || source === "kysely" || source === "custom"
 		? source
@@ -278,7 +410,12 @@ function snapshotPreparedQuery(query: PreparedLiveQuery): PreparedLiveQuery {
 	});
 }
 
-function validateDatabaseName(database: string): void {
+function validateDatabaseName(
+	database: string | undefined,
+): asserts database is string {
+	if (typeof database !== "string") {
+		throw new Error("Invalid Realtime database name");
+	}
 	const bytes = new TextEncoder().encode(database);
 	if (bytes.length === 0 || bytes.length > 63 || database.includes("\0")) {
 		throw new Error("Invalid Realtime database name");

@@ -881,6 +881,9 @@ importers:
 
   packages/realtime:
     dependencies:
+      '@hpke/core':
+        specifier: ^1.10.0
+        version: 1.10.0
       base64-js:
         specifier: 'catalog:'
         version: 1.5.1
@@ -888,9 +891,6 @@ importers:
         specifier: ^3.0.4
         version: 3.0.4
     devDependencies:
-      '@hpke/core':
-        specifier: ^1.10.0
-        version: 1.10.0
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17

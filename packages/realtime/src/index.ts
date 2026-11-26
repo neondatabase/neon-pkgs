@@ -1,5 +1,6 @@
 export * from "./client.js";
 export type {
+	OidcTokenSource,
 	PostgresParameterHelpers,
 	PreparedLiveQuery,
 	PreparedLiveQueryParameter,
@@ -7,8 +8,12 @@ export type {
 	RawSqlQuery,
 	RealtimeAdapter,
 	RealtimeAdapterSource,
+	RealtimeDatabaseUrlOptions,
 	RealtimeDirectServer,
 	RealtimeDirectServerOptions,
+	RealtimeEndpointOptions,
+	RealtimeFetch,
+	RealtimeSecretOptions,
 	RealtimeServer,
 	RealtimeServerOptions,
 	TypedRawSqlParameter,

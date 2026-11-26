@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { type SealedLiveQuery, validateSealedQuery } from "./sealed-query.js";
 import type {
@@ -30,6 +32,101 @@ type Payload = JsonTransport<{
 	query: SealedLiveQuery<TimestampRow>;
 	initialData: readonly TimestampRow[];
 }>;
+
+const envelopeFixtures = JSON.parse(
+	readFileSync(
+		new URL(
+			"../../schema/realtime-envelope-v3.fixtures.json",
+			import.meta.url,
+		),
+		"utf8",
+	),
+) as {
+	readonly valid: readonly {
+		readonly name: string;
+		readonly envelope: string;
+	}[];
+	readonly invalid: readonly {
+		readonly name: string;
+		readonly envelope: string;
+	}[];
+};
+const V3_HEADER = Buffer.from(
+	'{"alg":"HPKE-P256-SHA256-A256GCM","kid":"V0jKYYUsyVy0kRrL17dVJA","v":3}',
+).toString("base64url");
+
+function withCapability(capability: string): SealedLiveQuery<unknown> {
+	return { capability, queryFingerprint: "0".repeat(64), expiresAt: 1 };
+}
+
+describe("sealed query envelope check", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it.each(
+		envelopeFixtures.valid.map((fixture) => [
+			fixture.name,
+			fixture.envelope,
+		]),
+	)("accepts the v3 %s envelope", (_, envelope) => {
+		expect(() =>
+			validateSealedQuery(withCapability(envelope)),
+		).not.toThrow();
+	});
+
+	it("accepts a v3 envelope without TextDecoder or atob", () => {
+		vi.stubGlobal("TextDecoder", undefined);
+		vi.stubGlobal("atob", undefined);
+		expect(() =>
+			validateSealedQuery(
+				withCapability(`${V3_HEADER}.enc..ciphertext.`),
+			),
+		).not.toThrow();
+	});
+
+	it.each([
+		"dir_alg_v3",
+		"hpke_alg_v2",
+		"extra_header_key",
+		"non_empty_segment_3",
+		"non_empty_segment_5",
+		"four_segments",
+		"six_segments",
+	])("rejects the %s fixture", (name) => {
+		const fixture = envelopeFixtures.invalid.find(
+			(entry) => entry.name === name,
+		);
+		expect(() =>
+			validateSealedQuery(withCapability(fixture?.envelope ?? "")),
+		).toThrow("Invalid sealed live query");
+	});
+
+	it.each([
+		["an empty enc segment", `${V3_HEADER}...ciphertext.`],
+		["an empty ciphertext", `${V3_HEADER}.enc...`],
+		[
+			"a header without kid",
+			`${Buffer.from('{"alg":"HPKE-P256-SHA256-A256GCM","v":3}').toString("base64url")}.enc..ciphertext.`,
+		],
+		[
+			"an empty kid",
+			`${Buffer.from('{"alg":"HPKE-P256-SHA256-A256GCM","kid":"","v":3}').toString("base64url")}.enc..ciphertext.`,
+		],
+		[
+			"an unknown alg",
+			`${Buffer.from('{"alg":"HPKE-X25519","kid":"k","v":3}').toString("base64url")}.enc..ciphertext.`,
+		],
+		[
+			"a v1/v2 header in the v3 layout",
+			`${sealedQuery().capability.split(".")[0]}.enc..ciphertext.`,
+		],
+	])("rejects %s", (_, capability) => {
+		expect(() => validateSealedQuery(withCapability(capability))).toThrow(
+			"Invalid sealed live query",
+		);
+	});
+});
 
 describe("sealed query row types", () => {
 	afterEach(() => {
