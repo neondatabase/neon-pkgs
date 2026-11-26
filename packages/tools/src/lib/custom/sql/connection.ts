@@ -1,5 +1,5 @@
 import type { NeonClient } from "@neon/sdk";
-import { neon } from "@neondatabase/serverless";
+import { neon, types } from "@neondatabase/serverless";
 import * as z from "zod";
 import { pathInputDescriptions } from "../../../descriptions.gen.js";
 import { NeonToolCallerError } from "../../caller-error.js";
@@ -169,5 +169,66 @@ export const resolveConnection = async (
 	};
 };
 
-export const sqlClient = (uri: string, signal?: AbortSignal) =>
-	neon(uri, signal === undefined ? {} : { fetchOptions: { signal } });
+const TEXT_ARRAY_OID: number = 1009;
+
+/** Postgres date/time types the driver parses into a Date, each with its array type. */
+const DATE_TIME_ARRAY_OIDS = new Map([
+	[types.builtins.DATE, 1182],
+	[types.builtins.TIMESTAMP, 1115],
+	[types.builtins.TIMESTAMPTZ, 1185],
+]);
+
+/**
+ * Postgres dates reach year 5874897, timestamps 294276, and both accept `infinity`; a
+ * JavaScript Date stops at 275760. The driver turns those values into an Invalid Date,
+ * which cannot be serialized, or `Infinity`, which JSON turns into null, so they keep the
+ * text Postgres sent.
+ */
+const parseDateTime =
+	(oid: number) =>
+	(text: string): unknown => {
+		const value = types.getTypeParser(oid)(text);
+		return value instanceof Date && !Number.isNaN(value.getTime())
+			? value
+			: text;
+	};
+
+const mapArrayElements = (
+	value: unknown,
+	parse: (text: string) => unknown,
+): unknown => {
+	if (Array.isArray(value)) {
+		return value.map((element) => mapArrayElements(element, parse));
+	}
+	return typeof value === "string" ? parse(value) : value;
+};
+
+const dateTimeParsers = new Map<number, (text: string) => unknown>();
+for (const [oid, arrayOid] of DATE_TIME_ARRAY_OIDS) {
+	const parse = parseDateTime(oid);
+	dateTimeParsers.set(oid, parse);
+	dateTimeParsers.set(arrayOid, (text) =>
+		mapArrayElements(types.getTypeParser(TEXT_ARRAY_OID)(text), parse),
+	);
+}
+
+export const sqlTypes: typeof types = {
+	...types,
+	getTypeParser: (oid, format) =>
+		dateTimeParsers.get(oid) ?? types.getTypeParser(oid, format),
+};
+
+/**
+ * `neon()` ignores a `types` option and reads it only per query, so `query` adds the
+ * parsers to each call. A tagged-template call (sql`...`) does not get them.
+ */
+export const sqlClient = (uri: string, signal?: AbortSignal) => {
+	const sql = neon(
+		uri,
+		signal === undefined ? {} : { fetchOptions: { signal } },
+	);
+	const query = sql.query;
+	sql.query = (text, params, options) =>
+		query(text, params, { types: sqlTypes, ...options });
+	return sql;
+};
