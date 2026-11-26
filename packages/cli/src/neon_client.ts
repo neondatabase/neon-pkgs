@@ -18,16 +18,15 @@ import {
  * with the timeout, debug logging, user agent, and 423 retries of `getApiClient`. Throws;
  * pass failures through {@link fromSdkError}.
  */
-export const getNeonClient = ({
-	apiKey,
-	apiHost,
-	requestTimeoutMs,
-}: ApiCallProps) =>
+export const getNeonClient = (
+	{ apiKey, apiHost, requestTimeoutMs }: ApiCallProps,
+	options: { retries?: number } = {},
+) =>
 	createNeonClient({
 		apiKey,
 		baseUrl: apiHost ?? DEFAULT_API_HOST,
 		fetch: cliFetch(requestTimeoutMs),
-		retries: RETRY_COUNT,
+		retries: options.retries ?? RETRY_COUNT,
 		throwOnError: true,
 	});
 

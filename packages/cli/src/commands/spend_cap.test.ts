@@ -28,6 +28,7 @@ type Request = {
 	method?: string;
 	path?: string;
 	body: Record<string, unknown>;
+	rawBody: string;
 	authorization?: string;
 	contentType?: string;
 };
@@ -37,12 +38,18 @@ let baseURL: string;
 let current: SpendingLimitResponse;
 let requests: Request[];
 let error: { code: string; message: string } | undefined;
+let errorStatus: number;
+let concurrentAmount: number | null | undefined;
+let replaceRejectedToken: boolean;
 let organizations: { id: string; name: string }[];
 
 beforeEach(async () => {
 	current = { ...reachedCap };
 	requests = [];
 	error = undefined;
+	errorStatus = 403;
+	concurrentAmount = undefined;
+	replaceRejectedToken = false;
 	organizations = [{ id: "org-test", name: "Test" }];
 	configDir = await mkdtemp(join(tmpdir(), "neonctl-spend-cap-"));
 	// A local HTTP server exercises SDK authentication, routing, serialization,
@@ -58,21 +65,43 @@ beforeEach(async () => {
 				method: req.method,
 				path: req.url,
 				body,
+				rawBody: raw,
 				authorization: req.headers.authorization,
 				contentType: req.headers["content-type"],
 			});
 			res.setHeader("Content-Type", "application/json");
 			if (error) {
-				res.writeHead(403).end(JSON.stringify(error));
+				if (replaceRejectedToken) {
+					replaceRejectedToken = false;
+					await writeFile(
+						join(configDir, "credentials.json"),
+						JSON.stringify({
+							access_token: "replacement-access-token",
+							refresh_token: "test-refresh-token",
+							expires_at: Date.now() + 60 * 60 * 1000,
+						}),
+					);
+				}
+				res.writeHead(errorStatus).end(JSON.stringify(error));
 			} else if (req.url === "/api/v2/users/me/organizations") {
 				res.end(JSON.stringify({ organizations }));
 			} else if (
 				req.url ===
 					"/api/v2/organizations/org-test/billing/spending_limit" ||
 				req.url ===
-					"/api/v2/organizations/org%2Ftest/billing/spending_limit"
+					"/api/v2/organizations/org%2Ftest/billing/spending_limit" ||
+				req.url ===
+					"/api/v2/organizations/org-test/billing/spending_limit/disable"
 			) {
-				if (req.method === "PUT") {
+				const snapshot = { ...current };
+				// A separate admin edits after a legacy GET snapshot, or before the atomic POST.
+				if (concurrentAmount !== undefined) {
+					current.spending_limit_cents = concurrentAmount;
+					concurrentAmount = undefined;
+				}
+				if (req.method === "POST" && req.url.endsWith("/disable")) {
+					current = { ...current, spend_cap_enabled: false };
+				} else if (req.method === "PUT") {
 					current = {
 						...current,
 						spending_limit_cents:
@@ -85,7 +114,9 @@ beforeEach(async () => {
 							: {}),
 					};
 				}
-				res.end(JSON.stringify(current));
+				res.end(
+					JSON.stringify(req.method === "GET" ? snapshot : current),
+				);
 			} else {
 				res.writeHead(404).end(
 					JSON.stringify({ message: "Unexpected request" }),
@@ -109,7 +140,11 @@ afterEach(async () => {
 	await rm(configDir, { recursive: true, force: true });
 });
 
-const runCli = (args: string[], output = "json") =>
+const runCli = (
+	args: string[],
+	output = "json",
+	useStoredCredentials = false,
+) =>
 	new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
 		execFile(
 			process.execPath,
@@ -117,8 +152,9 @@ const runCli = (args: string[], output = "json") =>
 				join(process.cwd(), "dist/cli.js"),
 				"--api-host",
 				baseURL,
-				"--api-key",
-				"test-spend-key",
+				...(useStoredCredentials
+					? []
+					: ["--api-key", "test-spend-key"]),
 				"--config-dir",
 				configDir,
 				"--context-file",
@@ -338,30 +374,100 @@ describe("organization spend-cap CLI", () => {
 		});
 	});
 
-	it("disables through GET then PUT and retains the notification amount", async () => {
+	it("disables with one authenticated bodyless POST and retains the notification amount", async () => {
 		const result = await spendCap(["disable"]);
 		expect(result.code, result.stderr).toBe(0);
-		expect(requests.map((req) => req.method)).toEqual(["GET", "PUT"]);
-		expect(requests[1].body).toEqual({
-			spending_limit_cents: 10000,
-			spend_cap_enabled: false,
-		});
+		expect(requests).toHaveLength(1);
+		expect(requests).toMatchObject([
+			{
+				method: "POST",
+				path: "/api/v2/organizations/org-test/billing/spending_limit/disable",
+				rawBody: "",
+				authorization: "Bearer test-spend-key",
+			},
+		]);
 		expect(current.spending_limit_cents).toBe(10000);
 		expect(current.spend_cap_enabled).toBe(false);
 		expect(JSON.parse(result.stdout).enforcement_status).toBe("pending");
 	});
 
-	it("does not fabricate an amount or write when disabling an unset threshold", async () => {
+	it("disables an unset threshold without fabricating an amount or requiring observed usage", async () => {
 		current = { spending_limit_cents: null };
 		const result = await spendCap(["disable"]);
 		expect(result.code, result.stderr).toBe(0);
-		expect(requests.map((req) => req.method)).toEqual(["GET"]);
+		expect(requests.map((req) => req.method)).toEqual(["POST"]);
+		expect(requests[0].rawBody).toBe("");
 		expect(JSON.parse(result.stdout)).toMatchObject({
 			spending_limit_cents: null,
 		});
 		expect(JSON.parse(result.stdout)).not.toHaveProperty(
 			"enforcement_status",
 		);
+	});
+
+	it.each([
+		20000,
+		null,
+	])("disable preserves a concurrent threshold change to %s", async (amount) => {
+		concurrentAmount = amount;
+		const result = await spendCap(["disable"]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(current.spending_limit_cents).toBe(amount);
+		expect(current.spend_cap_enabled).toBe(false);
+		expect(JSON.parse(result.stdout).spending_limit_cents).toBe(amount);
+		expect(requests.map((req) => req.method)).toEqual(["POST"]);
+		expect(requests[0].rawBody).toBe("");
+	});
+
+	it.each([
+		403, 404, 405, 423, 429, 501, 503,
+	])("disable surfaces HTTP %s without fallback or retry", async (status) => {
+		errorStatus = status;
+		error = {
+			code:
+				status === 403
+					? "INSUFFICIENT_ORG_PERMISSIONS"
+					: "DISABLE_UNAVAILABLE",
+			message: "Disable request rejected",
+		};
+		const result = await spendCap(["disable"]);
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(error.message);
+		expect(result.stdout).toBe("");
+		expect(requests.map((req) => req.method)).toEqual(["POST"]);
+		expect(requests[0].rawBody).toBe("");
+	});
+
+	it("does not replay disable after stored OAuth credentials are replaced following a 401", async () => {
+		await writeFile(
+			join(configDir, "credentials.json"),
+			JSON.stringify({
+				access_token: "rejected-access-token",
+				refresh_token: "test-refresh-token",
+				expires_at: Date.now() + 60 * 60 * 1000,
+			}),
+		);
+		errorStatus = 401;
+		error = { code: "UNAUTHORIZED", message: "Unauthorized" };
+		replaceRejectedToken = true;
+		const result = await runCli(
+			[
+				"org",
+				"spend-cap",
+				"disable",
+				"--org-id",
+				"org-test",
+				"--oauth-host",
+				baseURL,
+			],
+			"json",
+			true,
+		);
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("Authentication failed");
+		expect(requests.map((req) => req.method)).toEqual(["POST"]);
+		expect(requests[0].authorization).toBe("Bearer rejected-access-token");
+		expect(requests[0].rawBody).toBe("");
 	});
 
 	it.each([
@@ -503,7 +609,7 @@ describe("organization spend-cap CLI", () => {
 		const result = await spendCap(["disable"]);
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain(`unsupported ${field}`);
-		expect(requests.map((req) => req.method)).toEqual(["GET"]);
+		expect(requests.map((req) => req.method)).toEqual(["POST"]);
 		expect(result.stdout).toBe("");
 	});
 

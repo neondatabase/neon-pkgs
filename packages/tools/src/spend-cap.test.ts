@@ -182,25 +182,103 @@ describe("organization spend caps", () => {
 		).rejects.toThrow();
 	});
 
-	test("disable GETs then PUTs the same amount with false and never DELETEs", async () => {
+	test("disable sends one authenticated bodyless POST without requiring observed usage", async () => {
 		const { tools, requests } = setup({ spending_limit_cents: 15325 });
-		await tools["organizations.spendingLimit.disable"].execute({
+		const tool = tools["organizations.spendingLimit.disable"];
+		const { data } = await tool.execute({
 			org_id: "org-1",
 		});
-		expect(requests.map((r) => r.method)).toEqual(["GET", "PUT"]);
-		expect(await requests[1].json()).toEqual({
-			spending_limit_cents: 15325,
-			spend_cap_enabled: false,
+		expect(requests.map((r) => r.method)).toEqual(["POST"]);
+		expect(requests[0].url).toBe(
+			"https://example.test/api/v2/organizations/org-1/billing/spending_limit/disable",
+		);
+		expect(requests[0].headers.get("authorization")).toBe(
+			"Bearer test-key",
+		);
+		expect(await requests[0].text()).toBe("");
+		expect(data.spending_limit_cents).toBe(15325);
+		expect(tool.metadata).toMatchObject({
+			method: "POST",
+			path: "/organizations/{org_id}/billing/spending_limit/disable",
+			readOnlySafe: false,
 		});
 	});
 
-	test("disable with no amount is a read-only no-op without inventing status", async () => {
+	test("disable leaves an unset amount unset without inventing status", async () => {
 		const { tools, requests } = setup({ spending_limit_cents: null });
 		const { data } = await tools[
 			"organizations.spendingLimit.disable"
 		].execute({ org_id: "org-1" });
-		expect(requests.map((r) => r.method)).toEqual(["GET"]);
+		expect(requests.map((r) => r.method)).toEqual(["POST"]);
+		expect(await requests[0].text()).toBe("");
+		expect(data.spending_limit_cents).toBeNull();
 		expect(data).not.toHaveProperty("spend_cap_enabled");
+	});
+
+	test.each([
+		20000,
+		null,
+	])("disable preserves a concurrent threshold change to %s", async (amount) => {
+		let current: {
+			spending_limit_cents: number | null;
+			spend_cap_enabled: boolean;
+		} = {
+			spending_limit_cents: 10000,
+			spend_cap_enabled: true,
+		};
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["organizations.spendingLimit.disable"],
+			fetch: async (input, init) => {
+				const request = new Request(input, init);
+				requests.push(request);
+				const snapshot = { ...current };
+				if (requests.length === 1)
+					current.spending_limit_cents = amount;
+				if (request.method === "POST")
+					current.spend_cap_enabled = false;
+				if (request.method === "PUT")
+					current = { ...current, ...(await request.json()) };
+				return new Response(
+					JSON.stringify(
+						request.method === "GET" ? snapshot : current,
+					),
+					{
+						headers: { "content-type": "application/json" },
+					},
+				);
+			},
+		});
+		const { data } = await tools[
+			"organizations.spendingLimit.disable"
+		].execute({ org_id: "org-1" });
+		expect(current).toEqual({
+			spending_limit_cents: amount,
+			spend_cap_enabled: false,
+		});
+		expect(data.spending_limit_cents).toBe(amount);
+		expect(requests.map((r) => r.method)).toEqual(["POST"]);
+		expect(await requests[0].text()).toBe("");
+	});
+
+	test.each([
+		403, 404, 405, 423, 429, 501, 503,
+	])("disable surfaces HTTP %s without fallback or retry", async (status) => {
+		const { tools, requests } = setup(
+			{
+				code: "DISABLE_UNAVAILABLE",
+				message: "Disable request rejected",
+			},
+			status,
+		);
+		await expect(
+			tools["organizations.spendingLimit.disable"].execute({
+				org_id: "org-1",
+			}),
+		).rejects.toMatchObject({ status });
+		expect(requests.map((r) => r.method)).toEqual(["POST"]);
+		expect(await requests[0].text()).toBe("");
 	});
 
 	test.each([

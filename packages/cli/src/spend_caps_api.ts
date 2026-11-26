@@ -83,12 +83,16 @@ const spendingLimitPath = (orgId: string) =>
 
 const request = async (
 	props: OrgScopeProps,
+	method: "GET" | "PUT" | "POST",
 	body?: SpendingLimitUpdate,
 ): Promise<SpendingLimitResponse> => {
-	const data = await getNeonClient(props)
+	const data = await getNeonClient(
+		props,
+		method === "POST" ? { retries: 0 } : undefined,
+	)
 		.request({
-			path: spendingLimitPath(props.orgId),
-			method: body === undefined ? "GET" : "PUT",
+			path: `${spendingLimitPath(props.orgId)}${method === "POST" ? "/disable" : ""}`,
+			method,
 			...(body === undefined ? {} : { body }),
 		})
 		.catch((error: unknown) => {
@@ -99,7 +103,11 @@ const request = async (
 
 export const getOrganizationSpendCap = (
 	props: OrgScopeProps,
-): Promise<SpendingLimitResponse> => request(props);
+): Promise<SpendingLimitResponse> => request(props, "GET");
+
+export const disableOrganizationSpendCap = (
+	props: OrgScopeProps,
+): Promise<SpendingLimitResponse> => request(props, "POST");
 
 export const setOrganizationSpendCap = (
 	props: OrgScopeProps,
@@ -113,5 +121,5 @@ export const setOrganizationSpendCap = (
 			"spending_limit_cents must be a positive safe integer.",
 		);
 	}
-	return request(props, body);
+	return request(props, "PUT", body);
 };

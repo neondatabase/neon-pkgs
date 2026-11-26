@@ -1633,9 +1633,12 @@ usage observation. These defaults also apply to `orgs spending-limit set`; use
 configuration. The CLI leaves omitted options out of the request so the server
 applies its availability gate and defaults.
 
-`disable` reads the current threshold and PUTs the same amount with enforcement
-off. It never uses
-DELETE, which would also remove notifications; an unset threshold is left unset.
+`disable` sends a bodyless POST to
+`/organizations/{org_id}/billing/spending_limit/disable`. The server atomically
+turns suspension off while preserving the current notification amount, including
+concurrent changes or deletion; an unset threshold stays unset. It requires no
+invoice observation. Older servers can reject the new endpoint; the CLI surfaces
+that error without retrying or falling back to GET/PUT or DELETE.
 Cap writes require an Organization Admin on an eligible non-free plan.
 
 Table, JSON, and YAML output show the server's current-invoice usage, observation

@@ -38,6 +38,14 @@ export const spendCapApi = (neon: NeonClient<true>, signal?: AbortSignal) => {
 	const path = (orgId: string) =>
 		`/organizations/${encodeURIComponent(orgId)}/billing/spending_limit`;
 	return {
+		async disable(orgId: string) {
+			return spendCapResponse.parse(
+				await neon.request(
+					{ method: "POST", path: `${path(orgId)}/disable` },
+					{ signal },
+				),
+			);
+		},
 		async get(orgId: string) {
 			return spendCapResponse.parse(
 				await neon.request(

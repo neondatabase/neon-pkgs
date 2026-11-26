@@ -112,6 +112,7 @@ const resolveApiKey = (
 export const toolClient = (
 	options: ToolClientOptions,
 	context?: NeonToolExecutionContext,
+	clientConfig: Pick<NeonConfig, "retries"> = {},
 ): NeonClient<true> =>
 	createNeonClient({
 		apiKey: resolveApiKey(options, context),
@@ -120,6 +121,7 @@ export const toolClient = (
 		...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
 		...(options.fetch === undefined ? {} : { fetch: options.fetch }),
 		...(options.wait === undefined ? {} : { wait: options.wait }),
+		...clientConfig,
 	});
 
 const objectListPage = (
@@ -263,6 +265,7 @@ export const bindTool = <
 		signal: AbortSignal | undefined,
 		context: NeonToolExecutionContext,
 	) => Promise<Output>,
+	clientConfig: Pick<NeonConfig, "retries"> = {},
 ): NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>, OutputSchema> & {
 	outputSchema: OutputSchema;
 } => ({
@@ -271,7 +274,7 @@ export const bindTool = <
 	async execute(input, context) {
 		const parsed = await tool.inputSchema.parseAsync(input);
 		const result = await run(
-			toolClient(options, context),
+			toolClient(options, context, clientConfig),
 			parsed,
 			context?.signal,
 			context ?? {},

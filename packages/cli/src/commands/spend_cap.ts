@@ -1,4 +1,5 @@
 import {
+	disableOrganizationSpendCap,
 	getOrganizationSpendCap,
 	type SpendingLimitResponse,
 	setOrganizationSpendCap,
@@ -104,18 +105,5 @@ export const setSpendCap = async (props: SetSpendCapProps) => {
 
 export const disableSpendCap = async (input: SpendCapProps) => {
 	const props = await resolveOrg(input);
-	const current = await getOrganizationSpendCap(props);
-	if (current.spending_limit_cents === null) {
-		writeSpendCap(props, current);
-		return;
-	}
-	// DELETE would also remove the notification threshold.
-	writeSpendCap(
-		props,
-		await setOrganizationSpendCap(props, {
-			spending_limit_cents: current.spending_limit_cents,
-			spend_cap_enabled: false,
-		}),
-		true,
-	);
+	writeSpendCap(props, await disableOrganizationSpendCap(props), true);
 };

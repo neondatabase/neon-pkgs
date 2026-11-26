@@ -324,6 +324,10 @@ async function handleError(
 	}
 
 	if (isNeonApiError(err)) {
+		// Atomic disable must surface a rejection without replaying after auth recovery.
+		const canRecover =
+			canRetry &&
+			!err.requestPath?.endsWith("/billing/spending_limit/disable");
 		if (err.code === "ECONNABORTED") {
 			log.error("Request timed out");
 			sendError(err, "REQUEST_TIMEOUT");
@@ -336,7 +340,7 @@ async function handleError(
 			// access-denials as 404 (existence-hiding), so these arrive as 403 OR 404 with the
 			// machine code in the body. recoverFromSSO opens the step-up URL and retries for the
 			// recoverable code, or prints terminal guidance for SSO_ORG_CREDS_ONLY.
-			const recovered = await recoverFromSSO(err, canRetry);
+			const recovered = await recoverFromSSO(err, canRecover);
 			if (recovered) {
 				return true;
 			}
@@ -345,7 +349,7 @@ async function handleError(
 			return false;
 		} else if (err.status === 401) {
 			sendError(err, "AUTH_FAILED");
-			return await recoverFrom401(canRetry);
+			return await recoverFrom401(canRecover);
 		} else {
 			const serverMessage =
 				spendCapErrorMessage(err.data) ?? messageFromBody(err.data);

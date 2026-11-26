@@ -103,19 +103,14 @@ export const disableSpendCapTool = (options: ToolClientOptions) =>
 			outputSchema: spendCapResponse,
 			annotations,
 			requiresApproval: true,
-			metadata: { ...metadata, method: "PUT", readOnlySafe: false },
+			metadata: {
+				...metadata,
+				method: "POST",
+				path: `${metadata.path}/disable`,
+				readOnlySafe: false,
+			},
 		},
-		async (neon, { org_id }, signal) => {
-			const api = spendCapApi(neon, signal);
-			const current = await api.get(org_id);
-			if (current.spending_limit_cents === null) return result(current);
-			return result(
-				await api.set({
-					org_id,
-					spending_limit_cents: current.spending_limit_cents,
-					spend_cap_enabled: false,
-				}),
-				true,
-			);
-		},
+		async (neon, { org_id }, signal) =>
+			result(await spendCapApi(neon, signal).disable(org_id), true),
+		{ retries: 0 },
 	);
