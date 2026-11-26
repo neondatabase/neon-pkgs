@@ -74,7 +74,8 @@ const parseBody = (text: string, response: Response | undefined): unknown => {
 
 /**
  * One request to any Neon API route. The body is parsed JSON, the text of a non-JSON
- * body, or `null` for an empty one. Never polls operations.
+ * body, or `null` for an empty one; a 2xx HTML page is a {@link NeonClientError}. Never
+ * polls operations.
  */
 export async function apiRequest(
 	ctx: RequestContext,

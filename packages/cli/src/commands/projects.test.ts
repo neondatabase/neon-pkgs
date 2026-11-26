@@ -30,6 +30,19 @@ describe("projects", () => {
 		await testCliCommand(["projects", "list", "--recoverable-only"]);
 	});
 
+	test("list fails clearly when the API host serves an HTML page", async ({
+		testCliCommand,
+	}) => {
+		const { stderr } = await testCliCommand(["projects", "list"], {
+			mockDir: "html-page",
+			code: 1,
+			snapshot: false,
+		});
+		expect(stderr).toMatch(
+			/^ERROR: http:\/\/localhost:\d+ answered GET \/projects with an HTML page \(HTTP 200\) instead of a Neon API response\./,
+		);
+	});
+
 	test("create", async ({ testCliCommand }) => {
 		await testCliCommand(["projects", "create", "--name", "test_project"]);
 	});

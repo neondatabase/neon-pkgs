@@ -313,7 +313,8 @@ export function toNeonError(
 	error: unknown,
 	response: Response | undefined,
 ): NeonErrorUnion {
-	// Raised by the client's `requestValidator` before any request was sent.
+	// Raised by the client's `requestValidator` before any request was sent, or by its
+	// response interceptor for a 2xx HTML page.
 	if (error instanceof NeonClientError) return error;
 	if (!response) {
 		const reason = describeTransportFailure(error);

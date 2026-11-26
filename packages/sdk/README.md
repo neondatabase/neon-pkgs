@@ -114,7 +114,7 @@ The `error` channel carries a typed hierarchy (all `Error` subclasses with a `ki
 | `NeonWaitTimeoutError` | `"timeout"` | `source: "wait"`, `timeoutMs`, `operations` — readiness budget ran out; pass `operations` to `neon.operations.waitFor` |
 | `NeonAbortError` | `"aborted"` | the caller's `signal` fired |
 | `NeonNetworkError` | `"network"` | `reason` — transport failure (no response) |
-| `NeonClientError` | `"client"` | SDK-side errors (e.g. ambiguous connection-string selection, invalid `requestTimeoutMs`) |
+| `NeonClientError` | `"client"` | SDK-side errors (e.g. ambiguous connection-string selection, invalid `requestTimeoutMs`, a 2xx response that is an HTML page because `baseUrl` points somewhere other than the Neon API) |
 
 The error channel is typed as `NeonErrorUnion`, the union of every row below the base.
 
@@ -1213,7 +1213,7 @@ Any API route by method and path, with the client's auth, deadline, retries, and
 
 | Method | Returns |
 | --- | --- |
-| `request({ method, path, query?, body? })` | The response body: parsed JSON, the text of a non-JSON body, or `null` when empty |
+| `request({ method, path, query?, body? })` | The response body: parsed JSON, the text of a non-JSON body, or `null` when empty. A 2xx HTML page is a `NeonClientError` |
 
 ```ts
 const { data, error } = await neon.request({
