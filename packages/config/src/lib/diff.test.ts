@@ -318,6 +318,60 @@ describe("diffConfig", () => {
 		expect(diff).toEqual({ plan: [], conflicts: [] });
 	});
 
+	test('treats "*" and the empty list the API reports for it as the same origins', () => {
+		const anyOriginPolicy = {
+			authEnabled: false,
+			dataApiEnabled: false,
+			realtimePolicy: "enabled" as const,
+			realtime: { allowedOrigins: ["*"] },
+		};
+		const anyOriginRemote: RemoteState = {
+			...remote,
+			realtime: { enabled: true, pending: false, allowedOrigins: [] },
+		};
+		for (const updateExisting of [false, true]) {
+			expect(
+				diffConfig(anyOriginPolicy, anyOriginRemote, {
+					updateExisting,
+				}),
+			).toEqual({ plan: [], conflicts: [] });
+		}
+
+		expect(
+			diffConfig(
+				anyOriginPolicy,
+				{
+					...remote,
+					realtime: {
+						enabled: true,
+						pending: false,
+						allowedOrigins: ["https://app.example.com"],
+					},
+				},
+				{ updateExisting: false },
+			).conflicts[0],
+		).toMatchObject({
+			field: "preview.realtime.allowedOrigins",
+			current: ["https://app.example.com"],
+			desired: ["*"],
+		});
+
+		expect(
+			diffConfig(
+				{
+					...anyOriginPolicy,
+					realtime: { allowedOrigins: ["https://app.example.com"] },
+				},
+				anyOriginRemote,
+				{ updateExisting: false },
+			).conflicts[0],
+		).toMatchObject({
+			field: "preview.realtime.allowedOrigins",
+			current: [],
+			desired: ["https://app.example.com"],
+		});
+	});
+
 	test("reports compute drift unless updateExisting is set", () => {
 		const diff = diffConfig(
 			{
