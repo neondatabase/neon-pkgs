@@ -50,7 +50,7 @@ describe("billing denials through the shared MCP adapter", () => {
 	test.each([
 		"SPEND_CAP_EXCEEDED",
 		"INSUFFICIENT_ORG_PERMISSIONS",
-	])("preserves %s and billing guidance without retry", async (code) => {
+	])("preserves %s and relevant admin guidance without retry", async (code) => {
 		let requests = 0;
 		const tools = createNeonTools({
 			apiKey: "test-key",
@@ -84,12 +84,28 @@ describe("billing denials through the shared MCP adapter", () => {
 					status: 403,
 					code,
 					message: "Denied by policy",
-					action: expect.stringContaining("Organization Billing"),
+					action: expect.stringContaining("Organization Admin"),
 				},
 			});
 			expect(JSON.stringify(result.content)).toContain(
 				"Organization Admin",
 			);
+			if (code === "INSUFFICIENT_ORG_PERMISSIONS") {
+				expect(result.structuredContent).toMatchObject({
+					error: {
+						action: "An Organization Admin must perform this action.",
+					},
+				});
+				expect(JSON.stringify(result.content)).not.toContain(
+					"Organization Billing",
+				);
+			} else {
+				expect(result.structuredContent).toMatchObject({
+					error: {
+						action: expect.stringContaining("Organization Billing"),
+					},
+				});
+			}
 			expect(requests).toBe(1);
 		} finally {
 			await client.close();

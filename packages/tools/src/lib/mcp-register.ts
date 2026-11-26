@@ -48,7 +48,7 @@ const mcpErrorPayload = (error: unknown): Record<string, unknown> => {
 					"An Organization Admin can increase or disable the spend cap in Organization Billing. Storage charges continue; recovery is asynchronous and other restrictions can remain.";
 			} else if (error.code === "INSUFFICIENT_ORG_PERMISSIONS") {
 				payload.action =
-					"An Organization Admin must change this setting in Organization Billing.";
+					"An Organization Admin must perform this action.";
 			}
 		}
 		if (typeof error.source === "string") {
