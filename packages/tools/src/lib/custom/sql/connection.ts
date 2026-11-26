@@ -1,5 +1,10 @@
-import type { NeonClient } from "@neon/sdk";
-import { neon } from "@neondatabase/serverless";
+import { describeTransportFailure, type NeonClient } from "@neon/sdk";
+import {
+	NeonDbError,
+	type NeonQueryFunction,
+	NeonQueryPromise,
+	neon,
+} from "@neondatabase/serverless";
 import * as z from "zod";
 import { pathInputDescriptions } from "../../../descriptions.gen.js";
 import { NeonToolCallerError } from "../../caller-error.js";
@@ -169,5 +174,49 @@ export const resolveConnection = async (
 	};
 };
 
-export const sqlClient = (uri: string, signal?: AbortSignal) =>
-	neon(uri, signal === undefined ? {} : { fetchOptions: { signal } });
+/** The request to the SQL endpoint got no response, so Postgres never answered. */
+export const isSqlTransportFailure = (error: NeonDbError): boolean =>
+	error.sourceError !== undefined;
+
+// The driver's message stops at `fetch failed`; the reason is on its cause.
+const withTransportReason = (error: unknown, signal?: AbortSignal) => {
+	if (
+		!(error instanceof NeonDbError) ||
+		!isSqlTransportFailure(error) ||
+		signal?.aborted
+	) {
+		return error;
+	}
+	const reason = describeTransportFailure(error.sourceError);
+	const described = new NeonDbError(
+		`Network error: no response received from the database's SQL endpoint (${reason}). A statement that changes data may have run anyway, so check before you retry it.`,
+	);
+	described.sourceError = error.sourceError;
+	described.cause = error.sourceError;
+	return described;
+};
+
+type SqlClient = Pick<NeonQueryFunction<false, false>, "query" | "transaction">;
+
+export const sqlClient = (uri: string, signal?: AbortSignal): SqlClient => {
+	const sql = neon(
+		uri,
+		signal === undefined ? {} : { fetchOptions: { signal } },
+	);
+	const reportTransport = <T>(pending: Promise<T>) =>
+		pending.catch((error: unknown) => {
+			throw withTransportReason(error, signal);
+		});
+	return {
+		query: (text, params, options) => {
+			const pending = sql.query(text, params, options);
+			return new NeonQueryPromise(
+				(data, opts) => reportTransport(pending.execute(data, opts)),
+				pending.queryData,
+				pending.opts,
+			);
+		},
+		transaction: (queries, options) =>
+			reportTransport(sql.transaction(queries, options)),
+	};
+};

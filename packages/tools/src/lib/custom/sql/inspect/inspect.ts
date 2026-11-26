@@ -9,6 +9,7 @@ import {
 import {
 	branchIdField,
 	computeIdField,
+	isSqlTransportFailure,
 	projectIdField,
 	resolveConnection,
 	sqlClient,
@@ -82,7 +83,11 @@ const runDiagnostic = async <T>(
 	try {
 		return await run();
 	} catch (error) {
-		if (error instanceof NeonDbError && !isRefusedConnection(error)) {
+		if (
+			error instanceof NeonDbError &&
+			!isRefusedConnection(error) &&
+			!isSqlTransportFailure(error)
+		) {
 			throw new InspectDiagnosticError(
 				`The "${check}" diagnostic failed against Postgres: ${error.message}`,
 				check,

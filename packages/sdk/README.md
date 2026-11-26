@@ -175,6 +175,9 @@ if (error instanceof NeonNetworkError) {
 }
 ```
 
+`describeTransportFailure(error)` reads the same reason from any other `fetch` failure, such as
+the `TypeError: fetch failed` a SQL driver reports.
+
 Validating ids and other path parameters before passing them in is the caller's
 responsibility. An empty path parameter builds a URL with an empty segment, which the Neon
 API answers with a redirect rather than a `400`; that can surface as a `"network"` error
