@@ -537,6 +537,127 @@ describe("ConnectionCoordinator", () => {
 		expect(accepted.admitted).toHaveBeenCalledOnce();
 	});
 
+	it.each([
+		"during admission",
+		"after the baseline",
+	] as const)("closes the idle socket after the last subscription fails %s", (phase) => {
+		const failed = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "bad" }, failed);
+		const socket = defined(FakeWebSocket.instances[0]);
+		try {
+			if (phase === "during admission") {
+				socket.open();
+				socket.receive({ type: "ready" });
+				socket.receive({
+					type: "subscribe_rejected",
+					request_id: "1",
+					code: "authorization_failed",
+					message: "invalid",
+				});
+			} else {
+				admit();
+				const baseline = {
+					live_id: "41",
+					epoch: "1",
+					baseline_sync_attempt: "1",
+				};
+				socket.receive({
+					type: "baseline_sync_start",
+					...baseline,
+					mvcc: { xmin: "1", xmax: "2", xip: [] },
+				});
+				socket.receive({
+					type: "baseline_sync_end",
+					...baseline,
+					batch_count: 0,
+				});
+				expect(failed.reconciliation.caughtUp).toHaveBeenCalledOnce();
+				socket.receive({
+					type: "subscription_error",
+					live_id: "41",
+					code: "baseline_sync_failed",
+					message: "failed",
+				});
+			}
+			expect(failed.failed).toHaveBeenCalledOnce();
+			expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+			const replacement = target();
+			coordinator.subscribe({ capability: "good" }, replacement);
+			expect(FakeWebSocket.instances).toHaveLength(2);
+			admit();
+			expect(replacement.admitted).toHaveBeenCalledOnce();
+		} finally {
+			coordinator.close();
+		}
+	});
+
+	it("keeps a replacement started by a terminal failure listener on the same socket", () => {
+		const failed = target();
+		const replacement = target();
+		const coordinator = createCoordinator();
+		failed.failed.mockImplementation(() =>
+			coordinator.subscribe({ capability: "good" }, replacement),
+		);
+		coordinator.subscribe({ capability: "bad" }, failed);
+		const socket = defined(FakeWebSocket.instances[0]);
+		try {
+			socket.open();
+			socket.receive({ type: "ready" });
+			socket.receive({
+				type: "subscribe_rejected",
+				request_id: "1",
+				code: "authorization_failed",
+				message: "invalid",
+			});
+			expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+			expect(socket.sent.at(-1)).toMatchObject({
+				type: "subscribe",
+				authorization: "good",
+			});
+			expect(FakeWebSocket.instances).toHaveLength(1);
+		} finally {
+			coordinator.close();
+		}
+	});
+
+	it("renews an expired sibling after the last active subscription fails", async () => {
+		const expired = target();
+		const failed = target();
+		const coordinator = createCoordinator();
+		const handle = coordinator.subscribe(
+			{ capability: "expired" },
+			expired,
+		);
+		coordinator.subscribe({ capability: "bad" }, failed);
+		const socket = defined(FakeWebSocket.instances[0]);
+		try {
+			socket.open();
+			socket.receive({ type: "ready" });
+			socket.receive({
+				type: "subscribe_rejected",
+				request_id: "1",
+				code: "authorization_expired",
+				message: "expired",
+			});
+			expect(expired.queryUnavailable).toHaveBeenCalledOnce();
+			socket.receive({
+				type: "subscribe_rejected",
+				request_id: "2",
+				code: "authorization_failed",
+				message: "invalid",
+			});
+			expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+			const renewed = handle.renew({ capability: "replacement" });
+			expect(FakeWebSocket.instances).toHaveLength(2);
+			admit();
+			await expect(renewed).resolves.toBeUndefined();
+			expect(expired.admitted).toHaveBeenCalledOnce();
+		} finally {
+			coordinator.close();
+		}
+	});
+
 	it("suspends an expired subscription until it receives a replacement", async () => {
 		const callbacks = target();
 		const coordinator = createCoordinator();

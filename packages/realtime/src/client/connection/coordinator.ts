@@ -316,10 +316,7 @@ export class ConnectionCoordinator {
 			this.detachingLiveIds.add(subscription.liveId);
 			this.send({ type: "unsubscribe", live_id: subscription.liveId });
 		}
-		if (this.activeSubscriptions.size === 0) {
-			this.cancelReconnectEpisode();
-			this.closeSocket(NORMAL_CLOSE, "no active subscriptions");
-		}
+		this.closeSocketIfIdle();
 	}
 
 	private connect(): void {
@@ -845,6 +842,7 @@ export class ConnectionCoordinator {
 		this.terminateSubscription(subscription, error, () =>
 			subscription.events.failed(error),
 		);
+		this.closeSocketIfIdle();
 	}
 
 	private terminateSubscription(
@@ -889,10 +887,7 @@ export class ConnectionCoordinator {
 		this.rejectRenewals(subscription, error);
 		subscription.events.failed(error);
 		subscription.callbacks.failed(error);
-		if (this.activeSubscriptions.size === 0) {
-			this.cancelReconnectEpisode();
-			this.closeSocket(NORMAL_CLOSE, "no active subscriptions");
-		}
+		this.closeSocketIfIdle();
 	}
 
 	private awaitReplacementQuery(
@@ -993,6 +988,12 @@ export class ConnectionCoordinator {
 			return false;
 		this.socket.send(encodeClientMessage(message));
 		return true;
+	}
+
+	private closeSocketIfIdle(): void {
+		if (this.activeSubscriptions.size !== 0) return;
+		this.cancelReconnectEpisode();
+		this.closeSocket(NORMAL_CLOSE, "no active subscriptions");
 	}
 
 	private closeSocket(code: number, reason: string): void {
