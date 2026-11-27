@@ -236,7 +236,9 @@ describe("trusted direct subscriptions", () => {
 	});
 
 	it("recovers one logical subscription after an outage spanning multiple capabilities", async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({
+			toFake: ["Date", "setTimeout", "clearTimeout", "performance"],
+		});
 		vi.setSystemTime(0);
 		useFakeWebSocket();
 		const realtime = createRealtime({
@@ -258,7 +260,7 @@ describe("trusted direct subscriptions", () => {
 			data: [{ id: 1, body: "before" }],
 		});
 		await vi.advanceTimersByTimeAsync(1_000);
-		const recovered = defined(FakeWebSocket.instances.at(-1));
+		const firstRetry = defined(FakeWebSocket.instances.at(-1));
 
 		for (let refresh = 0; refresh < 4; refresh += 1) {
 			await vi.advanceTimersByTimeAsync(50_000);
@@ -266,6 +268,15 @@ describe("trusted direct subscriptions", () => {
 		}
 		expect(subscription.getState().status).toBe("connecting");
 
+		expect(firstRetry.readyState).toBe(3);
+		const recovered = await vi.waitFor(
+			() => {
+				const socket = defined(FakeWebSocket.instances.at(-1));
+				expect(socket.readyState).toBe(0);
+				return socket;
+			},
+			{ timeout: 60_000, interval: 1_000 },
+		);
 		recovered.open();
 		recovered.receive({ type: "ready" });
 		const request = defined(

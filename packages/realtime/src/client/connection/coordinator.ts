@@ -33,6 +33,8 @@ const SOCKET_OPEN = 1;
 const SOCKET_CLOSING = 2;
 const SOCKET_CLOSED = 3;
 const SOCKET_CLOSE_GRACE_MS = 1_000;
+const READY_TIMEOUT_MS = 30_000;
+const ADMISSION_TIMEOUT_MS = 30_000;
 const NORMAL_CLOSE = 1_000;
 const APPLICATION_CLOSE = 4_000;
 
@@ -97,6 +99,7 @@ type ManagedSubscriptionState =
 class ManagedSubscription {
 	state: ManagedSubscriptionState = "active";
 	requestId?: string;
+	admissionDeadline?: ReconnectTimer;
 	requestedCapability?: string;
 	acceptedCapability?: string;
 	liveId?: string;
@@ -113,7 +116,7 @@ class ManagedSubscription {
 	/** Forget a detached wire attempt, preserving renewals for re-admission. */
 	resetWire(): void {
 		this.recovery.interrupted();
-		this.requestId = undefined;
+		this.finishAdmission();
 		this.requestedCapability = undefined;
 		this.acceptedCapability = undefined;
 		this.liveId = undefined;
@@ -121,6 +124,12 @@ class ManagedSubscription {
 			this.queuedRenewals.unshift(this.renewing);
 			this.renewing = undefined;
 		}
+	}
+
+	finishAdmission(): void {
+		this.admissionDeadline?.();
+		this.admissionDeadline = undefined;
+		this.requestId = undefined;
 	}
 }
 
@@ -141,6 +150,7 @@ export class ConnectionCoordinator {
 	private readonly heartbeat?: ConnectionHeartbeat;
 	private readonly events: ClientEventSink;
 	private socket?: WebSocketLike;
+	private readyDeadline?: ReconnectTimer;
 	private reconnectTimer?: ReconnectTimer;
 	private reconnectDeadlineTimer?: ReconnectTimer;
 	private stabilityTimer?: ReconnectTimer;
@@ -241,6 +251,7 @@ export class ConnectionCoordinator {
 		const error = new Error("Realtime client is closed");
 		for (const subscription of this.managedSubscriptions) {
 			subscription.recovery.cancel();
+			subscription.finishAdmission();
 			this.rejectRenewals(subscription, error);
 		}
 		this.managedSubscriptions.clear();
@@ -302,6 +313,7 @@ export class ConnectionCoordinator {
 	private unsubscribe(subscription: ManagedSubscription): void {
 		if (subscription.state === "closed") return;
 		subscription.recovery.cancel();
+		subscription.finishAdmission();
 		subscription.state = "closed";
 		this.managedSubscriptions.delete(subscription);
 		this.activeSubscriptions.delete(subscription);
@@ -356,6 +368,15 @@ export class ConnectionCoordinator {
 			return;
 		}
 		this.socket = socket;
+		this.readyDeadline = setDeadlineTimer(() => {
+			if (this.socket !== socket || this.ready) return;
+			this.pendingConnectionError = new ConnectionCoordinatorError(
+				"connection_ready_timeout",
+				true,
+				"Realtime server did not become ready",
+			);
+			this.closeSocket(APPLICATION_CLOSE, "ready timeout");
+		}, READY_TIMEOUT_MS);
 		socket.addEventListener("message", (event) => {
 			if (this.socket !== socket) return;
 			if (typeof event.data !== "string") {
@@ -403,6 +424,7 @@ export class ConnectionCoordinator {
 				);
 			}
 			this.ready = true;
+			this.cancelReadyDeadline();
 			this.send({
 				type: "client_info",
 				metadata: REALTIME_CLIENT_METADATA,
@@ -482,7 +504,7 @@ export class ConnectionCoordinator {
 			throw new ProtocolError("invalid subscription admission");
 		}
 		this.pendingRequests.delete(message.request_id);
-		subscription.requestId = undefined;
+		subscription.finishAdmission();
 		if (
 			subscription.state === "closed" ||
 			subscription.state === "failed"
@@ -538,7 +560,7 @@ export class ConnectionCoordinator {
 		if (!subscription)
 			throw new ProtocolError("unknown subscribe request ID");
 		this.pendingRequests.delete(message.request_id);
-		subscription.requestId = undefined;
+		subscription.finishAdmission();
 		if (subscription.state === "closed" || subscription.state === "failed")
 			return;
 		if (
@@ -693,6 +715,16 @@ export class ConnectionCoordinator {
 		subscription.requestId = requestId;
 		subscription.requestedCapability = subscription.query.capability;
 		this.pendingRequests.set(requestId, subscription);
+		subscription.admissionDeadline = setDeadlineTimer(() => {
+			this.failLocalSubscription(
+				subscription,
+				new ConnectionCoordinatorError(
+					"subscription_admission_timeout",
+					false,
+					"Realtime server did not answer the subscription request",
+				),
+			);
+		}, ADMISSION_TIMEOUT_MS);
 		if (subscription.queuedRenewals.length > 0) {
 			subscription.events.renewalStarted();
 		}
@@ -723,6 +755,7 @@ export class ConnectionCoordinator {
 	}
 
 	private disconnected(): void {
+		this.cancelReadyDeadline();
 		this.ready = false;
 		this.cancelStabilityTimer();
 		this.pendingRequests.clear();
@@ -1026,6 +1059,11 @@ export class ConnectionCoordinator {
 		if (this.reconnectTimer !== undefined)
 			this.reconnect?.clearTimer(this.reconnectTimer);
 		this.reconnectTimer = undefined;
+	}
+
+	private cancelReadyDeadline(): void {
+		this.readyDeadline?.();
+		this.readyDeadline = undefined;
 	}
 
 	private cancelStabilityTimer(): void {
