@@ -19,6 +19,10 @@ import {
 	type CachedSessionData,
 	SessionCacheManager,
 } from "./session-cache-manager";
+import {
+	isSessionVerifierSettled,
+	readResponseErrorCode,
+} from "./session-verifier";
 
 interface SocialSignInResponse {
 	redirect: boolean;
@@ -62,6 +66,11 @@ type MethodHook = {
 	// biome-ignore lint/suspicious/noConfusingVoidType: hook implementations are bare `() => {}` (void-returning) functions; `undefined` in the union isn't assignable from those the way `void` is.
 	onRequest: (request: RequestContext) => void | RequestContext;
 	onSuccess: (responseData: unknown) => void | Promise<void>;
+	/** Runs once the upstream fetch resolves, for 2xx and error statuses alike. */
+	onResponse?: (
+		input: string | URL | globalThis.Request,
+		response: Response,
+	) => void | Promise<void>;
 };
 
 export const BETTER_AUTH_ENDPOINTS = {
@@ -260,20 +269,40 @@ export const BETTER_AUTH_METHODS_HOOKS: Record<string, MethodHook> = {
 				if (wasRefreshed) {
 					emitAuthEvent({ type: "TOKEN_REFRESH", data: sessionData });
 				}
-
-				// remove the session verifier parameter from the URL if it exists on success
-				if (isBrowser()) {
-					const url = new URL(globalThis.window.location.href);
-					const neonAuthSessionVerifierParam = url.searchParams.get(
-						NEON_AUTH_SESSION_VERIFIER_PARAM_NAME,
-					);
-					if (neonAuthSessionVerifierParam) {
-						url.searchParams.delete(
-							NEON_AUTH_SESSION_VERIFIER_PARAM_NAME,
-						);
-						history.replaceState(history.state, "", url.href);
-					}
-				}
+			}
+		},
+		onResponse: async (input, response) => {
+			// A verifier the server rejected will not succeed on retry. Leaving
+			// it in the URL would make every later get-session carry it and fail,
+			// so the app would look signed out.
+			if (!isBrowser()) {
+				return;
+			}
+			const requestUrl = new URL(
+				input instanceof globalThis.Request ? input.url : input,
+				globalThis.window.location.href,
+			);
+			if (
+				!requestUrl.searchParams.has(
+					NEON_AUTH_SESSION_VERIFIER_PARAM_NAME,
+				)
+			) {
+				return;
+			}
+			const errorCode = response.ok
+				? null
+				: await readResponseErrorCode(response);
+			if (!isSessionVerifierSettled(response.status, errorCode)) {
+				return;
+			}
+			const pageUrl = new URL(globalThis.window.location.href);
+			if (
+				pageUrl.searchParams.has(NEON_AUTH_SESSION_VERIFIER_PARAM_NAME)
+			) {
+				pageUrl.searchParams.delete(
+					NEON_AUTH_SESSION_VERIFIER_PARAM_NAME,
+				);
+				history.replaceState(history.state, "", pageUrl.href);
 			}
 		},
 	},

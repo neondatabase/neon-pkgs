@@ -1,4 +1,5 @@
 import { parseCookies } from "better-auth/cookies";
+import { NEON_AUTH_SESSION_VERIFIER_PARAM_NAME } from "@/core/constants";
 import { injectClientInfo } from "@/utils/client-info";
 import type { SessionCookieSameSite } from "../config";
 import {
@@ -130,7 +131,7 @@ export async function processAuthMiddleware(
 			log,
 		);
 		if (exchangeResult !== null) {
-			// OAuth exchange successful - redirect with session cookies
+			// Redirect to the verifier-free URL, with session cookies on success
 			return {
 				action: "redirect_oauth",
 				redirectUrl: exchangeResult.redirectUrl,
@@ -160,7 +161,11 @@ export async function processAuthMiddleware(
 		// request may use any method — a Next.js Server Action POSTs to the page
 		// URL — and a non-GET would skip the get-session cache and hit the
 		// GET-only upstream, spuriously logging the user out.
-		const sessionRequest = new Request(request.url, {
+		// The verifier is redeemed only by the exchange above; dropping it here
+		// keeps this lookup on the session cache instead of a redeem attempt.
+		const sessionUrl = new URL(request.url);
+		sessionUrl.searchParams.delete(NEON_AUTH_SESSION_VERIFIER_PARAM_NAME);
+		const sessionRequest = new Request(sessionUrl, {
 			method: "GET",
 			headers: injectClientInfo(stripBodyHeaders(request.headers)),
 		});

@@ -1,5 +1,9 @@
 import { parseCookies } from "better-auth/cookies";
 import { NEON_AUTH_SESSION_VERIFIER_PARAM_NAME } from "@/core/constants";
+import {
+	isSessionVerifierSettled,
+	readResponseErrorCode,
+} from "@/core/session-verifier";
 import { injectClientInfo } from "@/utils/client-info";
 import type { SessionCookieSameSite } from "../config";
 import {
@@ -26,7 +30,7 @@ export interface OAuthExchangeResult {
 	redirectUrl: URL;
 	/** Set-Cookie headers to include in redirect response */
 	cookies: string[];
-	/** Whether the exchange was successful */
+	/** Whether the exchange was successful; on failure `redirectUrl` carries `?error=<code>` unless the URL already has an `error` param */
 	success: boolean;
 }
 
@@ -65,7 +69,7 @@ export function needsSessionVerification(request: Request): boolean {
  * @param domain - Optional cookie domain
  * @param sameSite - SameSite for cookies set during exchange
  * @param log - Resolved Neon Auth logging sink (proxy / middleware)
- * @returns Exchange result with redirect URL and cookies, or null if exchange not needed/failed
+ * @returns Exchange result with redirect URL (verifier removed) and cookies, or null if no exchange was needed or the server did not definitively reject the verifier
  */
 export async function exchangeOAuthToken(
 	request: Request,
@@ -113,18 +117,27 @@ export async function exchangeOAuthToken(
 	});
 
 	if (response.ok) {
-		// Extract Set-Cookie headers from response
-		const setCookieHeaders = response.headers.getSetCookie();
-
-		// Remove verifier param from redirect URL
 		url.searchParams.delete(NEON_AUTH_SESSION_VERIFIER_PARAM_NAME);
-
 		return {
 			redirectUrl: url,
-			cookies: setCookieHeaders,
+			cookies: response.headers.getSetCookie(),
 			success: true,
 		};
 	}
 
-	return null;
+	// Anything but a definitive rejection keeps the verifier so the next load
+	// can retry.
+	const errorCode = await readResponseErrorCode(response);
+	if (!isSessionVerifierSettled(response.status, errorCode)) {
+		return null;
+	}
+
+	// A verifier the server rejected will not succeed on retry, and leaving it
+	// in the URL would make every later request carry it. An `error` param the
+	// app already put in the URL is left as it is.
+	url.searchParams.delete(NEON_AUTH_SESSION_VERIFIER_PARAM_NAME);
+	if (errorCode && !url.searchParams.has("error")) {
+		url.searchParams.set("error", errorCode);
+	}
+	return { redirectUrl: url, cookies: [], success: false };
 }

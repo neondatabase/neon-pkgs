@@ -1,3 +1,4 @@
+import { NEON_AUTH_SESSION_VERIFIER_PARAM_NAME } from "@/core/constants";
 import type { SessionCookieSameSite } from "../config";
 import { API_ENDPOINTS } from "../endpoints";
 import type { NeonAuthLogger, ResolvedNeonAuthLogging } from "../logger";
@@ -64,10 +65,17 @@ export async function handleAuthProxyRequest(
 	// `undefined` so downstream `?.warn(...)` calls remain silent.
 	const log = resolveLog(config.log);
 
-	// Try cookie cache for /get-session GET requests (optimization)
+	// Try cookie cache for /get-session GET requests (optimization).
+	// A request carrying a session verifier must reach upstream with its query
+	// string intact: the server only commits the pending sign-in or account
+	// link when it redeems the verifier, and the cache would answer from the
+	// existing session without ever forwarding it.
 	if (
 		path === API_ENDPOINTS.getSession.path &&
-		request.method === API_ENDPOINTS.getSession.method
+		request.method === API_ENDPOINTS.getSession.method &&
+		!new URL(request.url).searchParams.has(
+			NEON_AUTH_SESSION_VERIFIER_PARAM_NAME,
+		)
 	) {
 		const cachedResponse = await trySessionCache(
 			request,
