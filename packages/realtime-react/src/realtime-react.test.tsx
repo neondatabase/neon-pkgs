@@ -346,6 +346,41 @@ describe("Realtime React integration", () => {
 		client.close();
 	});
 
+	it("keeps one subscription when renders copy the same sealed query", () => {
+		const wire = wireClient();
+		const initial = query("initial");
+		const subscribe = vi.spyOn(wire.client, "subscribe");
+		function View({ initialTitle }: { initialTitle: string }) {
+			const { data, status } = useLiveQuery(
+				{ ...initial },
+				{
+					initialData: [{ id: 1, title: initialTitle }],
+				},
+			);
+			return (
+				<p>
+					{status}:{data?.[0]?.title}
+				</p>
+			);
+		}
+		const viewFor = (initialTitle: string) => (
+			<RealtimeProvider client={wire.client}>
+				<View initialTitle={initialTitle} />
+			</RealtimeProvider>
+		);
+		try {
+			const view = render(viewFor("server"));
+			expect(screen.getByText("connecting:server")).toBeTruthy();
+			act(() => wire.baseline());
+			view.rerender(viewFor("new seed"));
+			expect(screen.getByText("live:before")).toBeTruthy();
+			expect(subscribe).toHaveBeenCalledOnce();
+			view.unmount();
+		} finally {
+			wire.client.close();
+		}
+	});
+
 	it("owns subscription cleanup", () => {
 		const client = new TestClient<MessageRow>();
 		const view = render(

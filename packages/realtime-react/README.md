@@ -98,8 +98,9 @@ When `refreshQuery` is present, the integration renews before expiry
 and keeps retrying through capability expiry and transport outages. Existing
 data remains available while `stale` indicates that a replacement capability
 is being obtained and `connecting` indicates active resubscription or transport
-recovery. Changing the sealed query starts a new logical query; changing only
-the refresh callback does not.
+recovery. Changing the sealed query starts a new logical query. React reuses
+the current subscription when renders supply equivalent sealed query values or
+change only the refresh callback.
 
 ### Server-rendered initial data
 
