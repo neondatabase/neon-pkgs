@@ -272,6 +272,50 @@ describe("Realtime React integration", () => {
 		expect(client.subscriptions).toHaveLength(1);
 	});
 
+	it("keeps an in-flight signer request when a render replaces its callback", async () => {
+		vi.useFakeTimers();
+		const client = new TestClient<MessageRow>();
+		const currentQuery = query("current", 10);
+		let resolveFirst!: (replacement: SealedLiveQuery<MessageRow>) => void;
+		const first = new Promise<SealedLiveQuery<MessageRow>>((resolve) => {
+			resolveFirst = resolve;
+		});
+		const firstRefresh = vi.fn(() => first);
+		const secondReplacement = query("second replacement");
+		const secondRefresh = vi.fn(async () => secondReplacement);
+		const viewWith = (
+			refreshQuery: () => Promise<SealedLiveQuery<MessageRow>>,
+		) => (
+			<RealtimeProvider client={client}>
+				<Messages query={currentQuery} refreshQuery={refreshQuery} />
+			</RealtimeProvider>
+		);
+		const view = render(viewWith(firstRefresh));
+		try {
+			await act(async () => vi.advanceTimersByTimeAsync(1));
+			expect(firstRefresh).toHaveBeenCalledOnce();
+			expect(firstRefresh.mock.contexts).toEqual([undefined]);
+
+			view.rerender(viewWith(secondRefresh));
+			await act(async () => vi.advanceTimersByTimeAsync(100));
+			expect(secondRefresh).not.toHaveBeenCalled();
+
+			const firstReplacement = query("first replacement", 11);
+			await act(async () => resolveFirst(firstReplacement));
+			expect(client.latest().renewals).toEqual([firstReplacement]);
+
+			await act(async () => vi.advanceTimersByTimeAsync(1_000));
+			expect(secondRefresh).toHaveBeenCalledOnce();
+			expect(client.latest().renewals).toEqual([
+				firstReplacement,
+				secondReplacement,
+			]);
+		} finally {
+			view.unmount();
+			vi.useRealTimers();
+		}
+	});
+
 	it("refreshes an expiring query through renew", async () => {
 		const client = new TestClient<MessageRow>();
 		const replacement = query("query-2", 3_000);

@@ -189,6 +189,89 @@ describe("QueryRefreshController", () => {
 		expect(renewSubscription).not.toHaveBeenCalled();
 	});
 
+	it.each([
+		"pending",
+		"accepted",
+	])("ignores an older refresh while a manual renewal is %s", async (state) => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const issuance = deferred<SealedLiveQuery<unknown>>();
+		const acceptance = deferred();
+		const manual = query(60);
+		const fresh = query(120);
+		const refreshQuery = vi.fn(async () => fresh);
+		refreshQuery.mockReturnValueOnce(issuance.promise);
+		const renewSubscription = vi.fn(
+			(replacement: SealedLiveQuery<unknown>) =>
+				replacement === manual ? acceptance.promise : Promise.resolve(),
+		);
+		const controller = new QueryRefreshController({
+			query: query(2),
+			refreshQuery,
+			renewSubscription,
+			onRefreshExhausted: vi.fn(),
+		});
+
+		try {
+			controller.start();
+			await vi.advanceTimersByTimeAsync(0);
+			const renewal = controller.replaceSealedQuery(manual);
+			if (state === "accepted") {
+				acceptance.resolve();
+				await renewal;
+			}
+			issuance.resolve(query(30));
+			await vi.advanceTimersByTimeAsync(0);
+			expect(renewSubscription.mock.calls).toEqual([[manual]]);
+			acceptance.resolve();
+			await renewal;
+			expect(controller.currentQuery()).toBe(manual);
+
+			await vi.advanceTimersByTimeAsync(49_999);
+			expect(refreshQuery).toHaveBeenCalledOnce();
+			await vi.advanceTimersByTimeAsync(1);
+			expect(renewSubscription.mock.calls).toEqual([[manual], [fresh]]);
+		} finally {
+			controller.stop();
+		}
+	});
+
+	it("refreshes through a replacement callback while the old callback is pending", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const oldIssuance = deferred<SealedLiveQuery<unknown>>();
+		const newIssuance = deferred<SealedLiveQuery<unknown>>();
+		const replacementCallback = vi.fn(() => newIssuance.promise);
+		const renewSubscription = vi.fn();
+		const controller = new QueryRefreshController({
+			query: query(2),
+			refreshQuery: () => oldIssuance.promise,
+			renewSubscription,
+			onRefreshExhausted: vi.fn(),
+		});
+
+		try {
+			controller.start();
+			await vi.advanceTimersByTimeAsync(0);
+			controller.setRefreshCallback(undefined);
+			controller.setRefreshCallback(replacementCallback);
+			await vi.advanceTimersByTimeAsync(1);
+			expect(replacementCallback).toHaveBeenCalledOnce();
+
+			oldIssuance.reject(new Error("retired callback failed"));
+			await vi.advanceTimersByTimeAsync(1_000);
+			expect(replacementCallback).toHaveBeenCalledOnce();
+			expect(renewSubscription).not.toHaveBeenCalled();
+
+			const fresh = query(60);
+			newIssuance.resolve(fresh);
+			await vi.advanceTimersByTimeAsync(0);
+			expect(renewSubscription.mock.calls).toEqual([[fresh]]);
+		} finally {
+			controller.stop();
+		}
+	});
+
 	it("keeps obtaining capabilities while acceptance is pending", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);
@@ -474,14 +557,14 @@ function compactJwe(): string {
 	return `${header}..a.b.c`;
 }
 
-function deferred(): {
-	promise: Promise<void>;
-	resolve: () => void;
+function deferred<T = void>(): {
+	promise: Promise<T>;
+	resolve: (value: T) => void;
 	reject: (error: Error) => void;
 } {
-	let resolve!: () => void;
+	let resolve!: (value: T) => void;
 	let reject!: (error: Error) => void;
-	const promise = new Promise<void>((accept, fail) => {
+	const promise = new Promise<T>((accept, fail) => {
 		resolve = accept;
 		reject = fail;
 	});
