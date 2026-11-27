@@ -299,11 +299,13 @@ export class Subscription<Row>
 		const staged = this.stagedReset;
 		if (!staged) throw new Error("Realtime published an uninstalled reset");
 		this.stagedReset = undefined;
-		this.transactions.applySnapshot(mvcc);
 		this.notify(
 			this.updateListeners,
 			Object.freeze({ type: "rows", rows: staged.rows }),
 		);
+		// Raw adapters install the reset in their update listener. Deliver it
+		// before acknowledging transactions covered by the snapshot.
+		this.transactions.applySnapshot(mvcc);
 	}
 
 	publishBatch(batch: ReconciledBatch): void {
