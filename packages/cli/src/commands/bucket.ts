@@ -8,6 +8,7 @@ import { isNeonApiError, retryOnLock } from "../api.js";
 import { log } from "../log.js";
 import {
 	type BucketAccessLevel,
+	type BucketObjectsListResponse,
 	createProjectBranchBucket,
 	deleteProjectBranchBucket,
 	deleteProjectBranchBucketObject,
@@ -339,6 +340,29 @@ export const resolveListDelimiter = (props: {
 	return "/";
 };
 
+// What to print under the folders table when a page lists no objects. A page of
+// only folders is not an empty listing: its keys sit inside them, so "No
+// objects found." would read as an empty bucket. Folders and objects share one
+// paged listing, so "none directly here" holds only for a page that is the
+// whole listing (no --cursor, nothing truncated). On any other page the objects
+// at this level can sit on a page we did not fetch, so print nothing.
+const noObjectsMessage = (
+	props: { target: string; cursor?: string; delimiter?: string },
+	page: Pick<BucketObjectsListResponse, "folders" | "is_truncated">,
+): string | undefined => {
+	if (page.folders.length === 0) {
+		return "No objects found.";
+	}
+	if (props.cursor || page.is_truncated) {
+		return undefined;
+	}
+	const recursiveHint =
+		props.delimiter === undefined
+			? "pass --recursive"
+			: "replace --delimiter with --recursive";
+	return `No objects directly under "${props.target}". List one of the folders above, or ${recursiveHint} to list every key.`;
+};
+
 const listObjects = async (
 	props: BranchScopeProps & {
 		target: string;
@@ -381,11 +405,14 @@ const listObjects = async (
 			{ fields: ["name"], title: "folders" },
 		);
 	}
-	w.write(data.objects, {
-		fields: OBJECT_FIELDS,
-		title: "objects",
-		emptyMessage: "No objects found.",
-	});
+	const emptyMessage = noObjectsMessage(props, data);
+	if (data.objects.length > 0 || emptyMessage) {
+		w.write(data.objects, {
+			fields: OBJECT_FIELDS,
+			title: "objects",
+			emptyMessage,
+		});
+	}
 	w.end();
 
 	if (data.is_truncated && data.next_cursor) {
