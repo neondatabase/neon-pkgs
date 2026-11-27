@@ -641,6 +641,50 @@ describe("Realtime TanStack DB collection", () => {
 		expect(client.latest().unsubscribed).toBe(true);
 	});
 
+	it("keeps syncing when a ready observer throws after the first snapshot", async () => {
+		const listenerErrors: unknown[] = [];
+		const wire = wireClient((entry) => {
+			if (entry.event === "subscription_listener_failed") {
+				listenerErrors.push(entry.error);
+			}
+		});
+		const collection = createTestCollection(wire.client);
+		cleanups.push(async () => wire.client.close());
+		const failure = new Error("Application ready callback failed");
+		collection.onFirstReady(() => {
+			throw failure;
+		});
+		const preload = collection.preload();
+		wire.baseline();
+		await preload;
+		expect(collection.health.error).toBeNull();
+		expect(listenerErrors).toEqual([failure]);
+
+		wire.receive({ type: "open", publication_id: "update" });
+		wire.receive({
+			type: "keyed_results",
+			publication_id: "update",
+			index: 0,
+			txids: ["42"],
+			targets: [{ live_id: "1", epoch: "1", sequence: "1" }],
+			changes: [
+				{
+					op: "upsert",
+					row_key: "a".repeat(64),
+					values: ["1", "after"],
+				},
+			],
+		});
+		wire.receive({
+			type: "commit",
+			publication_id: "update",
+			body_count: 1,
+			frontier: { lsn: "0/10" },
+		});
+		await expect(collection.utils.awaitTxId("42", 100)).resolves.toBe(true);
+		expect(collection.get(1)?.title).toBe("after");
+	});
+
 	it("preserves terminal Realtime errors for transaction waiters", async () => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
@@ -886,7 +930,7 @@ function identity<T>(value: T): T {
 }
 
 /** Fake transport only: subscriptions, decoding, and reconciliation are real. */
-function wireClient() {
+function wireClient(logger?: (entry: RealtimeLogEntry) => void) {
 	const listeners = new Map<
 		string,
 		(event: { readonly data: unknown }) => void
@@ -907,6 +951,8 @@ function wireClient() {
 	vi.stubGlobal("WebSocket", FakeWebSocket);
 	const client = createRealtimeClient({
 		url: "ws://live.test",
+		logLevel: logger ? "warn" : undefined,
+		logger,
 	});
 	const receive = (message: object) => {
 		listeners.get("message")?.({ data: JSON.stringify(message) });

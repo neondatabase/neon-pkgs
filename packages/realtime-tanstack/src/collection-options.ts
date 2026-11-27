@@ -363,6 +363,7 @@ function createRealtimeCollectionOptions<
 				const installReset = (
 					rows: readonly RawLiveQueryRow<Row>[],
 				) => {
+					let receipt: SyncAppliedReceipt;
 					try {
 						const nextRowIds = new Map<string, Key>();
 						const nextKeys = new Map<Key, string>();
@@ -385,13 +386,16 @@ function createRealtimeCollectionOptions<
 						begin({ snapshot: true });
 						for (const { row } of rows)
 							write({ type: "insert", value: row });
-						const receipt = commit();
+						receipt = commit();
 						rowIds = nextRowIds;
 						keys = nextKeys;
-						observeReceipt(receipt, markSynchronized);
 					} catch (error) {
 						stop(error);
+						return;
 					}
+					// A ready observer can throw after TanStack has applied the snapshot.
+					// Let the subscription report listener errors without stopping sync.
+					observeReceipt(receipt, markSynchronized);
 				};
 
 				const applyBatch = (
