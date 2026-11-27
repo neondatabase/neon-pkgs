@@ -1078,6 +1078,53 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
+	it("publishes a single materialized snapshot when replacing a live baseline with replay", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+
+		const changes = vi.fn();
+		const updates: string[] = [];
+		subscription.onChange(changes);
+		subscription.onUpdate((update) => updates.push(update.type));
+		try {
+			reset(socket, "2");
+			for (const [index, title] of [
+				"first replay",
+				"second replay",
+			].entries()) {
+				publication(
+					socket,
+					[{ op: "upsert", row_key: ROW_KEY, values: ["1", title] }],
+					[String(42 + index)],
+					{ epoch: "2", sequence: String(index + 1) },
+				);
+			}
+			expect(changes).not.toHaveBeenCalled();
+			expect(updates).toEqual([]);
+			const transaction = subscription.awaitTxId("43");
+			const matchingRows = subscription.awaitRows(
+				(rows) => rows[0]?.title === "second replay",
+			);
+
+			baselineSync(socket, "replacement", "41", "2");
+
+			await Promise.all([transaction, matchingRows]);
+			expect(updates).toEqual(["rows", "changes", "changes"]);
+			expect(subscription.getSnapshot()).toMatchObject({
+				status: "live",
+				data: [{ id: 1, title: "second replay" }],
+			});
+			expect(changes).toHaveBeenCalledExactlyOnceWith(
+				subscription.getSnapshot(),
+			);
+		} finally {
+			client.close();
+		}
+	});
+
 	it("starts hydrated data while connecting and replaces it atomically", () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({
@@ -2136,19 +2183,21 @@ function publication(
 	socket: FakeWebSocket,
 	changes: readonly object[],
 	txids: readonly string[],
+	target = { epoch: "1", sequence: "1" },
 ): void {
-	socket.receive({ type: "open", publication_id: "7" });
+	const publicationId = `publication-${target.epoch}-${target.sequence}`;
+	socket.receive({ type: "open", publication_id: publicationId });
 	socket.receive({
 		type: "keyed_results",
-		publication_id: "7",
+		publication_id: publicationId,
 		index: 0,
 		txids,
-		targets: [{ live_id: "41", epoch: "1", sequence: "1" }],
+		targets: [{ live_id: "41", ...target }],
 		changes,
 	});
 	socket.receive({
 		type: "commit",
-		publication_id: "7",
+		publication_id: publicationId,
 		body_count: 1,
 		frontier: { lsn: "0/10" },
 	});

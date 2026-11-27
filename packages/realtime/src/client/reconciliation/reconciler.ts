@@ -40,7 +40,7 @@ export interface ReconciliationTarget {
 	/** Notify raw listeners after all state for this publication is installed. */
 	publishReset(rows: readonly WireRow[], mvcc: MvccSnapshot): void;
 	/** Notify listeners after all state for this publication is installed. */
-	publishBatch(batch: ReconciledBatch): void;
+	publishBatch(batch: ReconciledBatch, publishSnapshot?: boolean): void;
 	/** Confirm installed progress without notifying row listeners. */
 	applyProgress(mvcc: ParsedMvccSnapshot): void;
 	/** Publish the one fully caught-up materialized view and enter `live`. */
@@ -425,7 +425,8 @@ export class BaselineSyncPublicationReconciler {
 		state.backlog = state.backlog.slice(shown);
 		state.target.baselineSyncCompleted(message.batch_count);
 		state.target.publishReset(rows, baselineSync.mvcc);
-		for (const batch of replay) state.target.publishBatch(batch);
+		// Replay raw batches individually. caughtUp publishes the complete view.
+		for (const batch of replay) state.target.publishBatch(batch, false);
 		state.live = true;
 		state.lifecycle?.baselineCompleted();
 		state.target.caughtUp();
