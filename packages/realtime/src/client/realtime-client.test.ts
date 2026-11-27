@@ -1642,6 +1642,123 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
+	it("refreshes when the proxy expires a query before the scheduled refresh", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const initial = query("local expiry is later");
+		const replacement = { ...query("replacement"), expiresAt: 90_000 };
+		const refreshQuery = vi.fn(async () => replacement);
+		const subscription = client.subscribe(initial);
+		const controller = new QueryRefreshController({
+			query: initial,
+			refreshQuery,
+			renewSubscription: (renewal) => subscription.renew(renewal),
+			onRefreshExhausted: vi.fn(),
+			subscription,
+		});
+		const socket = connectAndAdmit();
+		baselineSync(socket, "cached");
+		try {
+			controller.start();
+			await vi.advanceTimersByTimeAsync(1_000);
+			expect(refreshQuery).not.toHaveBeenCalled();
+			socket.receive({
+				type: "subscription_error",
+				live_id: "41",
+				code: "authorization_expired",
+				message: "expired at the proxy",
+			});
+			expect(subscription.getState().status).toBe("stale");
+			await vi.advanceTimersByTimeAsync(1);
+			expect(refreshQuery).toHaveBeenCalledOnce();
+			expect(socket.sent.at(-1)).toMatchObject({
+				type: "subscribe",
+				authorization: replacement.capability,
+			});
+		} finally {
+			controller.stop();
+			client.close();
+		}
+	});
+
+	it("skips an expedited refresh when a manual replacement has started", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const initial = query("initial");
+		const manual = { ...query("manual"), expiresAt: 20_000 };
+		const automatic = { ...query("automatic"), expiresAt: 120_000 };
+		const refreshQuery = vi.fn(async () => automatic);
+		const subscription = client.subscribe(initial, { materialize: false });
+		const controller = new QueryRefreshController({
+			query: initial,
+			refreshQuery,
+			renewSubscription: (renewal) => subscription.renew(renewal),
+			onRefreshExhausted: vi.fn(),
+			subscription,
+		});
+		const socket = connectAndAdmit();
+		baselineSync(socket, "cached");
+		try {
+			controller.start();
+			socket.receive({
+				type: "subscription_error",
+				live_id: "41",
+				code: "authorization_expired",
+				message: "expired at the proxy",
+			});
+			expect(subscription.getState().status).toBe("stale");
+			// Let the stale notification schedule its timer before starting renewal.
+			await Promise.resolve();
+			const renewal = controller.replaceSealedQuery(manual);
+			void renewal.catch(() => undefined);
+			const request = defined(socket.sent.at(-1));
+			expect(request).toMatchObject({
+				type: "subscribe",
+				authorization: manual.capability,
+			});
+			expect(subscription.getState().status).toBe("connecting");
+			await vi.advanceTimersByTimeAsync(1);
+			expect(refreshQuery).not.toHaveBeenCalled();
+			expect(socket.sent.at(-1)).toBe(request);
+			socket.receive({
+				type: "subscribed",
+				request_id: request.request_id,
+				live_id: "42",
+				epoch: "2",
+				first_sequence: "1",
+				columns: [
+					{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+					{
+						name: "title",
+						type_oid: 25,
+						typmod: -1,
+						codec: "pg_text",
+					},
+				],
+			});
+			baselineSync(socket, "fresh", "42", "2");
+			await expect(renewal).resolves.toBeUndefined();
+			expect(subscription.getState().status).toBe("live");
+
+			await vi.advanceTimersByTimeAsync(9_998);
+			expect(refreshQuery).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(1);
+			expect(refreshQuery).toHaveBeenCalledOnce();
+			expect(socket.sent.at(-1)).toMatchObject({
+				type: "renew",
+				authorization: automatic.capability,
+				live_id: "42",
+			});
+		} finally {
+			controller.stop();
+			client.close();
+		}
+	});
+
 	it("maps permanent subscription failures to error", async () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({
