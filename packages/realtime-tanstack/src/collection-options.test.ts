@@ -330,7 +330,12 @@ describe("Realtime TanStack DB collection", () => {
 		"stale",
 	] as const)("reports recoverable Realtime %s state through collection health", async (status) => {
 		const client = new TestClient<MessageRow>();
-		const collection = createTestCollection(client);
+		const initial = query("query-1");
+		const collection = createTestCollection(
+			client,
+			initial,
+			async () => initial,
+		);
 		const preload = collection.preload();
 		client.latest().reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
 		await preload;
@@ -414,6 +419,60 @@ describe("Realtime TanStack DB collection", () => {
 		expect(collection.status).toBe("error");
 		expect(collection.health.error?.cause).toBe(failure);
 		expect(client.latest().unsubscribed).toBe(true);
+	});
+
+	it.each([
+		"preload",
+		"reload",
+	] as const)("rejects %s when the proxy expires a query without a refresh callback", async (operation) => {
+		const wire = wireClient();
+		const collection = createTestCollection(wire.client);
+		cleanups.push(async () => wire.client.close());
+		if (operation === "reload") {
+			const preload = collection.preload();
+			wire.baseline();
+			await preload;
+		}
+		const result = collection[operation]().catch(identity);
+		wire.receive({ type: "ready" });
+		wire.receive({
+			type: "subscribe_rejected",
+			request_id: operation === "preload" ? "1" : "2",
+			code: "authorization_expired",
+			message: "Expired query",
+		});
+
+		expect(collection.health.error?.cause).toMatchObject({
+			message: expect.stringContaining("refreshQuery"),
+		});
+		await expect(result).resolves.toBe(collection.health.error?.cause);
+		await expect(collection.utils.awaitTxId("42")).rejects.toBe(
+			collection.health.error?.cause,
+		);
+	});
+
+	it("retains loaded rows and reports expiry without a refresh callback", async () => {
+		const wire = wireClient();
+		const collection = createTestCollection(wire.client);
+		cleanups.push(async () => wire.client.close());
+		const preload = collection.preload();
+		wire.baseline();
+		await preload;
+		const confirmed = collection.utils.awaitTxId("42").catch(identity);
+
+		wire.receive({
+			type: "subscription_error",
+			live_id: "1",
+			code: "authorization_expired",
+			message: "Expired query",
+		});
+
+		expect(collection.status).toBe("ready");
+		expect(collection.get(1)).toMatchObject({ title: "before" });
+		expect(collection.health.error?.cause).toMatchObject({
+			message: expect.stringContaining("refreshQuery"),
+		});
+		await expect(confirmed).resolves.toBe(collection.health.error?.cause);
 	});
 
 	it("fails when Realtime is terminal before listeners are installed", async () => {

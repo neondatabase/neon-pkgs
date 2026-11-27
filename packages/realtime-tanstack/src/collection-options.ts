@@ -420,6 +420,12 @@ function createRealtimeCollectionOptions<
 						const error = new Error("Realtime subscription closed");
 						error.name = "RealtimeSubscriptionClosedError";
 						stop(error);
+					} else if (state.status === "stale" && !refreshQuery) {
+						stop(
+							new Error(
+								"Realtime needs a replacement capability. Provide refreshQuery to keep the collection synchronized.",
+							),
+						);
 					} else if (
 						state.status === "connecting" ||
 						state.status === "stale"
@@ -436,7 +442,11 @@ function createRealtimeCollectionOptions<
 				});
 				unsubscribeState = subscription.onStateChange(stateChanged);
 				const state = subscription.getState();
-				if (state.status === "error" || state.status === "closed") {
+				if (
+					state.status === "error" ||
+					state.status === "closed" ||
+					(state.status === "stale" && !refreshQuery)
+				) {
 					stateChanged(state);
 				}
 				if (!stopped) queryRefresh.start();
