@@ -1517,6 +1517,62 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
+	it.each([
+		"closed",
+		"error",
+	] as const)("rejects row waits after a subscription enters %s with matching retained rows", async (status) => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+
+		try {
+			const matches = vi.fn((rows: readonly MessageRow[]) =>
+				rows.some((row) => row.title === "before"),
+			);
+			if (status === "closed") {
+				subscription.unsubscribe();
+				await expect(subscription.awaitRows(matches)).rejects.toThrow(
+					"subscription is closed",
+				);
+			} else {
+				socket.receive({
+					type: "subscription_error",
+					live_id: "41",
+					code: "baseline_sync_failed",
+					message: "snapshot failed",
+				});
+				await expect(subscription.awaitRows(matches)).rejects.toBe(
+					subscription.getSnapshot().error,
+				);
+			}
+			expect(matches).not.toHaveBeenCalled();
+		} finally {
+			client.close();
+		}
+	});
+
+	it("does not call an awaitRows predicate again after it closes the subscription", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"), {
+			initialData: [{ id: 1, title: "before" }],
+		});
+		const matches = vi.fn(() => {
+			subscription.unsubscribe();
+			return false;
+		});
+		try {
+			await expect(subscription.awaitRows(matches)).rejects.toThrow(
+				"subscription is closed",
+			);
+			expect(matches).toHaveBeenCalledOnce();
+		} finally {
+			client.close();
+		}
+	});
+
 	it("renews only with a sealed query for the same query", async () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({

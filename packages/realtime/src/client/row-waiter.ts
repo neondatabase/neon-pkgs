@@ -41,19 +41,21 @@ export function waitForRows<Row>(
 			reject(error);
 		};
 		const inspect = (snapshot: LiveQuerySnapshot<Row>) => {
-			try {
-				if (snapshot.data !== undefined && matches(snapshot.data)) {
-					succeed();
-					return;
-				}
-			} catch (error) {
-				fail(error);
+			if (snapshot.status === "error") {
+				fail(snapshot.error);
+				return;
+			}
+			if (snapshot.status === "closed") {
+				fail(new Error("Live-query subscription is closed"));
 				return;
 			}
 
-			if (snapshot.status === "error") fail(snapshot.error);
-			else if (snapshot.status === "closed") {
-				fail(new Error("Live-query subscription is closed"));
+			try {
+				if (snapshot.data !== undefined && matches(snapshot.data)) {
+					succeed();
+				}
+			} catch (error) {
+				fail(error);
 			}
 		};
 
