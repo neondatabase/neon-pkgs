@@ -810,6 +810,38 @@ describe("RealtimeClient", () => {
 		);
 	});
 
+	it.each([
+		"unsubscribe",
+		"close",
+	] as const)("publishes one closed snapshot after reentrant %s from an error state listener", (action) => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "value");
+		const changed = vi.fn();
+		subscription.onChange(changed);
+		subscription.onStateChange((state) => {
+			if (state.status !== "error") return;
+			if (action === "unsubscribe") subscription.unsubscribe();
+			else client.close();
+		});
+
+		try {
+			socket.receive({
+				type: "connection_error",
+				code: "invalid_payload",
+				message: "invalid payload",
+			});
+			expect(subscription.getState().status).toBe("closed");
+			expect(changed).toHaveBeenCalledExactlyOnceWith(
+				subscription.getSnapshot(),
+			);
+		} finally {
+			client.close();
+		}
+	});
+
 	it("queues the unsubscribe diagnostic before reentrant state listeners", async () => {
 		useFakeWebSocket();
 		const events: string[] = [];
