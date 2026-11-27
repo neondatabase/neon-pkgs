@@ -64,6 +64,7 @@ export interface AddReconciliationTarget {
 
 /** Observe reconciliation milestones without wrapping the delivery target. */
 export interface ReconciliationLifecycle {
+	baselineProgress?(): void;
 	baselineCompleted(): void;
 	interrupted(): void;
 }
@@ -314,6 +315,7 @@ export class BaselineSyncPublicationReconciler {
 			rows: [],
 			rowKeys: new Set(),
 		};
+		state.lifecycle?.baselineProgress?.();
 		state.target.baselineSyncStarted();
 	}
 
@@ -364,6 +366,7 @@ export class BaselineSyncPublicationReconciler {
 			baselineSync.rows.push(row);
 		}
 		baselineSync.nextBatch += 1;
+		state.lifecycle?.baselineProgress?.();
 	}
 
 	private baselineSyncEnd(

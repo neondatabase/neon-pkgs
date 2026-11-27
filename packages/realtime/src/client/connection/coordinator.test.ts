@@ -729,6 +729,121 @@ describe("ConnectionCoordinator", () => {
 		expect(FakeWebSocket.instances).toHaveLength(1);
 	});
 
+	it("fails an idle baseline without interrupting completed peers", async () => {
+		vi.useFakeTimers({
+			toFake: ["setTimeout", "clearTimeout", "performance"],
+		});
+		const coordinator = createCoordinator();
+		const stalled = target();
+		const healthy = target();
+		coordinator.subscribe({ capability: "stalled" }, stalled);
+		const socket = admit();
+		coordinator.subscribe({ capability: "healthy" }, healthy);
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+		const mvcc = { xmin: "1", xmax: "2", xip: [] };
+		socket.receive({
+			type: "baseline_sync_start",
+			live_id: "42",
+			epoch: "1",
+			baseline_sync_attempt: "1",
+			mvcc,
+		});
+		socket.receive({
+			type: "baseline_sync_end",
+			live_id: "42",
+			epoch: "1",
+			baseline_sync_attempt: "1",
+			batch_count: 0,
+		});
+		await vi.advanceTimersByTimeAsync(50_000);
+		socket.receive({
+			type: "baseline_sync_start",
+			live_id: "41",
+			epoch: "1",
+			baseline_sync_attempt: "1",
+			mvcc,
+		});
+		await vi.advanceTimersByTimeAsync(59_999);
+		expect(stalled.failed).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(stalled.failed).toHaveBeenCalledWith(
+			expect.objectContaining({ code: "subscription_baseline_timeout" }),
+		);
+		expect(socket.sent.at(-1)).toEqual({
+			type: "unsubscribe",
+			live_id: "41",
+		});
+		expect(healthy.reconciliation.caughtUp).toHaveBeenCalledOnce();
+		expect(healthy.failed).not.toHaveBeenCalled();
+		coordinator.close();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("fails unanswered renewals and ignores late acknowledgments during detach", async () => {
+		vi.useFakeTimers({
+			toFake: ["setTimeout", "clearTimeout", "performance"],
+		});
+		const coordinator = createCoordinator();
+		const stale = target();
+		const healthy = target();
+		const handle = coordinator.subscribe({ capability: "initial" }, stale);
+		const socket = admit();
+		coordinator.subscribe({ capability: "healthy" }, healthy);
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+		for (const live_id of ["41", "42"]) {
+			socket.receive({
+				type: "baseline_sync_start",
+				live_id,
+				epoch: "1",
+				baseline_sync_attempt: "1",
+				mvcc: { xmin: "1", xmax: "2", xip: [] },
+			});
+			socket.receive({
+				type: "baseline_sync_end",
+				live_id,
+				epoch: "1",
+				baseline_sync_attempt: "1",
+				batch_count: 0,
+			});
+		}
+		const first = handle.renew({ capability: "renewed" });
+		socket.receive({ type: "renewed", live_id: "41" });
+		await first;
+		const unanswered = handle
+			.renew({ capability: "unanswered" })
+			.catch((error) => error);
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(stale.failed).toHaveBeenCalledWith(
+			expect.objectContaining({ code: "subscription_renewal_timeout" }),
+		);
+		expect(await unanswered).toMatchObject({
+			code: "subscription_renewal_timeout",
+		});
+		expect(socket.sent.at(-1)).toEqual({
+			type: "unsubscribe",
+			live_id: "41",
+		});
+		socket.receive({ type: "renewed", live_id: "41" });
+		socket.receive({ type: "unsubscribed", live_id: "41" });
+		expect(healthy.failed).not.toHaveBeenCalled();
+		coordinator.close();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
 	it("probes an idle ready connection and times it out without inbound activity", async () => {
 		vi.useFakeTimers();
 		const callbacks = target();
