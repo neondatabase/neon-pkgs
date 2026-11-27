@@ -14,7 +14,56 @@ type SnapshotListener<Row> = (snapshot: LiveQuerySnapshot<Row>) => void;
 type StateListener = (state: LiveQueryState) => void;
 type UpdateListener<Row> = (update: RawLiveQueryUpdate<Row>) => void;
 
-export class ReactLiveQueryStore<Row> {
+/** What `useLiveQuery()` needs from the store behind one logical query. */
+export interface LiveQueryStore<Row> {
+	readonly utils: UseLiveQueryUtils<Row>;
+	readonly subscribe: (listener: () => void) => () => void;
+	readonly getHookSnapshot: () => LiveQuerySnapshot<Row>;
+	readonly getServerSnapshot: () => LiveQuerySnapshot<Row>;
+	setRefreshCallback(
+		refreshQuery: (() => Promise<SealedLiveQuery<Row>>) | undefined,
+	): void;
+}
+
+const idleState: LiveQueryState = Object.freeze({
+	status: "closed",
+	error: undefined,
+});
+const idleSnapshot: LiveQuerySnapshot<never> = Object.freeze({
+	...idleState,
+	data: undefined,
+});
+const ignoreListener = (): (() => void) => () => {};
+const rejectSkipped = (): Promise<never> =>
+	Promise.reject(new Error("Live query is skipped"));
+
+/**
+ * Store for a skipped query (`useLiveQuery(null)`). It never subscribes, so
+ * every hook that skips shares this one immutable instance and its snapshot.
+ */
+const idleStore: LiveQueryStore<never> = Object.freeze({
+	utils: Object.freeze({
+		getState: () => idleState,
+		getSnapshot: () => idleSnapshot,
+		awaitRows: rejectSkipped,
+		onUpdate: ignoreListener,
+		onStateChange: ignoreListener,
+		onChange: ignoreListener,
+		awaitTxId: rejectSkipped,
+		renew: rejectSkipped,
+	}),
+	subscribe: ignoreListener,
+	getHookSnapshot: () => idleSnapshot,
+	getServerSnapshot: () => idleSnapshot,
+	setRefreshCallback: () => {},
+});
+
+/** Return the shared store used while a query is skipped. */
+export function idleLiveQueryStore<Row>(): LiveQueryStore<Row> {
+	return idleStore as unknown as LiveQueryStore<Row>;
+}
+
+export class ReactLiveQueryStore<Row> implements LiveQueryStore<Row> {
 	private readonly reactListeners = new Set<() => void>();
 	private readonly snapshotListeners = new Set<SnapshotListener<Row>>();
 	private readonly stateListeners = new Set<StateListener>();

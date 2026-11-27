@@ -12,6 +12,7 @@ import type {
 } from "@neon/realtime/client";
 import { createRealtimeClient } from "@neon/realtime/client";
 import { act, cleanup, render, screen } from "@testing-library/react";
+import { StrictMode } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -383,6 +384,372 @@ describe("Realtime React integration", () => {
 	});
 });
 
+describe("useLiveQuery skip", () => {
+	it("returns a stable idle result without subscribing while the query is null", async () => {
+		const client = new TestClient<MessageRow>();
+		const results: UseLiveQueryResult<MessageRow>[] = [];
+		const refreshQuery = vi.fn(async () => query("refresh"));
+		const props = {
+			query: null,
+			initialData: [{ id: 1, title: "server" }],
+			refreshQuery,
+			observe: (result: UseLiveQueryResult<MessageRow>) =>
+				results.push(result),
+		};
+		const { rerender } = renderMessages(client, props);
+		rerender({ ...props, initialData: [{ id: 2, title: "ignored" }] });
+		rerender({ ...props, refreshQuery: async () => query("refresh-2") });
+
+		expect(client.subscriptions).toHaveLength(0);
+		expect(screen.getByText("closed:none")).toBeTruthy();
+		const [idle] = results;
+		expect(results).toHaveLength(3);
+		for (const result of results) expect(result).toBe(idle);
+		expect(Object.isFrozen(idle)).toBe(true);
+		expect(idle).toEqual({
+			status: "closed",
+			error: undefined,
+			data: undefined,
+			isPlaceholderData: false,
+			utils: expect.any(Object),
+		});
+
+		const { utils } = idle;
+		expect(utils.getState()).toEqual({
+			status: "closed",
+			error: undefined,
+		});
+		expect(utils.getSnapshot()).toEqual({
+			status: "closed",
+			error: undefined,
+			data: undefined,
+		});
+		expect(utils).not.toHaveProperty("unsubscribe");
+		const stopListening = [
+			utils.onChange(vi.fn()),
+			utils.onStateChange(vi.fn()),
+			utils.onUpdate(vi.fn()),
+		];
+		for (const stop of stopListening) expect(stop()).toBeUndefined();
+		await expect(utils.awaitTxId("42")).rejects.toThrow(
+			"Live query is skipped",
+		);
+		await expect(utils.awaitRows(() => true)).rejects.toThrow(
+			"Live query is skipped",
+		);
+		await expect(utils.renew(query("query-1"))).rejects.toThrow(
+			"Live query is skipped",
+		);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(refreshQuery).not.toHaveBeenCalled();
+	});
+
+	it("subscribes when a query arrives and unsubscribes when skipped again", () => {
+		const client = new TestClient<MessageRow>();
+		let observed: UseLiveQueryResult<MessageRow> | undefined;
+		const observe = (result: UseLiveQueryResult<MessageRow>) => {
+			observed = result;
+		};
+		const { rerender } = renderMessages(client, { query: null, observe });
+		const idleUtils = observed?.utils;
+
+		const first = query("query-1");
+		rerender({ query: first, observe });
+		expect(client.subscriptions).toHaveLength(1);
+		expect(screen.getByText("connecting:none")).toBeTruthy();
+		expect(observed?.utils).not.toBe(idleUtils);
+		act(() =>
+			client.latest().publish(liveSnapshot({ id: 1, title: "first" })),
+		);
+		expect(screen.getByText("live:first")).toBeTruthy();
+
+		rerender({ query: null, observe });
+		expect(client.latest().unsubscribed).toBe(true);
+		expect(screen.getByText("closed:none")).toBeTruthy();
+		expect(observed?.utils).toBe(idleUtils);
+
+		rerender({ query: first, observe });
+		expect(client.subscriptions).toHaveLength(2);
+		expect(activeSubscriptions(client)).toHaveLength(1);
+	});
+
+	it("opens exactly one subscription under StrictMode", () => {
+		const client = new TestClient<MessageRow>();
+		const { view, rerender } = renderMessages(
+			client,
+			{ query: null },
+			{ strict: true },
+		);
+		expect(client.subscriptions).toHaveLength(0);
+		expect(screen.getByText("closed:none")).toBeTruthy();
+
+		rerender({ query: query("query-1") });
+		expect(activeSubscriptions(client)).toHaveLength(1);
+		act(() =>
+			activeSubscriptions(client)[0]?.publish(
+				liveSnapshot({ id: 1, title: "first" }),
+			),
+		);
+		expect(screen.getByText("live:first")).toBeTruthy();
+
+		view.unmount();
+		expect(activeSubscriptions(client)).toHaveLength(0);
+	});
+
+	it("renders a skipped query on the server without subscribing", () => {
+		const client = new TestClient<MessageRow>();
+		const html = renderToString(
+			<RealtimeProvider client={client}>
+				<Messages
+					query={null}
+					initialData={[{ id: 1, title: "server" }]}
+					keepPreviousData
+				/>
+			</RealtimeProvider>,
+		);
+
+		expect(html.replaceAll("<!-- -->", "")).toBe(
+			"<span>closed:none</span>",
+		);
+		expect(client.subscriptions).toHaveLength(0);
+	});
+});
+
+describe("useLiveQuery keepPreviousData", () => {
+	it("keeps the previous rows until the next query's first result", () => {
+		const client = new TestClient<MessageRow>();
+		let observed: UseLiveQueryResult<MessageRow> | undefined;
+		const observe = (result: UseLiveQueryResult<MessageRow>) => {
+			observed = result;
+		};
+		const { rerender } = renderMessages(client, {
+			query: query("query-1"),
+			keepPreviousData: true,
+			observe,
+		});
+		const firstSubscription = client.latest();
+		act(() =>
+			firstSubscription.publish(liveSnapshot({ id: 1, title: "first" })),
+		);
+		expect(observed?.isPlaceholderData).toBe(false);
+
+		rerender({ query: query("query-2"), keepPreviousData: true, observe });
+
+		expect(firstSubscription.unsubscribed).toBe(true);
+		expect(client.subscriptions).toHaveLength(2);
+		expect(screen.getByText("connecting:first:previous")).toBeTruthy();
+		expect(observed).toMatchObject({
+			status: "connecting",
+			error: undefined,
+			data: [{ id: 1, title: "first" }],
+			isPlaceholderData: true,
+		});
+		// utils describe the current query, which has no rows yet.
+		expect(observed?.utils.getSnapshot().data).toBeUndefined();
+
+		act(() =>
+			client.latest().publish(liveSnapshot({ id: 2, title: "second" })),
+		);
+		expect(screen.getByText("live:second")).toBeTruthy();
+		expect(observed).toMatchObject({
+			data: [{ id: 2, title: "second" }],
+			isPlaceholderData: false,
+		});
+	});
+
+	it("shows the next query's empty result instead of the previous rows", () => {
+		const client = new TestClient<MessageRow>();
+		let observed: UseLiveQueryResult<MessageRow> | undefined;
+		const observe = (result: UseLiveQueryResult<MessageRow>) => {
+			observed = result;
+		};
+		const { rerender } = renderMessages(client, {
+			query: query("query-1"),
+			keepPreviousData: true,
+			observe,
+		});
+		act(() =>
+			client.latest().publish(liveSnapshot({ id: 1, title: "first" })),
+		);
+		rerender({ query: query("query-2"), keepPreviousData: true, observe });
+		act(() => client.latest().publish(liveSnapshot()));
+
+		expect(screen.getByText("live:none")).toBeTruthy();
+		expect(observed).toMatchObject({ data: [], isPlaceholderData: false });
+	});
+
+	it("keeps the last rows through rapid query changes", () => {
+		const client = new TestClient<MessageRow>();
+		const { rerender } = renderMessages(client, {
+			query: query("query-a"),
+			keepPreviousData: true,
+		});
+		act(() => client.latest().publish(liveSnapshot({ id: 1, title: "a" })));
+
+		// B is replaced by C before B's first snapshot arrives.
+		rerender({ query: query("query-b"), keepPreviousData: true });
+		const [, b] = client.subscriptions;
+		rerender({ query: query("query-c"), keepPreviousData: true });
+		expect(b?.unsubscribed).toBe(true);
+		expect(activeSubscriptions(client)).toEqual([client.latest()]);
+		expect(screen.getByText("connecting:a:previous")).toBeTruthy();
+
+		// A late snapshot from the abandoned query is ignored.
+		act(() => b?.publish(liveSnapshot({ id: 2, title: "b" })));
+		expect(screen.getByText("connecting:a:previous")).toBeTruthy();
+
+		act(() => client.latest().publish(liveSnapshot({ id: 3, title: "c" })));
+		expect(screen.getByText("live:c")).toBeTruthy();
+
+		// The placeholder is always the latest rows that were rendered.
+		rerender({ query: query("query-d"), keepPreviousData: true });
+		expect(screen.getByText("connecting:c:previous")).toBeTruthy();
+	});
+
+	it("keeps the previous rows while the query is skipped", () => {
+		const client = new TestClient<MessageRow>();
+		const results: UseLiveQueryResult<MessageRow>[] = [];
+		const observe = (result: UseLiveQueryResult<MessageRow>) => {
+			results.push(result);
+		};
+		const { rerender } = renderMessages(client, {
+			query: query("query-1"),
+			keepPreviousData: true,
+			observe,
+		});
+		act(() =>
+			client.latest().publish(liveSnapshot({ id: 1, title: "first" })),
+		);
+
+		// For example, while the next sealed query is being fetched.
+		rerender({ query: null, keepPreviousData: true, observe });
+		expect(client.latest().unsubscribed).toBe(true);
+		expect(screen.getByText("closed:first:previous")).toBeTruthy();
+		const skipped = results.at(-1);
+		expect(skipped).toMatchObject({
+			status: "closed",
+			error: undefined,
+			data: [{ id: 1, title: "first" }],
+			isPlaceholderData: true,
+		});
+		expect(skipped?.utils.getState().status).toBe("closed");
+		rerender({ query: null, keepPreviousData: true, observe });
+		expect(results.at(-1)).toBe(skipped);
+
+		rerender({ query: query("query-2"), keepPreviousData: true, observe });
+		expect(screen.getByText("connecting:first:previous")).toBeTruthy();
+		act(() =>
+			client.latest().publish(liveSnapshot({ id: 2, title: "second" })),
+		);
+		expect(screen.getByText("live:second")).toBeTruthy();
+	});
+
+	it("prefers the next query's initialData over the previous rows", () => {
+		const client = new TestClient<MessageRow>();
+		const { rerender } = renderMessages(client, {
+			query: query("query-1"),
+			keepPreviousData: true,
+		});
+		act(() =>
+			client.latest().publish(liveSnapshot({ id: 1, title: "first" })),
+		);
+
+		rerender({
+			query: query("query-2"),
+			initialData: [{ id: 2, title: "seed" }],
+			keepPreviousData: true,
+		});
+		expect(screen.getByText("connecting:seed")).toBeTruthy();
+	});
+
+	it("reports the next query's error alongside the previous rows", () => {
+		const client = new TestClient<MessageRow>();
+		let observed: UseLiveQueryResult<MessageRow> | undefined;
+		const observe = (result: UseLiveQueryResult<MessageRow>) => {
+			observed = result;
+		};
+		const { rerender } = renderMessages(client, {
+			query: query("query-1"),
+			keepPreviousData: true,
+			observe,
+		});
+		act(() =>
+			client.latest().publish(liveSnapshot({ id: 1, title: "first" })),
+		);
+		rerender({ query: query("query-2"), keepPreviousData: true, observe });
+
+		const error = Object.assign(new Error("Query rejected"), {
+			code: "QUERY_REJECTED",
+			retryable: false,
+		});
+		act(() =>
+			client
+				.latest()
+				.publish({ status: "error", error, data: undefined }),
+		);
+		expect(screen.getByText("error:first:previous")).toBeTruthy();
+		expect(observed).toMatchObject({
+			status: "error",
+			error,
+			isPlaceholderData: true,
+		});
+	});
+
+	it("empties data on a query change unless keepPreviousData is set", () => {
+		const client = new TestClient<MessageRow>();
+		let observed: UseLiveQueryResult<MessageRow> | undefined;
+		const observe = (result: UseLiveQueryResult<MessageRow>) => {
+			observed = result;
+		};
+		const { rerender } = renderMessages(client, {
+			query: query("query-1"),
+			observe,
+		});
+		act(() =>
+			client.latest().publish(liveSnapshot({ id: 1, title: "first" })),
+		);
+
+		const second = query("query-2");
+		rerender({ query: second, observe });
+		expect(screen.getByText("connecting:none")).toBeTruthy();
+		expect(observed?.isPlaceholderData).toBe(false);
+
+		// The option is read on every render.
+		rerender({ query: second, keepPreviousData: true, observe });
+		expect(screen.getByText("connecting:first:previous")).toBeTruthy();
+		rerender({ query: second, keepPreviousData: false, observe });
+		expect(screen.getByText("connecting:none")).toBeTruthy();
+		expect(client.subscriptions).toHaveLength(2);
+	});
+
+	it("keeps the previous rows under StrictMode", () => {
+		const client = new TestClient<MessageRow>();
+		const { view, rerender } = renderMessages(
+			client,
+			{ query: query("query-a"), keepPreviousData: true },
+			{ strict: true },
+		);
+		expect(activeSubscriptions(client)).toHaveLength(1);
+		act(() =>
+			activeSubscriptions(client)[0]?.publish(
+				liveSnapshot({ id: 1, title: "a" }),
+			),
+		);
+		expect(screen.getByText("live:a")).toBeTruthy();
+
+		rerender({ query: query("query-b"), keepPreviousData: true });
+		rerender({ query: query("query-c"), keepPreviousData: true });
+		expect(activeSubscriptions(client)).toEqual([client.latest()]);
+		expect(screen.getByText("connecting:a:previous")).toBeTruthy();
+
+		act(() => client.latest().publish(liveSnapshot({ id: 3, title: "c" })));
+		expect(screen.getByText("live:c")).toBeTruthy();
+
+		view.unmount();
+		expect(activeSubscriptions(client)).toHaveLength(0);
+	});
+});
+
 describe("useRealtimeClient", () => {
 	it("returns the client passed to the provider", () => {
 		const client = new TestClient<MessageRow>();
@@ -460,22 +827,62 @@ function Messages({
 	query: currentQuery,
 	initialData,
 	refreshQuery,
+	keepPreviousData,
 	observe,
 }: {
-	query: SealedLiveQuery<MessageRow>;
+	query: SealedLiveQuery<MessageRow> | null;
 	initialData?: readonly MessageRow[];
 	refreshQuery?: () => Promise<SealedLiveQuery<MessageRow>>;
+	keepPreviousData?: boolean;
 	observe?: (result: UseLiveQueryResult<MessageRow>) => void;
 }) {
 	const result = useLiveQuery(currentQuery, {
 		initialData,
 		refreshQuery,
+		keepPreviousData,
 	});
 	observe?.(result);
 	return (
 		<span>
 			{result.status}:{result.data?.[0]?.title ?? "none"}
+			{result.isPlaceholderData ? ":previous" : ""}
 		</span>
+	);
+}
+
+/** Render `Messages` and return a function that re-renders it with new props. */
+function renderMessages(
+	client: RealtimeClient,
+	props: Parameters<typeof Messages>[0],
+	{ strict = false }: { strict?: boolean } = {},
+) {
+	const tree = (current: Parameters<typeof Messages>[0]) => {
+		const provided = (
+			<RealtimeProvider client={client}>
+				<Messages {...current} />
+			</RealtimeProvider>
+		);
+		return strict ? <StrictMode>{provided}</StrictMode> : provided;
+	};
+	const view = render(tree(props));
+	return {
+		view,
+		rerender: (next: Parameters<typeof Messages>[0]) =>
+			view.rerender(tree(next)),
+	};
+}
+
+function liveSnapshot(
+	...rows: readonly MessageRow[]
+): LiveQuerySnapshot<MessageRow> {
+	return { status: "live", error: undefined, data: rows };
+}
+
+function activeSubscriptions<Row>(
+	client: TestClient<Row>,
+): TestSubscription<Row>[] {
+	return client.subscriptions.filter(
+		(subscription) => !subscription.unsubscribed,
 	);
 }
 

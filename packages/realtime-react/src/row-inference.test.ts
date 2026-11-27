@@ -43,3 +43,29 @@ it("checks preload data and refresh callbacks against the query's row", () => {
 		UseLiveQueryResult<TimestampRow>
 	>();
 });
+
+it("infers rows through a skippable query", () => {
+	// Type-checked during build; never render or call this hook.
+	function useSkippableRows(
+		query: SealedLiveQuery<TimestampRow> | undefined,
+	) {
+		const result = useLiveQuery(query ?? null, {
+			keepPreviousData: true,
+			refreshQuery: async () => {
+				if (!query) throw new Error("No query to refresh");
+				return query;
+			},
+		});
+		expectTypeOf(result).toEqualTypeOf<UseLiveQueryResult<TimestampRow>>();
+		expectTypeOf(result.isPlaceholderData).toEqualTypeOf<boolean>();
+		expectTypeOf(useLiveQuery(null)).toEqualTypeOf<
+			UseLiveQueryResult<unknown>
+		>();
+		// @ts-expect-error Skip with null; undefined is not a skip sentinel.
+		useLiveQuery(query);
+		return result;
+	}
+	expectTypeOf(useSkippableRows).returns.toEqualTypeOf<
+		UseLiveQueryResult<TimestampRow>
+	>();
+});
