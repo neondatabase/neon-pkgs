@@ -62,6 +62,9 @@ describe("per-call wait budget", () => {
 		}
 		expect(error.timeoutMs).toBe(80);
 		expect(error.operations.map((op) => op.id)).toEqual(["op-1"]);
+		expect(error.message).toBe(
+			"Timed out after 80ms waiting for 1 operation(s) to finish. The request was accepted, and these operations are still running: op-1 (create_timeline, running, project p-1).",
+		);
 		expect(Date.now() - startedAt).toBeLessThan(2_000);
 	});
 
