@@ -21,6 +21,26 @@ import type { NoInferCompat } from "./no-infer.js";
 /** Utilities attached to a Realtime-backed TanStack DB collection. */
 export interface RealtimeCollectionUtils extends UtilsRecord {
 	/**
+	 * Wait for the first server snapshot in this synchronization run to be
+	 * applied, including an empty snapshot. Local persistence can make a
+	 * collection ready before the server snapshot arrives.
+	 *
+	 * This does not start synchronization. If called before a run starts, it
+	 * waits for the next run. Once a snapshot has applied, later calls in the
+	 * same run resolve immediately, including during automatic reconnects.
+	 * Reloading retires the previous run and cancels its pending waits.
+	 *
+	 * Wait before starting an operation that needs the server baseline.
+	 * Public collection reads may still include optimistic changes.
+	 *
+	 * @param timeout - Optional wait of 0 to 2,147,483,647 milliseconds,
+	 * including any wait for synchronization to start.
+	 * @throws If the timeout is invalid or elapses, or the run terminates
+	 * or is cleaned up before its first snapshot applies.
+	 */
+	awaitInitialSnapshot(timeout?: number): Promise<void>;
+
+	/**
 	 * Wait until this query has processed a known committed PostgreSQL transaction.
 	 * Covered row changes enter TanStack DB's causal sync queue before this resolves.
 	 *
@@ -93,7 +113,7 @@ export type RealtimeCollectionOptions<
 	CollectionConfig<Row, Key, Schema, RealtimeCollectionUtils>,
 	"utils"
 > & {
-	/** Realtime-specific transaction-confirmation utility. */
+	/** Realtime-specific synchronization utilities. */
 	readonly utils: RealtimeCollectionUtils;
 };
 
@@ -102,6 +122,8 @@ export type RealtimeCollectionOptions<
  * Complete-row replacements and committed change batches are applied atomically.
  * This is an unordered keyed collection: move operations do not change membership
  * or values and are ignored. Use core materialized subscriptions for server order.
+ * Create fresh options for each concrete collection, including when wrapping
+ * the options with a persistence adapter.
  *
  * @typeParam Row - Object row synchronized into the collection.
  * @typeParam Key - Stable key returned by `getKey`.
@@ -120,14 +142,34 @@ export function realtimeCollectionOptions<
 		readonly query: SealedLiveQuery<Row>;
 	},
 ): RealtimeCollectionOptions<Row, Key, Schema> {
-	const createOptions = () => createRealtimeCollectionOptions(config);
-	return withCollectionConfigFactory(createOptions(), createOptions);
+	const createOptions = (): RealtimeCollectionOptions<Row, Key, Schema> => {
+		let claimed = false;
+		return withCollectionConfigFactory(
+			createRealtimeCollectionOptions(config),
+			createOptions,
+			() => {
+				if (claimed)
+					throw new Error(
+						"Realtime options can create only one collection",
+					);
+				claimed = true;
+				return () => {
+					claimed = false;
+				};
+			},
+		);
+	};
+	return createOptions();
 }
 
 /** How a sync run started: subscribed, or failed while subscribing. */
 type SyncStart<Row> =
 	| { readonly subscription: RawLiveQuerySubscription<Row> }
 	| { readonly error: unknown };
+
+type InitialSnapshotResult = { readonly error: unknown } | true;
+
+const MAX_TIMER_TIMEOUT_MS = 2_147_483_647;
 
 function monotonicNow(): number {
 	return typeof performance === "undefined" ? Date.now() : performance.now();
@@ -164,6 +206,7 @@ function createRealtimeCollectionOptions<
 	// reloaded sync run subscribes with it rather than with the initial query,
 	// which has often expired by then.
 	let latestQuery = initialQuery;
+	let collectionOwner: object | undefined;
 	let activeSubscription: RawLiveQuerySubscription<Row> | undefined;
 	let inactiveSubscriptionFailure: { readonly error: unknown } | undefined;
 	const terminalSubscriptionFailures = new WeakMap<
@@ -197,7 +240,60 @@ function createRealtimeCollectionOptions<
 			};
 			syncStartWaiters.add(waiter);
 		});
+	let initialSnapshotResult: InitialSnapshotResult | undefined;
+	const initialSnapshotWaiters = new Set<
+		(result: InitialSnapshotResult) => void
+	>();
+	const settleInitialSnapshot = (result: InitialSnapshotResult) => {
+		if (initialSnapshotResult !== undefined) return;
+		initialSnapshotResult = result;
+		for (const waiter of initialSnapshotWaiters) waiter(result);
+		initialSnapshotWaiters.clear();
+	};
+	const resetInitialSnapshot = () => {
+		if (initialSnapshotWaiters.size > 0) {
+			settleInitialSnapshot({
+				error: new Error("Realtime collection was cleaned up"),
+			});
+		}
+		initialSnapshotResult = undefined;
+	};
 	const utils: RealtimeCollectionUtils = Object.freeze({
+		awaitInitialSnapshot: async (timeout) => {
+			if (
+				timeout !== undefined &&
+				(!Number.isFinite(timeout) ||
+					timeout < 0 ||
+					timeout > MAX_TIMER_TIMEOUT_MS)
+			) {
+				throw new RangeError(
+					`Live-query snapshot timeout must be between 0 and ${MAX_TIMER_TIMEOUT_MS} milliseconds`,
+				);
+			}
+			if (initialSnapshotResult === true) return;
+			if (initialSnapshotResult !== undefined) {
+				throw initialSnapshotResult.error;
+			}
+			return new Promise<void>((resolve, reject) => {
+				const waiter = (result: InitialSnapshotResult) => {
+					clearTimeout(timer);
+					if (result === true) resolve();
+					else reject(result.error);
+				};
+				const timer =
+					timeout === undefined
+						? undefined
+						: setTimeout(() => {
+								initialSnapshotWaiters.delete(waiter);
+								reject(
+									new Error(
+										"Timed out waiting for the live-query snapshot",
+									),
+								);
+							}, timeout);
+				initialSnapshotWaiters.add(waiter);
+			});
+		},
 		awaitTxId: async (txid, timeout) => {
 			const normalizedTxid = validateTransactionWait(txid, timeout);
 			let subscription = activeSubscription;
@@ -239,6 +335,7 @@ function createRealtimeCollectionOptions<
 		sync: {
 			rowUpdateMode: "full",
 			sync: ({
+				collection,
 				begin,
 				write,
 				commit,
@@ -247,6 +344,14 @@ function createRealtimeCollectionOptions<
 				reportHealthy,
 				fail,
 			}) => {
+				// A wrapper can supply its own construction claim. Keep a
+				// concrete Realtime source tied to its first Collection.
+				if (collectionOwner && collectionOwner !== collection) {
+					throw new Error(
+						"Realtime options can create only one collection",
+					);
+				}
+				collectionOwner = collection;
 				let cleaned = false;
 				let stopped = false;
 				let ready = false;
@@ -265,10 +370,12 @@ function createRealtimeCollectionOptions<
 					const failure = { error };
 					inactiveSubscriptionFailure = failure;
 					settleSyncStartWaiters(failure);
+					settleInitialSnapshot(failure);
 					fail(error);
 					return () => {
 						if (inactiveSubscriptionFailure === failure) {
 							inactiveSubscriptionFailure = undefined;
+							resetInitialSnapshot();
 						}
 					};
 				}
@@ -301,6 +408,7 @@ function createRealtimeCollectionOptions<
 					if (activeSubscription === subscription) {
 						inactiveSubscriptionFailure = terminalFailure;
 					}
+					settleInitialSnapshot(terminalFailure);
 					detach();
 					rowIds.clear();
 					keys.clear();
@@ -318,16 +426,16 @@ function createRealtimeCollectionOptions<
 					receipt: SyncAppliedReceipt,
 					onApplied?: () => void,
 				) => {
-					if (receipt === true) {
-						onApplied?.();
-					} else {
-						void receipt.then(
-							() => {
-								if (!cleaned && !stopped) onApplied?.();
-							},
-							(error) => stop(error),
+					// A synchronous commit can notify subscribers that reload or
+					// clean up the Collection before commit returns.
+					const onCurrentRunApplied = () => {
+						if (!cleaned && !stopped) onApplied?.();
+					};
+					if (receipt === true) onCurrentRunApplied();
+					else
+						void receipt.then(onCurrentRunApplied, (error) =>
+							stop(error),
 						);
-					}
 				};
 				const reportRecovered = () => {
 					if (!interrupted) return;
@@ -340,6 +448,7 @@ function createRealtimeCollectionOptions<
 				const markSynchronized = () => {
 					if (!ready) {
 						ready = true;
+						settleInitialSnapshot(true);
 						markReady();
 					}
 					if (interrupted && !interrupted.reported) {
@@ -447,6 +556,7 @@ function createRealtimeCollectionOptions<
 
 				return () => {
 					cleaned = true;
+					resetInitialSnapshot();
 					if (
 						inactiveSubscriptionFailure ===
 						terminalSubscriptionFailures.get(subscription)

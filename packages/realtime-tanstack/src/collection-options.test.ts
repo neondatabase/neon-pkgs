@@ -387,6 +387,9 @@ describe("Realtime TanStack DB collection", () => {
 			.latest()
 			.reset([{ rowId: "a", row: { id: 1, title: "authoritative" } }]);
 		client.latest().state({ status: "connecting", error: undefined });
+		await expect(
+			collection.utils.awaitInitialSnapshot(0),
+		).resolves.toBeUndefined();
 
 		finishPersistence();
 		await Promise.all([mutation.when("settled"), reload]);
@@ -613,12 +616,16 @@ describe("Realtime TanStack DB collection", () => {
 		expect(browserCollection.get(1)).toMatchObject({ title: "server" });
 		expect(client.subscriptions).toHaveLength(0);
 
+		const snapshot = browserCollection.utils.awaitInitialSnapshot(100);
 		const preload = browserCollection.preload();
 		client.latest().reset([
 			{ rowId: "a", row: { id: 1, title: "authoritative" } },
 			{ rowId: "b", row: { id: 2, title: "new" } },
 		]);
-		await preload;
+		await Promise.all([preload, snapshot]);
+		await expect(
+			serverCollection.utils.awaitInitialSnapshot(0),
+		).rejects.toThrow("Timed out waiting for the live-query snapshot");
 
 		expect(browserCollection.get(1)).toMatchObject({
 			title: "authoritative",
@@ -689,6 +696,162 @@ describe("Realtime TanStack DB collection", () => {
 		await restarted;
 		expect(collection.get(1)).toMatchObject({ title: "two" });
 		expect(refreshQuery).toHaveBeenCalledOnce();
+	});
+
+	describe("awaitInitialSnapshot", () => {
+		it("rejects a second direct collection from the same concrete options", () => {
+			const options = realtimeCollectionOptions({
+				client: new TestClient<MessageRow>(),
+				query: query("query-1"),
+				getKey: (message) => message.id,
+			});
+			const collection = createCollection(options);
+			cleanups.push(() => collection.cleanup());
+
+			expect(() => createCollection(options)).toThrow(
+				"Realtime options can create only one collection",
+			);
+		});
+
+		it("waits for an empty server snapshot to become visible after cached readiness", async () => {
+			const client = new TestClient<MessageRow>();
+			const options = realtimeCollectionOptions({
+				client,
+				query: query("query-1"),
+				getKey: (message) => message.id,
+			});
+			let apply!: () => void;
+			const applied = new Promise<void>((resolve) => {
+				apply = resolve;
+			});
+			const collection = createCollection(options);
+			cleanups.push(() => collection.cleanup());
+			const markReady = vi.fn();
+			const begin = vi.fn();
+			const firstSnapshot = vi.fn();
+			const waiting = options.utils
+				.awaitInitialSnapshot()
+				.then(firstSnapshot);
+			expect(client.subscriptions).toHaveLength(0);
+
+			const stop = options.sync.sync({
+				collection,
+				begin,
+				write: vi.fn(),
+				commit: () => applied,
+				markReady,
+				reportError: vi.fn(),
+				reportHealthy: vi.fn(),
+				fail: vi.fn(),
+				truncate: vi.fn(),
+				invalidateLoadedSubsets: vi.fn(),
+			});
+			try {
+				// A persistence wrapper can report ready while the source starts.
+				markReady();
+				client.latest().reset([]);
+				await Promise.resolve();
+				expect(begin).toHaveBeenCalledWith({ snapshot: true });
+				expect(firstSnapshot).not.toHaveBeenCalled();
+
+				apply();
+				await waiting;
+				expect(firstSnapshot).toHaveBeenCalledOnce();
+				await expect(
+					options.utils.awaitInitialSnapshot(0),
+				).resolves.toBeUndefined();
+			} finally {
+				if (typeof stop === "function") stop();
+			}
+		});
+
+		it("rejects when a run fails before its first snapshot", async () => {
+			const failure = liveError("ACCESS_DENIED");
+			const client = new TestClient<MessageRow>({
+				status: "error",
+				error: failure,
+			});
+			const collection = createTestCollection(client);
+			const waiting = collection.utils
+				.awaitInitialSnapshot()
+				.catch(identity);
+
+			await expect(collection.preload()).rejects.toBe(failure);
+			expect(await waiting).toBe(failure);
+			await expect(collection.utils.awaitInitialSnapshot()).rejects.toBe(
+				failure,
+			);
+		});
+
+		it("does not let a reentrant reload inherit the retired snapshot receipt", async () => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+			let reload: Promise<void> | undefined;
+			const changes = collection.subscribeChanges(() => {
+				reload ??= collection.reload();
+			});
+			try {
+				const retired = collection.utils
+					.awaitInitialSnapshot()
+					.catch(identity);
+				client
+					.latest()
+					.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+				expect(client.subscriptions).toHaveLength(2);
+				await expect(retired).resolves.toMatchObject({
+					message: "Realtime collection was cleaned up",
+				});
+				await expect(
+					collection.utils.awaitInitialSnapshot(0),
+				).rejects.toThrow(
+					"Timed out waiting for the live-query snapshot",
+				);
+				const current = collection.utils.awaitInitialSnapshot(100);
+				client.latest().reset([]);
+				await current;
+				await reload;
+				expect(collection.size).toBe(0);
+			} finally {
+				changes.unsubscribe();
+			}
+		});
+
+		it("rejects timeouts that cannot be represented by a JavaScript timer", async () => {
+			const collection = createTestCollection(
+				new TestClient<MessageRow>(),
+			);
+			await expect(
+				collection.utils.awaitInitialSnapshot(2_147_483_648),
+			).rejects.toThrow(
+				"Live-query snapshot timeout must be between 0 and 2147483647 milliseconds",
+			);
+		});
+
+		it("times out before sync starts and waits again after cleanup", async () => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+			await expect(
+				collection.utils.awaitInitialSnapshot(0),
+			).rejects.toThrow("Timed out waiting for the live-query snapshot");
+			expect(client.subscriptions).toHaveLength(0);
+
+			const preload = collection.preload().catch(identity);
+			const waiting = expect(
+				collection.utils.awaitInitialSnapshot(),
+			).rejects.toThrow("Realtime collection was cleaned up");
+			await collection.cleanup();
+			await waiting;
+			await preload;
+
+			const next = collection.utils.awaitInitialSnapshot();
+			const ready = collection.preload();
+			client
+				.latest()
+				.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+			await next;
+			await ready;
+			expect(collection.has(1)).toBe(true);
+		});
 	});
 
 	describe("awaitTxId before the collection starts syncing", () => {
