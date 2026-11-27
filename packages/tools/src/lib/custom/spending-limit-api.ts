@@ -4,13 +4,13 @@ import * as z from "zod";
 // Public int64 amounts must stay exact when represented as JavaScript numbers.
 const cents = z.int().min(1);
 
-export const spendCapInput = z.strictObject({
+export const spendingLimitInput = z.strictObject({
 	org_id: z.string().min(1).describe("Org id."),
 });
 
-export const setSpendCapInput = spendCapInput.extend({
+export const setSpendingLimitInput = spendingLimitInput.extend({
 	spending_limit_cents: cents.describe("USD cents: 100 = $1."),
-	spend_cap_enabled: z
+	spending_limit_enabled: z
 		.boolean()
 		.optional()
 		.describe(
@@ -18,9 +18,9 @@ export const setSpendCapInput = spendCapInput.extend({
 		),
 });
 
-export const spendCapResponse = z.looseObject({
+export const spendingLimitResponse = z.looseObject({
 	spending_limit_cents: cents.nullable(),
-	spend_cap_enabled: z.boolean().nullish(),
+	spending_limit_enabled: z.boolean().nullish(),
 	current_usage_cents: z.int().min(0).nullish(),
 	usage_observed_at: z.iso.datetime({ offset: true }).nullish(),
 	invoice_period_id: z.string().nullish(),
@@ -34,12 +34,15 @@ export const spendCapResponse = z.looseObject({
 });
 
 /** Typed adapter for the additive API fields not yet in the SDK's generated spec. */
-export const spendCapApi = (neon: NeonClient<true>, signal?: AbortSignal) => {
+export const spendingLimitApi = (
+	neon: NeonClient<true>,
+	signal?: AbortSignal,
+) => {
 	const path = (orgId: string) =>
 		`/organizations/${encodeURIComponent(orgId)}/billing/spending_limit`;
 	return {
 		async disable(orgId: string) {
-			return spendCapResponse.parse(
+			return spendingLimitResponse.parse(
 				await neon.request(
 					{ method: "POST", path: `${path(orgId)}/disable` },
 					{ signal },
@@ -47,16 +50,16 @@ export const spendCapApi = (neon: NeonClient<true>, signal?: AbortSignal) => {
 			);
 		},
 		async get(orgId: string) {
-			return spendCapResponse.parse(
+			return spendingLimitResponse.parse(
 				await neon.request(
 					{ method: "GET", path: path(orgId) },
 					{ signal },
 				),
 			);
 		},
-		async set(input: z.infer<typeof setSpendCapInput>) {
+		async set(input: z.infer<typeof setSpendingLimitInput>) {
 			const { org_id, ...body } = input;
-			return spendCapResponse.parse(
+			return spendingLimitResponse.parse(
 				await neon.request(
 					{ method: "PUT", path: path(org_id), body },
 					{ signal },

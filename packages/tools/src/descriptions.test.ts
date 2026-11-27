@@ -311,7 +311,7 @@ describe("mcp-tool-names.json", () => {
 				`organizations.spendingLimit.${action}`,
 			);
 			expect(mcpToolNames).not.toHaveProperty(
-				`${action}_organization_spend_cap`,
+				`${action}_organization_unknown_setting`,
 			);
 		}
 	});

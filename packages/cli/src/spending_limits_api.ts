@@ -1,10 +1,10 @@
 import { fromSdkError, getNeonClient } from "./neon_client.js";
 import type { OrgScopeProps } from "./types.js";
 
-// Keep this narrow adapter until the SDK's spendingLimit namespace includes the opt-in.
+// Keep this narrow adapter until the SDK's spendingLimit namespace includes the suspension setting.
 export type SpendingLimitResponse = {
 	spending_limit_cents: number | null;
-	spend_cap_enabled?: boolean;
+	spending_limit_enabled?: boolean;
 	current_usage_cents?: number | null;
 	usage_observed_at?: string | null;
 	invoice_period_id?: string;
@@ -18,7 +18,7 @@ export type SpendingLimitResponse = {
 
 type SpendingLimitUpdate = {
 	spending_limit_cents: number;
-	spend_cap_enabled?: boolean;
+	spending_limit_enabled?: boolean;
 };
 
 const validateResponse = (data: unknown): SpendingLimitResponse => {
@@ -52,10 +52,12 @@ const validateResponse = (data: unknown): SpendingLimitResponse => {
 		throw new Error("The API response is missing spending_limit_cents.");
 	}
 	if (
-		"spend_cap_enabled" in data &&
-		typeof data.spend_cap_enabled !== "boolean"
+		"spending_limit_enabled" in data &&
+		typeof data.spending_limit_enabled !== "boolean"
 	) {
-		throw new Error("The API returned an unsupported spend_cap_enabled.");
+		throw new Error(
+			"The API returned an unsupported spending_limit_enabled.",
+		);
 	}
 	for (const field of [
 		"usage_observed_at",
@@ -101,15 +103,15 @@ const request = async (
 	return validateResponse(data);
 };
 
-export const getOrganizationSpendCap = (
+export const getOrganizationSpendingLimit = (
 	props: OrgScopeProps,
 ): Promise<SpendingLimitResponse> => request(props, "GET");
 
-export const disableOrganizationSpendCap = (
+export const disableOrganizationSpendingLimit = (
 	props: OrgScopeProps,
 ): Promise<SpendingLimitResponse> => request(props, "POST");
 
-export const setOrganizationSpendCap = (
+export const setOrganizationSpendingLimit = (
 	props: OrgScopeProps,
 	body: SpendingLimitUpdate,
 ): Promise<SpendingLimitResponse> => {

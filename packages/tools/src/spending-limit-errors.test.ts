@@ -19,7 +19,7 @@ describe("billing denials through the shared MCP adapter", () => {
 				async execute() {
 					throw Object.assign(
 						new NeonDbError("Compute is restricted"),
-						{ code: "57P03", detail: "SPEND_CAP_EXCEEDED" },
+						{ code: "57P03", detail: "SPENDING_LIMIT_EXCEEDED" },
 					);
 				},
 			},
@@ -37,7 +37,7 @@ describe("billing denials through the shared MCP adapter", () => {
 			expect(result.structuredContent).toMatchObject({
 				error: {
 					code: "57P03",
-					detail: "SPEND_CAP_EXCEEDED",
+					detail: "SPENDING_LIMIT_EXCEEDED",
 					action: expect.stringContaining("Organization Billing"),
 				},
 			});
@@ -48,7 +48,7 @@ describe("billing denials through the shared MCP adapter", () => {
 		}
 	});
 	test.each([
-		"SPEND_CAP_EXCEEDED",
+		"SPENDING_LIMIT_EXCEEDED",
 		"INSUFFICIENT_ORG_PERMISSIONS",
 	])("preserves %s and relevant admin guidance without retry", async (code) => {
 		let requests = 0;

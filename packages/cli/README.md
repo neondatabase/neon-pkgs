@@ -1658,7 +1658,7 @@ planes have not acknowledged the current restriction or clear. `applied` confirm
 acknowledgements, not that every running workload has finished stopping or
 resuming. Raising or disabling the spending limit clears only spending-limit restrictions; other
 restrictions may remain. Use `get` to check later status. Existing commands that
-are blocked by the spending limit exit unsuccessfully with `SPEND_CAP_EXCEEDED` and Organization
+are blocked by the spending limit exit unsuccessfully with `SPENDING_LIMIT_EXCEEDED` and Organization
 Billing guidance, without retrying the denial.
 
 ## Commands

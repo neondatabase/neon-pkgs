@@ -10,7 +10,7 @@ import type yargs from "yargs";
 
 import { readContextFile } from "../context.js";
 import { log } from "../log.js";
-import type { SpendingLimitResponse } from "../spend_caps_api.js";
+import type { SpendingLimitResponse } from "../spending_limits_api.js";
 import type { CommonProps } from "../types.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
@@ -34,7 +34,7 @@ const SPENDING_LIMIT_TABLE_FIELDS = [
 	"enforcement_note",
 ] as const;
 
-export const SPEND_CAP_ACKNOWLEDGEMENT_NOTICE =
+export const SPENDING_LIMIT_ACKNOWLEDGEMENT_NOTICE =
 	"Restrictions and clears are acknowledged asynchronously; pending means control planes have not yet acknowledged the current decision. Applied does not confirm every workload has finished stopping or resuming.";
 
 const MEMBER_ROLES = [
@@ -252,10 +252,12 @@ export const builder = (argv: yargs.Argv) => {
 						"Disable suspension while retaining the amount and email notifications. Admin only",
 						guarded,
 						async (args) => {
-							const { disableSpendCap } = await import(
-								"./spend_cap.js"
+							const { disableSpendingLimit } = await import(
+								"./spending_limit.js"
 							);
-							await disableSpendCap(args as unknown as OrgProps);
+							await disableSpendingLimit(
+								args as unknown as OrgProps,
+							);
 						},
 					)
 					.command(
@@ -444,17 +446,17 @@ const writeInvitations = (
 };
 
 const getSpendingLimit = async (props: OrgProps) => {
-	const { getSpendCap } = await import("./spend_cap.js");
-	await getSpendCap(props);
+	const { getSpendingLimit: get } = await import("./spending_limit.js");
+	await get(props);
 };
 
 const setSpendingLimit = async (props: SetSpendingLimitProps) => {
 	if (props.amount !== undefined || props.suspendOnLimit !== undefined) {
-		const { setSpendCap } = await import("./spend_cap.js");
-		await setSpendCap({
+		const { setSpendingLimit: set } = await import("./spending_limit.js");
+		await set({
 			...props,
 			amount: props.amount ?? props.usd ?? "",
-			spendCapEnabled: props.suspendOnLimit,
+			spendingLimitEnabled: props.suspendOnLimit,
 		});
 		return;
 	}
@@ -498,7 +500,7 @@ export const writeSpendingLimit = (
 			enforcement_note:
 				limit.enforcement_status === undefined
 					? undefined
-					: SPEND_CAP_ACKNOWLEDGEMENT_NOTICE,
+					: SPENDING_LIMIT_ACKNOWLEDGEMENT_NOTICE,
 		},
 		{
 			fields: SPENDING_LIMIT_TABLE_FIELDS,

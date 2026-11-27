@@ -1,26 +1,26 @@
 import {
-	disableOrganizationSpendCap,
-	getOrganizationSpendCap,
+	disableOrganizationSpendingLimit,
+	getOrganizationSpendingLimit,
 	type SpendingLimitResponse,
-	setOrganizationSpendCap,
-} from "../spend_caps_api.js";
+	setOrganizationSpendingLimit,
+} from "../spending_limits_api.js";
 import type { CommonProps } from "../types.js";
 import { fillSingleOrg } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 import {
 	formatUsd,
 	parseUsdCents,
-	SPEND_CAP_ACKNOWLEDGEMENT_NOTICE,
+	SPENDING_LIMIT_ACKNOWLEDGEMENT_NOTICE,
 	writeSpendingLimit,
 } from "./orgs.js";
 
-type SpendCapProps = CommonProps & { orgId?: string };
-const resolveOrg = (props: SpendCapProps) =>
+type SpendingLimitProps = CommonProps & { orgId?: string };
+const resolveOrg = (props: SpendingLimitProps) =>
 	fillSingleOrg({ ...props, orgId: props.orgId ?? "" });
 
-type SetSpendCapProps = SpendCapProps & {
+type SetSpendingLimitProps = SpendingLimitProps & {
 	amount: string;
-	spendCapEnabled?: boolean;
+	spendingLimitEnabled?: boolean;
 };
 
 const formatCents = (cents: number | null | undefined) => {
@@ -28,14 +28,14 @@ const formatCents = (cents: number | null | undefined) => {
 	return formatUsd(cents);
 };
 
-const writeSpendCap = (
-	props: SpendCapProps,
+const writeSpendingLimitDetails = (
+	props: SpendingLimitProps,
 	data: SpendingLimitResponse,
 	saved = false,
 ) => {
 	const notice = [
 		...(saved ? ["Configuration accepted."] : []),
-		SPEND_CAP_ACKNOWLEDGEMENT_NOTICE,
+		SPENDING_LIMIT_ACKNOWLEDGEMENT_NOTICE,
 		"Usage detection can lag by 1-2 hours; this is not a guaranteed maximum bill. Storage charges continue.",
 		"Only the current open invoice counts. Billing resets on the first UTC calendar day of each month.",
 	].join(" ");
@@ -52,9 +52,9 @@ const writeSpendCap = (
 		],
 		[
 			"Service suspension enabled",
-			data.spend_cap_enabled === undefined
+			data.spending_limit_enabled === undefined
 				? "Unavailable / unsupported"
-				: String(data.spend_cap_enabled),
+				: String(data.spending_limit_enabled),
 		],
 		["Current invoice usage", formatCents(data.current_usage_cents)],
 		["Usage observed at", data.usage_observed_at ?? "Unavailable"],
@@ -85,38 +85,42 @@ const writeSpendCap = (
 	writer(props).text(notice + "\n");
 };
 
-export const getSpendCap = async (input: SpendCapProps) => {
+export const getSpendingLimit = async (input: SpendingLimitProps) => {
 	const props = await resolveOrg(input);
-	const data = await getOrganizationSpendCap(props);
+	const data = await getOrganizationSpendingLimit(props);
 	if (
 		props.output === "table" &&
-		(data.spend_cap_enabled !== undefined ||
+		(data.spending_limit_enabled !== undefined ||
 			data.current_usage_cents !== undefined)
 	) {
-		writeSpendCap(props, data);
+		writeSpendingLimitDetails(props, data);
 	} else {
 		writeSpendingLimit(props, props.orgId, data);
 	}
 };
 
-export const setSpendCap = async (props: SetSpendCapProps) => {
+export const setSpendingLimit = async (props: SetSpendingLimitProps) => {
 	const body = {
 		spending_limit_cents: parseUsdCents(
 			props.amount,
 			"org spending-limit set",
 		),
-		...(props.spendCapEnabled !== undefined
-			? { spend_cap_enabled: props.spendCapEnabled }
+		...(props.spendingLimitEnabled !== undefined
+			? { spending_limit_enabled: props.spendingLimitEnabled }
 			: {}),
 	};
-	writeSpendCap(
+	writeSpendingLimitDetails(
 		props,
-		await setOrganizationSpendCap(await resolveOrg(props), body),
+		await setOrganizationSpendingLimit(await resolveOrg(props), body),
 		true,
 	);
 };
 
-export const disableSpendCap = async (input: SpendCapProps) => {
+export const disableSpendingLimit = async (input: SpendingLimitProps) => {
 	const props = await resolveOrg(input);
-	writeSpendCap(props, await disableOrganizationSpendCap(props), true);
+	writeSpendingLimitDetails(
+		props,
+		await disableOrganizationSpendingLimit(props),
+		true,
+	);
 };

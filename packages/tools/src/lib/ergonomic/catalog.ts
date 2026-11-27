@@ -14,10 +14,10 @@ import { fetchResourceTool } from "../custom/fetch.js";
 import { userOrganizationsTool } from "../custom/organizations.js";
 import { searchResourcesTool } from "../custom/resources.js";
 import {
-	disableSpendCapTool,
-	getSpendCapTool,
-	setSpendCapTool,
-} from "../custom/spend-cap.js";
+	disableSpendingLimitTool,
+	getSpendingLimitTool,
+	setSpendingLimitTool,
+} from "../custom/spending-limit.js";
 import { describeBranchTool } from "../custom/sql/describe-branch.js";
 import { inspectDatabaseTool } from "../custom/sql/inspect/inspect.js";
 import {
@@ -2319,9 +2319,9 @@ export const toolFactories = {
 					{ signal },
 				),
 		}),
-	"organizations.spendingLimit.get": getSpendCapTool,
-	"organizations.spendingLimit.set": setSpendCapTool,
-	"organizations.spendingLimit.disable": disableSpendCapTool,
+	"organizations.spendingLimit.get": getSpendingLimitTool,
+	"organizations.spendingLimit.set": setSpendingLimitTool,
+	"organizations.spendingLimit.disable": disableSpendingLimitTool,
 	"organizations.spendingLimit.delete": (options) =>
 		fromGenerated(options, {
 			id: "organizations.spendingLimit.delete",

@@ -4,7 +4,7 @@ import { createNeonTools } from "./index.js";
 
 const fullStatus = {
 	spending_limit_cents: 10000,
-	spend_cap_enabled: true,
+	spending_limit_enabled: true,
 	current_usage_cents: 10042,
 	usage_observed_at: "2026-11-25T09:00:00Z",
 	invoice_period_id: "current-open-invoice",
@@ -67,7 +67,7 @@ describe("organization spending limits", () => {
 		const { data } = await tools["organizations.spendingLimit.get"].execute(
 			{ org_id: "org-1" },
 		);
-		expect(data).not.toHaveProperty("spend_cap_enabled");
+		expect(data).not.toHaveProperty("spending_limit_enabled");
 		expect(data).not.toHaveProperty("status");
 		expect(data).not.toHaveProperty("enforcement_status");
 		expect(data).not.toHaveProperty("current_usage_cents");
@@ -89,7 +89,7 @@ describe("organization spending limits", () => {
 			{
 				org_id: "org-1",
 				spending_limit_cents: 10000,
-				spend_cap_enabled: true,
+				spending_limit_enabled: true,
 			},
 		);
 		expect(data).toMatchObject(additiveStatus);
@@ -119,7 +119,9 @@ describe("organization spending limits", () => {
 		const input = {
 			org_id: "org-1",
 			spending_limit_cents: 10000,
-			...(enabled === undefined ? {} : { spend_cap_enabled: enabled }),
+			...(enabled === undefined
+				? {}
+				: { spending_limit_enabled: enabled }),
 		};
 		const { data } =
 			await tools["organizations.spendingLimit.set"].execute(input);
@@ -213,7 +215,7 @@ describe("organization spending limits", () => {
 		expect(requests.map((r) => r.method)).toEqual(["POST"]);
 		expect(await requests[0].text()).toBe("");
 		expect(data.spending_limit_cents).toBeNull();
-		expect(data).not.toHaveProperty("spend_cap_enabled");
+		expect(data).not.toHaveProperty("spending_limit_enabled");
 	});
 
 	test.each([
@@ -222,10 +224,10 @@ describe("organization spending limits", () => {
 	])("disable preserves a concurrent threshold change to %s", async (amount) => {
 		let current: {
 			spending_limit_cents: number | null;
-			spend_cap_enabled: boolean;
+			spending_limit_enabled: boolean;
 		} = {
 			spending_limit_cents: 10000,
-			spend_cap_enabled: true,
+			spending_limit_enabled: true,
 		};
 		const requests: Request[] = [];
 		const tools = createNeonTools({
@@ -238,7 +240,7 @@ describe("organization spending limits", () => {
 				if (requests.length === 1)
 					current.spending_limit_cents = amount;
 				if (request.method === "POST")
-					current.spend_cap_enabled = false;
+					current.spending_limit_enabled = false;
 				if (request.method === "PUT")
 					current = { ...current, ...(await request.json()) };
 				return new Response(
@@ -256,7 +258,7 @@ describe("organization spending limits", () => {
 		].execute({ org_id: "org-1" });
 		expect(current).toEqual({
 			spending_limit_cents: amount,
-			spend_cap_enabled: false,
+			spending_limit_enabled: false,
 		});
 		expect(data.spending_limit_cents).toBe(amount);
 		expect(requests.map((r) => r.method)).toEqual(["POST"]);
@@ -302,7 +304,7 @@ describe("organization spending limits", () => {
 	});
 
 	test.each([
-		"SPEND_CAP_EXCEEDED",
+		"SPENDING_LIMIT_EXCEEDED",
 		"INSUFFICIENT_ORG_PERMISSIONS",
 	])("preserves 403 %s without retrying", async (code) => {
 		const { tools, requests } = setup(

@@ -6,21 +6,24 @@ import {
 	type ToolClientOptions,
 } from "../ergonomic/bind.js";
 import {
-	setSpendCapInput,
-	spendCapApi,
-	spendCapInput,
-	spendCapResponse,
-} from "./spend-cap-api.js";
+	setSpendingLimitInput,
+	spendingLimitApi,
+	spendingLimitInput,
+	spendingLimitResponse,
+} from "./spending-limit-api.js";
 
 const notices = [
-	"For new limits, omitted spend_cap_enabled defaults to suspension when spending limits are available for the organization. For existing limits, omission preserves saved enforcement, including notifications-only limits. Explicit false creates notifications only and does not require observed usage; a new enabled limit requires observed current-invoice usage.",
+	"For new limits, omitted spending_limit_enabled defaults to suspension when spending limits are available for the organization. For existing limits, omission preserves saved enforcement, including notifications-only limits. Explicit false creates notifications only and does not require observed usage; a new enabled limit requires observed current-invoice usage.",
 	"Usage detection can lag by 1-2 hours; this is not a guaranteed maximum bill. Storage charges continue during suspension.",
 	"Billing resets on the first UTC calendar day of each month. Only the current open invoice counts, including when plan changes create multiple invoices in one month.",
 	"Missing status fields are unavailable or unsupported; they do not prove enforcement is off or applied.",
 	"Enforcement converges asynchronously. Applied means control planes acknowledged the decision, not that all workloads finished stopping or resuming. Other restrictions can remain.",
 ];
 
-const result = (data: z.infer<typeof spendCapResponse>, updated = false) => ({
+const result = (
+	data: z.infer<typeof spendingLimitResponse>,
+	updated = false,
+) => ({
 	...data,
 	notice: (updated
 		? [
@@ -47,7 +50,7 @@ const annotations = {
 	openWorldHint: true,
 };
 
-export const getSpendCapTool = (options: ToolClientOptions) =>
+export const getSpendingLimitTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
@@ -55,8 +58,8 @@ export const getSpendCapTool = (options: ToolClientOptions) =>
 			id: publishedId("organizations.spendingLimit.get"),
 			title: "Get spending limit",
 			description: "Gets spending limit and usage.",
-			inputSchema: spendCapInput,
-			outputSchema: spendCapResponse,
+			inputSchema: spendingLimitInput,
+			outputSchema: spendingLimitResponse,
 			annotations: {
 				readOnlyHint: true,
 				destructiveHint: false,
@@ -67,10 +70,10 @@ export const getSpendCapTool = (options: ToolClientOptions) =>
 			metadata,
 		},
 		async (neon, { org_id }, signal) =>
-			result(await spendCapApi(neon, signal).get(org_id)),
+			result(await spendingLimitApi(neon, signal).get(org_id)),
 	);
 
-export const setSpendCapTool = (options: ToolClientOptions) =>
+export const setSpendingLimitTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
@@ -80,17 +83,17 @@ export const setSpendCapTool = (options: ToolClientOptions) =>
 			description:
 				toolDescriptions["organizations.spendingLimit.set"] ??
 				"Sets spending limit; admin only.",
-			inputSchema: setSpendCapInput,
-			outputSchema: spendCapResponse,
+			inputSchema: setSpendingLimitInput,
+			outputSchema: spendingLimitResponse,
 			annotations,
 			requiresApproval: true,
 			metadata: { ...metadata, method: "PUT", readOnlySafe: false },
 		},
 		async (neon, input, signal) =>
-			result(await spendCapApi(neon, signal).set(input), true),
+			result(await spendingLimitApi(neon, signal).set(input), true),
 	);
 
-export const disableSpendCapTool = (options: ToolClientOptions) =>
+export const disableSpendingLimitTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
@@ -99,8 +102,8 @@ export const disableSpendCapTool = (options: ToolClientOptions) =>
 			title: "Disable spending limit",
 			description:
 				"Disables suspension; keeps limit and emails. Admin only.",
-			inputSchema: spendCapInput,
-			outputSchema: spendCapResponse,
+			inputSchema: spendingLimitInput,
+			outputSchema: spendingLimitResponse,
 			annotations,
 			requiresApproval: true,
 			metadata: {
@@ -111,6 +114,6 @@ export const disableSpendCapTool = (options: ToolClientOptions) =>
 			},
 		},
 		async (neon, { org_id }, signal) =>
-			result(await spendCapApi(neon, signal).disable(org_id), true),
+			result(await spendingLimitApi(neon, signal).disable(org_id), true),
 		{ retries: 0 },
 	);

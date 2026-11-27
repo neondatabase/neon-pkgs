@@ -169,10 +169,10 @@ export function codeFromBody(body: unknown): string | undefined {
 }
 
 /** Actionable billing denials keep their backend code and message. */
-export function spendCapErrorMessage(body: unknown): string | undefined {
+export function spendingLimitErrorMessage(body: unknown): string | undefined {
 	const code = codeFromBody(body);
 	const message = messageFromBody(body);
-	if (code === "SPEND_CAP_EXCEEDED") {
+	if (code === "SPENDING_LIMIT_EXCEEDED") {
 		return `${code}: ${message ?? "Organization spending limit reached."} Ask an Organization Admin to increase or disable the spending limit in Organization Billing. Other restrictions may still apply.`;
 	}
 	if (code === "INSUFFICIENT_ORG_PERMISSIONS") {
