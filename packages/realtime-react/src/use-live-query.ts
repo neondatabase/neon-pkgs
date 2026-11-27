@@ -32,8 +32,9 @@ export function useLiveQuery<Row>(
 	);
 	useEffect(() => {
 		store.setRefreshCallback(options.refreshQuery);
-		return () => store.setRefreshCallback(undefined);
 	}, [store, options.refreshQuery]);
+	// Clear the old callback only when the store itself is retired.
+	useEffect(() => () => store.setRefreshCallback(undefined), [store]);
 	const snapshot = useSyncExternalStore(
 		store.subscribe,
 		store.getHookSnapshot,
