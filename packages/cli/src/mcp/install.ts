@@ -15,15 +15,25 @@ import { getCliName } from "../utils/cli_name.js";
 export const NEON_MCP_URL = "https://mcp.neon.tech/mcp";
 export const NEON_MCP_NAME = "Neon";
 
+/**
+ * Mirrors `SCOPE_CATEGORIES` in mcp-server-neon (`mcp/utils/grant-context.ts`), in the same order.
+ * The server silently drops a category it does not know, so the CLI validates against this list
+ * instead: a category added there has to be added here.
+ */
 export const NEON_MCP_CATEGORIES = [
 	"projects",
 	"branches",
+	"endpoints",
+	"snapshots",
 	"schema",
 	"querying",
 	"neon_auth",
 	"data_api",
 	"observability",
 	"docs",
+	"functions",
+	"storage",
+	"realtime",
 ] as const;
 
 export type NeonMcpCategory = (typeof NEON_MCP_CATEGORIES)[number];
