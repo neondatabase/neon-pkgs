@@ -53,7 +53,7 @@ Apps and starters that work with these packages live in [`neondatabase/examples`
 | `@neon/neon-js` | Unified client combining Neon Auth and the Neon Data API, with automatic token injection into database queries. |
 | `@neon/oauth` | OAuth helpers for apps that use Neon Auth as an OAuth provider: PKCE sign-in, access-token verification, and MCP server protection (with Hono, Express, Next.js and `node:http` adapters). |
 
-`neon-new` and `vite-plugin-neon-new` are **deprecated**. Use Claimable Neon in the Neon CLI: `npx neon@latest claim create`. The old alias packages (`get-db`, `neondb`, `vite-plugin-db`, `@neondatabase/vite-plugin-postgres`) still re-export them.
+`neon-new` and `vite-plugin-neon-new` are **deprecated**. Use [Claimable Neon](https://neon.com/docs/reference/claimable-neon) in the Neon CLI: `npx neon@latest claim create`. The old alias packages (`get-db`, `neondb`, `vite-plugin-db`, `@neondatabase/vite-plugin-postgres`) still re-export them.
 
 `neonctl` is not deprecated: it is a supported compatibility package that installs and runs `neon`.
 
