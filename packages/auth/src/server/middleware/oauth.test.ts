@@ -216,23 +216,21 @@ describe("exchangeOAuthToken", () => {
 		expect(result).toBe(null);
 	});
 
-	test("returns null when upstream response is not ok", async () => {
-		const mockUpstreamResponse = new Response("Unauthorized", {
-			status: 401,
-		});
-		const mockProcessedResponse = new Response("Unauthorized", {
-			status: 401,
-		});
-
+	test.each([
+		[401, "LINK_SESSION_NOT_FOUND"],
+		[403, "LINK_SESSION_MISMATCH"],
+		[400, "VERIFICATION_NOT_FOUND"],
+		[400, "SESSION_CHALLENGE_VALIDATION_FAILED"],
+	])("strips the verifier and surfaces the error code on a %i exchange", async (status, code) => {
 		vi.spyOn(proxy, "handleAuthRequest").mockResolvedValue(
-			mockUpstreamResponse,
+			Response.json({ code, message: "link failed" }, { status }),
 		);
 		vi.spyOn(proxy, "handleAuthResponse").mockResolvedValue(
-			mockProcessedResponse,
+			Response.json({ code, message: "link failed" }, { status }),
 		);
 
 		const request = new Request(
-			`https://example.com/dashboard?${VERIFIER_PARAM}=test-verifier`,
+			`https://example.com/settings?${VERIFIER_PARAM}=lk.verifier&tab=accounts`,
 			{
 				headers: {
 					Cookie: `${NEON_AUTH_SESSION_CHALLENGE_COOKIE_NAME}=test-challenge`,
@@ -242,6 +240,125 @@ describe("exchangeOAuthToken", () => {
 
 		const result = await exchangeOAuthToken(
 			request,
+			"https://auth.example.com",
+			TEST_SECRET,
+		);
+
+		expect(result?.success).toBe(false);
+		expect(result?.redirectUrl.pathname).toBe("/settings");
+		expect(result?.redirectUrl.searchParams.has(VERIFIER_PARAM)).toBe(
+			false,
+		);
+		expect(result?.redirectUrl.searchParams.get("tab")).toBe("accounts");
+		expect(result?.redirectUrl.searchParams.get("error")).toBe(code);
+	});
+
+	test.each([
+		[
+			"a plain-text 401",
+			() => new Response("Unauthorized", { status: 401 }),
+		],
+		["a 401 without a code", () => Response.json({}, { status: 401 })],
+		[
+			"a 403 with an unrelated code",
+			() => Response.json({ code: "FORBIDDEN" }, { status: 403 }),
+		],
+	])("returns null and keeps the verifier on %s", async (_case, make) => {
+		vi.spyOn(proxy, "handleAuthRequest").mockResolvedValue(make());
+		vi.spyOn(proxy, "handleAuthResponse").mockResolvedValue(make());
+
+		const result = await exchangeOAuthToken(
+			new Request(
+				`https://example.com/dashboard?${VERIFIER_PARAM}=test-verifier`,
+				{
+					headers: {
+						Cookie: `${NEON_AUTH_SESSION_CHALLENGE_COOKIE_NAME}=test-challenge`,
+					},
+				},
+			),
+			"https://auth.example.com",
+			TEST_SECRET,
+		);
+
+		expect(result).toBe(null);
+	});
+
+	test("keeps an error param the app already put in the URL", async () => {
+		const rejected = () =>
+			Response.json({ code: "LINK_SESSION_MISMATCH" }, { status: 403 });
+		vi.spyOn(proxy, "handleAuthRequest").mockResolvedValue(rejected());
+		vi.spyOn(proxy, "handleAuthResponse").mockResolvedValue(rejected());
+
+		const result = await exchangeOAuthToken(
+			new Request(
+				`https://example.com/settings?error=app_value&${VERIFIER_PARAM}=lk.verifier`,
+				{
+					headers: {
+						Cookie: `${NEON_AUTH_SESSION_CHALLENGE_COOKIE_NAME}=test-challenge`,
+					},
+				},
+			),
+			"https://auth.example.com",
+			TEST_SECRET,
+		);
+
+		expect(result?.success).toBe(false);
+		expect(result?.redirectUrl.searchParams.has(VERIFIER_PARAM)).toBe(
+			false,
+		);
+		expect(result?.redirectUrl.searchParams.getAll("error")).toEqual([
+			"app_value",
+		]);
+	});
+
+	test("does not forward upstream cookies on a rejected exchange", async () => {
+		const rejected = () =>
+			Response.json(
+				{ code: "LINK_SESSION_MISMATCH" },
+				{
+					status: 403,
+					headers: {
+						"Set-Cookie":
+							"__Secure-neon-auth.session_token=; Max-Age=0",
+					},
+				},
+			);
+		vi.spyOn(proxy, "handleAuthRequest").mockResolvedValue(rejected());
+		vi.spyOn(proxy, "handleAuthResponse").mockResolvedValue(rejected());
+
+		const result = await exchangeOAuthToken(
+			new Request(`https://example.com/?${VERIFIER_PARAM}=lk.verifier`, {
+				headers: {
+					Cookie: `${NEON_AUTH_SESSION_CHALLENGE_COOKIE_NAME}=test-challenge`,
+				},
+			}),
+			"https://auth.example.com",
+			TEST_SECRET,
+		);
+
+		expect(result?.success).toBe(false);
+		expect(result?.cookies).toEqual([]);
+	});
+
+	test.each([
+		500, 502, 503, 429, 408, 425,
+	])("returns null and keeps the verifier on a transient %i", async (status) => {
+		vi.spyOn(proxy, "handleAuthRequest").mockResolvedValue(
+			Response.json({ code: "UPSTREAM_ERROR" }, { status }),
+		);
+		vi.spyOn(proxy, "handleAuthResponse").mockResolvedValue(
+			Response.json({ code: "UPSTREAM_ERROR" }, { status }),
+		);
+
+		const result = await exchangeOAuthToken(
+			new Request(
+				`https://example.com/dashboard?${VERIFIER_PARAM}=lk.verifier`,
+				{
+					headers: {
+						Cookie: `${NEON_AUTH_SESSION_CHALLENGE_COOKIE_NAME}=test-challenge`,
+					},
+				},
+			),
 			"https://auth.example.com",
 			TEST_SECRET,
 		);

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import * as cacheHandler from "../session/cache-handler";
 import type { AuthProxyConfig } from "./handler";
 import { handleAuthProxyRequest } from "./handler";
@@ -121,6 +121,78 @@ describe("handleAuthProxyRequest", () => {
 
 			// Should NOT try cache for POST requests
 			expect(trySessionCacheSpy).not.toHaveBeenCalled();
+		});
+
+		describe("with a session verifier in the URL", () => {
+			const SESSION_COOKIE =
+				"__Secure-neon-auth.session_token=existing-session-token";
+
+			afterEach(() => {
+				vi.restoreAllMocks();
+			});
+
+			test("bypasses the cache and forwards the query string upstream", async () => {
+				const trySessionCacheSpy = vi.spyOn(
+					cacheHandler,
+					"trySessionCache",
+				);
+				const fetchSpy = vi
+					.spyOn(globalThis, "fetch")
+					.mockResolvedValue(
+						Response.json({ session: null, user: null }),
+					);
+
+				await handleAuthProxyRequest(
+					createTestConfig({
+						request: new Request(
+							"https://app.com/api/auth/get-session?neon_auth_session_verifier=lk.abc&disableRefresh=true",
+							{ headers: { Cookie: SESSION_COOKIE } },
+						),
+					}),
+				);
+
+				expect(trySessionCacheSpy).not.toHaveBeenCalled();
+				expect(fetchSpy).toHaveBeenCalledTimes(1);
+				const upstreamUrl = new URL(
+					String(fetchSpy.mock.calls[0]?.[0]),
+				);
+				expect(upstreamUrl.origin + upstreamUrl.pathname).toBe(
+					`${BASE_URL}/get-session`,
+				);
+				expect(
+					upstreamUrl.searchParams.get("neon_auth_session_verifier"),
+				).toBe("lk.abc");
+				expect(upstreamUrl.searchParams.get("disableRefresh")).toBe(
+					"true",
+				);
+			});
+
+			test("still serves from the cache when no verifier is present", async () => {
+				const cachedResponse = Response.json({
+					session: { id: "session-123" },
+					user: { id: "user-123" },
+				});
+				const trySessionCacheSpy = vi
+					.spyOn(cacheHandler, "trySessionCache")
+					.mockResolvedValue(cachedResponse);
+				const handleAuthRequestSpy = vi.spyOn(
+					request,
+					"handleAuthRequest",
+				);
+
+				const result = await handleAuthProxyRequest(
+					createTestConfig({
+						request: new Request(
+							"https://app.com/api/auth/get-session?disableRefresh=true",
+							{ headers: { Cookie: SESSION_COOKIE } },
+						),
+					}),
+				);
+
+				expect(trySessionCacheSpy).toHaveBeenCalledTimes(1);
+				expect(result).toBe(cachedResponse);
+				expect(handleAuthRequestSpy).not.toHaveBeenCalled();
+			});
 		});
 
 		test("skips cache for non-get-session endpoints", async () => {

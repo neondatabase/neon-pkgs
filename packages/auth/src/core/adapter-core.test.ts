@@ -289,3 +289,161 @@ describe("NeonAuthAdapterCore customFetchImpl error normalization", () => {
 		});
 	});
 });
+
+describe("NeonAuthAdapterCore get-session verifier cleanup", () => {
+	const GET_SESSION_URL = "https://auth.example.com/api/auth/get-session";
+	const VERIFIER = "neon_auth_session_verifier";
+	let fetchMock: ReturnType<typeof vi.fn>;
+	let replaceState: ReturnType<typeof vi.fn>;
+
+	function stubBrowserAt(href: string) {
+		replaceState = vi.fn();
+		vi.stubGlobal("window", {
+			location: { href, search: new URL(href).search },
+		});
+		vi.stubGlobal("document", {});
+		vi.stubGlobal("history", { state: { k: 1 }, replaceState });
+	}
+
+	beforeEach(() => {
+		fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	test.each([
+		[401, "LINK_SESSION_NOT_FOUND"],
+		[403, "LINK_SESSION_MISMATCH"],
+		[400, "VERIFICATION_NOT_FOUND"],
+	])("strips the verifier from the page URL after a %i get-session", async (status, code) => {
+		stubBrowserAt(
+			`https://app.example.com/settings?${VERIFIER}=lk.abc&tab=accounts`,
+		);
+		fetchMock.mockResolvedValueOnce(
+			Response.json({ code, message: "link failed" }, { status }),
+		);
+		const customFetchImpl = new TestAdapter({
+			baseURL: "https://auth.example.com",
+		}).getCustomFetchImpl();
+
+		await expect(
+			customFetchImpl(`${GET_SESSION_URL}?${VERIFIER}=lk.abc`, {
+				method: "GET",
+			}),
+		).rejects.toBeDefined();
+
+		expect(replaceState).toHaveBeenCalledTimes(1);
+		expect(replaceState).toHaveBeenCalledWith(
+			{ k: 1 },
+			"",
+			"https://app.example.com/settings?tab=accounts",
+		);
+	});
+
+	test("strips the verifier after a force-fetched get-session fails", async () => {
+		stubBrowserAt(`https://app.example.com/?${VERIFIER}=lk.abc`);
+		fetchMock.mockResolvedValueOnce(
+			Response.json({ code: "VERIFICATION_NOT_FOUND" }, { status: 400 }),
+		);
+		const customFetchImpl = new TestAdapter({
+			baseURL: "https://auth.example.com",
+		}).getCustomFetchImpl();
+
+		await expect(
+			customFetchImpl(`${GET_SESSION_URL}?${VERIFIER}=lk.abc`, {
+				method: "GET",
+				headers: { [FORCE_FETCH_HEADER]: "true" },
+			}),
+		).rejects.toBeDefined();
+
+		expect(replaceState).toHaveBeenCalledWith(
+			{ k: 1 },
+			"",
+			"https://app.example.com/",
+		);
+	});
+
+	test("strips the verifier after a successful get-session", async () => {
+		stubBrowserAt(`https://app.example.com/dashboard?${VERIFIER}=v1`);
+		fetchMock.mockResolvedValueOnce(
+			Response.json({ session: null, user: null }, { status: 200 }),
+		);
+		const customFetchImpl = new TestAdapter({
+			baseURL: "https://auth.example.com",
+		}).getCustomFetchImpl();
+
+		await customFetchImpl(`${GET_SESSION_URL}?${VERIFIER}=v1`, {
+			method: "GET",
+		});
+
+		expect(replaceState).toHaveBeenCalledWith(
+			{ k: 1 },
+			"",
+			"https://app.example.com/dashboard",
+		);
+	});
+
+	test("leaves the page URL alone when the get-session did not carry a verifier", async () => {
+		stubBrowserAt(`https://app.example.com/dashboard?${VERIFIER}=v1`);
+		fetchMock.mockResolvedValueOnce(Response.json({}, { status: 401 }));
+		const customFetchImpl = new TestAdapter({
+			baseURL: "https://auth.example.com",
+		}).getCustomFetchImpl();
+
+		await expect(
+			customFetchImpl(`${GET_SESSION_URL}?disableRefresh=true`, {
+				method: "GET",
+			}),
+		).rejects.toBeDefined();
+
+		expect(replaceState).not.toHaveBeenCalled();
+	});
+
+	test.each([
+		500, 502, 503, 429, 408, 425,
+	])("keeps the verifier after a transient %i get-session", async (status) => {
+		stubBrowserAt(`https://app.example.com/dashboard?${VERIFIER}=v1`);
+		fetchMock.mockResolvedValueOnce(Response.json({}, { status }));
+		const customFetchImpl = new TestAdapter({
+			baseURL: "https://auth.example.com",
+		}).getCustomFetchImpl();
+
+		await expect(
+			customFetchImpl(`${GET_SESSION_URL}?${VERIFIER}=v1&s=${status}`, {
+				method: "GET",
+			}),
+		).rejects.toBeDefined();
+
+		expect(replaceState).not.toHaveBeenCalled();
+	});
+
+	test.each([
+		[
+			"a plain-text 401",
+			() => new Response("Unauthorized", { status: 401 }),
+		],
+		["a 401 without a code", () => Response.json({}, { status: 401 })],
+		[
+			"a 403 with an unrelated code",
+			() => Response.json({ code: "FORBIDDEN" }, { status: 403 }),
+		],
+	])("keeps the verifier after %s", async (label, make) => {
+		stubBrowserAt(`https://app.example.com/dashboard?${VERIFIER}=v1`);
+		fetchMock.mockResolvedValueOnce(make());
+		const customFetchImpl = new TestAdapter({
+			baseURL: "https://auth.example.com",
+		}).getCustomFetchImpl();
+
+		await expect(
+			customFetchImpl(
+				`${GET_SESSION_URL}?${VERIFIER}=v1&case=${encodeURIComponent(label)}`,
+				{ method: "GET" },
+			),
+		).rejects.toBeDefined();
+
+		expect(replaceState).not.toHaveBeenCalled();
+	});
+});

@@ -159,6 +159,39 @@ describe("processAuthMiddleware", () => {
 			expect(handleAuthProxyRequestSpy).not.toHaveBeenCalled();
 		});
 
+		test("drops the session verifier from the session lookup request", async () => {
+			const handleAuthProxyRequestSpy = vi
+				.spyOn(proxyHandler, "handleAuthProxyRequest")
+				.mockResolvedValue(
+					Response.json({
+						session: { id: "session-123" },
+						user: { id: "user-123" },
+					}),
+				);
+
+			await processAuthMiddleware(
+				createTestConfig({
+					request: new Request(
+						"https://app.com/dashboard?neon_auth_session_verifier=stale&tab=a",
+						{
+							headers: {
+								Cookie: "__Secure-neon-auth.session_token=token",
+							},
+						},
+					),
+				}),
+			);
+
+			expect(handleAuthProxyRequestSpy).toHaveBeenCalledTimes(1);
+			const lookupUrl = new URL(
+				handleAuthProxyRequestSpy.mock.calls[0]?.[0].request.url ?? "",
+			);
+			expect(
+				lookupUrl.searchParams.has("neon_auth_session_verifier"),
+			).toBe(false);
+			expect(lookupUrl.searchParams.get("tab")).toBe("a");
+		});
+
 		test("calls handleAuthProxyRequest when session cookie is present", async () => {
 			const sessionResponse = Response.json({
 				session: { id: "session-123" },
