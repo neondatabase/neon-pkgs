@@ -258,6 +258,18 @@ describe("a 401 from the Neon API", () => {
 		expect(existsSync(credentialsFile())).toBe(true);
 	});
 
+	it("retries a subcommand with its positional arguments", async () => {
+		const before = seedCredentials();
+		api.reject(before.access_token as string);
+
+		const result = await runCli(["projects", "get", "proj-123"]);
+
+		expect(result.stderr).not.toContain("Not enough non-option arguments");
+		expect(result.code).toBe(0);
+		expect(JSON.parse(result.stdout)).toMatchObject({ id: "proj-123" });
+		expect(oauth.rotations()).toBe(1);
+	});
+
 	it("keeps the credentials when the grant is dead", async () => {
 		const before = seedCredentials();
 		api.reject(before.access_token as string);
