@@ -846,6 +846,8 @@ describe("special mappings", () => {
 			fetch: async (input, init) => {
 				const request = new Request(input, init);
 				requests.push(request);
+				if (request.url.endsWith("/billing/spending_limit"))
+					return jsonResponse({ spending_limit_cents: 5000 });
 				if (request.url.includes("/members")) {
 					return jsonResponse({
 						members: [

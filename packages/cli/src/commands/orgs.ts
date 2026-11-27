@@ -4,13 +4,13 @@ import type {
 	MemberRole,
 	MemberWithUser,
 	Organization,
-	SpendingLimitResponse,
 } from "@neon/sdk";
 import chalk from "chalk";
 import type yargs from "yargs";
 
 import { readContextFile } from "../context.js";
 import { log } from "../log.js";
+import type { SpendingLimitResponse } from "../spending_limits_api.js";
 import type { CommonProps } from "../types.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
@@ -26,7 +26,16 @@ const ORG_DETAIL_FIELDS = [
 const MEMBER_TABLE_FIELDS = ["id", "email", "role", "joined_at"] as const;
 const MEMBER_FIELDS = ["id", "user_id", "role", "joined_at"] as const;
 const INVITATION_FIELDS = ["id", "email", "role", "invited_at"] as const;
-const SPENDING_LIMIT_TABLE_FIELDS = ["monthly_limit"] as const;
+const SPENDING_LIMIT_TABLE_FIELDS = [
+	"monthly_limit",
+	"status",
+	"enforcement_status",
+	"warning",
+	"enforcement_note",
+] as const;
+
+export const SPENDING_LIMIT_ACKNOWLEDGEMENT_NOTICE =
+	"Restrictions and clears are acknowledged asynchronously; pending means control planes have not yet acknowledged the current decision. Applied does not confirm every workload has finished stopping or resuming.";
 
 const MEMBER_ROLES = [
 	"admin",
@@ -185,7 +194,7 @@ export const builder = (argv: yargs.Argv) => {
 		)
 		.command(
 			"spending-limit",
-			"Manage the organization's monthly spending limit (Launch and Scale plans)",
+			"Manage organization spending limits and optional service suspension (non-free plans)",
 			(yargs) =>
 				yargs
 					.usage("$0 orgs spending-limit <sub-command> [options]")
@@ -198,20 +207,58 @@ export const builder = (argv: yargs.Argv) => {
 							await getSpendingLimit(args as unknown as OrgProps),
 					)
 					.command(
-						"set <usd>",
-						"Set the monthly spending limit. Neon emails at 80% and 100% and keeps computes running. Admin only",
+						"set [usd]",
+						"Set the monthly spending limit. New limits default to suspension when available; existing limits keep their setting. Admin only",
 						(yargs) =>
 							guarded(
-								yargs.positional("usd", {
-									describe:
-										"Monthly limit in US dollars, e.g. 500 or 250.50",
-									type: "string",
-								}),
+								yargs
+									.positional("usd", {
+										describe:
+											"Monthly limit in US dollars, e.g. 500 or 250.50",
+										type: "string",
+									})
+									.option("amount", {
+										describe:
+											"Positive USD amount with at most two decimal places; use instead of <usd>",
+										type: "string",
+										coerce: single("amount", {
+											required: true,
+										}),
+									})
+									.option("suspend-on-limit", {
+										describe:
+											"true enables service suspension; --suspend-on-limit=false selects email notifications only. Omit to use the new-limit default or preserve an existing setting",
+										type: "boolean",
+									})
+									.check((args) => {
+										if (
+											(args.usd === undefined) ===
+											(args.amount === undefined)
+										) {
+											throw new Error(
+												"Pass exactly one spending limit amount: <usd> or --amount <usd>.",
+											);
+										}
+										return true;
+									}),
 							),
 						async (args) =>
 							await setSpendingLimit(
 								args as unknown as SetSpendingLimitProps,
 							),
+					)
+					.command(
+						"disable",
+						"Disable suspension while retaining the amount and email notifications. Admin only",
+						guarded,
+						async (args) => {
+							const { disableSpendingLimit } = await import(
+								"./spending_limit.js"
+							);
+							await disableSpendingLimit(
+								args as unknown as OrgProps,
+							);
+						},
 					)
 					.command(
 						"delete",
@@ -233,7 +280,11 @@ type GetProps = OrgProps & { id?: string };
 type MemberProps = OrgProps & { memberId: string };
 type UpdateMemberProps = MemberProps & { role: MemberRole };
 type CreateInvitationsProps = OrgProps & { email: string[]; role: MemberRole };
-type SetSpendingLimitProps = OrgProps & { usd: string };
+type SetSpendingLimitProps = OrgProps & {
+	usd?: string;
+	amount?: string;
+	suspendOnLimit?: boolean;
+};
 
 const list = async (props: CommonProps) => {
 	const out = writer(props);
@@ -395,16 +446,20 @@ const writeInvitations = (
 };
 
 const getSpendingLimit = async (props: OrgProps) => {
-	const { neon, fail, orgId } = await sdk(props);
-	const limit = await neon.organizations.spendingLimit
-		.get({ orgId })
-		.catch((error: unknown) => {
-			throw fail(error);
-		});
-	writeSpendingLimit(props, orgId, limit);
+	const { getSpendingLimit: get } = await import("./spending_limit.js");
+	await get(props);
 };
 
 const setSpendingLimit = async (props: SetSpendingLimitProps) => {
+	if (props.amount !== undefined || props.suspendOnLimit !== undefined) {
+		const { setSpendingLimit: set } = await import("./spending_limit.js");
+		await set({
+			...props,
+			amount: props.amount ?? props.usd ?? "",
+			spendingLimitEnabled: props.suspendOnLimit,
+		});
+		return;
+	}
 	const spendingLimitCents = parseUsdCents(props.usd);
 	const { neon, fail, orgId } = await sdk(props);
 	const limit = await neon.organizations.spendingLimit
@@ -426,7 +481,7 @@ const deleteSpendingLimit = async (props: OrgProps) => {
 };
 
 /** JSON and YAML keep the API's cents; the table shows dollars. */
-const writeSpendingLimit = (
+export const writeSpendingLimit = (
 	props: OrgProps,
 	orgId: string,
 	limit: SpendingLimitResponse,
@@ -437,39 +492,21 @@ const writeSpendingLimit = (
 	}
 	const cents = limit.spending_limit_cents;
 	writer(props).end(
-		{ monthly_limit: cents === null ? "Not set" : formatUsd(cents) },
+		{
+			monthly_limit: cents === null ? "Not set" : formatUsd(cents),
+			status: limit.status,
+			enforcement_status: limit.enforcement_status,
+			warning: limit.warning,
+			enforcement_note:
+				limit.enforcement_status === undefined
+					? undefined
+					: SPENDING_LIMIT_ACKNOWLEDGEMENT_NOTICE,
+		},
 		{
 			fields: SPENDING_LIMIT_TABLE_FIELDS,
 			title: `Spending limit for ${orgId}`,
 		},
 	);
-};
-
-const USD = new Intl.NumberFormat("en-US", {
-	style: "currency",
-	currency: "USD",
-});
-
-const formatUsd = (cents: number) => USD.format(cents / 100);
-
-/**
- * `500` or `250.50` → cents. Parsed as text, not with `Number()`: `1e3` and `0x10` are
- * numbers too, and a float multiply turns `0.29` into 28.999… cents.
- */
-export const parseUsdCents = (value: unknown): number => {
-	const match =
-		typeof value === "string"
-			? /^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim())
-			: null;
-	const cents = match
-		? Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"))
-		: Number.NaN;
-	if (!Number.isSafeInteger(cents) || cents <= 0) {
-		throw new Error(
-			`spending-limit set needs a positive amount in US dollars, such as 500 or 250.50. Got \`${String(value)}\`. To remove the limit, run \`neon orgs spending-limit delete\`.`,
-		);
-	}
-	return cents;
 };
 
 const ACRONYMS: Record<string, string> = { aws: "AWS", pg: "PG" };
@@ -482,3 +519,37 @@ export const planName = (plan: string | undefined): string =>
 		.filter(Boolean)
 		.map((word) => ACRONYMS[word] ?? word[0].toUpperCase() + word.slice(1))
 		.join(" ");
+
+/** Parse dollars as text so floating-point multiplication cannot round a cent. */
+export const parseUsdCents = (
+	value: unknown,
+	command = "spending-limit set",
+): number => {
+	const match =
+		typeof value === "string"
+			? /^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim())
+			: null;
+	const cents = match
+		? BigInt(match[1]) * 100n + BigInt((match[2] ?? "").padEnd(2, "0"))
+		: null;
+	if (
+		cents === null ||
+		cents <= 0n ||
+		cents > BigInt(Number.MAX_SAFE_INTEGER)
+	) {
+		throw new Error(
+			`${command} needs a positive amount in US dollars with at most two decimals, from $0.01 to $90071992547409.91. To remove the notification threshold, run \`neon orgs spending-limit delete\`.`,
+		);
+	}
+	return Number(cents);
+};
+
+export const formatUsd = (cents: number): string => {
+	if (!Number.isSafeInteger(cents) || cents < 0) {
+		throw new Error(
+			"The API returned an amount outside the supported safe integer range.",
+		);
+	}
+	const value = BigInt(cents);
+	return `$${(value / 100n).toLocaleString("en-US")}.${(value % 100n).toString().padStart(2, "0")}`;
+};

@@ -1,0 +1,715 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import strip from "strip-ansi";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import YAML from "yaml";
+import type { SpendingLimitResponse } from "../spending_limits_api.js";
+
+const reachedLimit: SpendingLimitResponse = {
+	spending_limit_cents: 10000,
+	spending_limit_enabled: true,
+	current_usage_cents: 10042,
+	usage_observed_at: "2026-11-25T09:00:00Z",
+	invoice_period_id: "current-open-invoice",
+	status: "reached",
+	enforcement_status: "pending",
+	generation: 7,
+	period_ends_at: "2026-12-01T00:00:00Z",
+	monitoring_delay: "1-2 hours",
+	warning:
+		"Observed usage $100.42 has reached the $100.00 spending limit. Storage charges continue.",
+};
+
+type Request = {
+	method?: string;
+	path?: string;
+	body: Record<string, unknown>;
+	rawBody: string;
+	authorization?: string;
+	contentType?: string;
+};
+let server: Server;
+let configDir: string;
+let baseURL: string;
+let current: SpendingLimitResponse;
+let requests: Request[];
+let error: { code: string; message: string } | undefined;
+let errorStatus: number;
+let concurrentAmount: number | null | undefined;
+let replaceRejectedToken: boolean;
+let organizations: { id: string; name: string }[];
+
+beforeEach(async () => {
+	current = { ...reachedLimit };
+	requests = [];
+	error = undefined;
+	errorStatus = 403;
+	concurrentAmount = undefined;
+	replaceRejectedToken = false;
+	organizations = [{ id: "org-test", name: "Test" }];
+	configDir = await mkdtemp(join(tmpdir(), "neonctl-spending-limit-"));
+	// A local HTTP server exercises SDK authentication, routing, serialization,
+	// and the real CLI process without changing a customer's billing settings.
+	server = createServer((req, res) => {
+		void (async () => {
+			let raw = "";
+			for await (const chunk of req) raw += String(chunk);
+			const body = raw
+				? (JSON.parse(raw) as Record<string, unknown>)
+				: {};
+			requests.push({
+				method: req.method,
+				path: req.url,
+				body,
+				rawBody: raw,
+				authorization: req.headers.authorization,
+				contentType: req.headers["content-type"],
+			});
+			res.setHeader("Content-Type", "application/json");
+			if (error) {
+				if (replaceRejectedToken) {
+					replaceRejectedToken = false;
+					await writeFile(
+						join(configDir, "credentials.json"),
+						JSON.stringify({
+							access_token: "replacement-access-token",
+							refresh_token: "test-refresh-token",
+							expires_at: Date.now() + 60 * 60 * 1000,
+						}),
+					);
+				}
+				res.writeHead(errorStatus).end(JSON.stringify(error));
+			} else if (req.url === "/api/v2/users/me/organizations") {
+				res.end(JSON.stringify({ organizations }));
+			} else if (
+				req.url ===
+					"/api/v2/organizations/org-test/billing/spending_limit" ||
+				req.url ===
+					"/api/v2/organizations/org%2Ftest/billing/spending_limit" ||
+				req.url ===
+					"/api/v2/organizations/org-test/billing/spending_limit/disable"
+			) {
+				const snapshot = { ...current };
+				// A separate admin edits after a legacy GET snapshot, or before the atomic POST.
+				if (concurrentAmount !== undefined) {
+					current.spending_limit_cents = concurrentAmount;
+					concurrentAmount = undefined;
+				}
+				if (req.method === "POST" && req.url.endsWith("/disable")) {
+					current = { ...current, spending_limit_enabled: false };
+				} else if (req.method === "PUT") {
+					current = {
+						...current,
+						spending_limit_cents:
+							body.spending_limit_cents as number,
+						...(body.spending_limit_enabled !== undefined
+							? {
+									spending_limit_enabled:
+										body.spending_limit_enabled as boolean,
+								}
+							: {}),
+					};
+				}
+				res.end(
+					JSON.stringify(req.method === "GET" ? snapshot : current),
+				);
+			} else {
+				res.writeHead(404).end(
+					JSON.stringify({ message: "Unexpected request" }),
+				);
+			}
+		})();
+	});
+	await new Promise<void>((resolve) =>
+		server.listen(0, "127.0.0.1", resolve),
+	);
+	baseURL = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/v2`;
+});
+
+afterEach(async () => {
+	await new Promise<void>((resolve, reject) =>
+		server.close((err) => {
+			if (err) reject(err);
+			else resolve();
+		}),
+	);
+	await rm(configDir, { recursive: true, force: true });
+});
+
+const runCli = (
+	args: string[],
+	output = "json",
+	useStoredCredentials = false,
+) =>
+	new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
+		execFile(
+			process.execPath,
+			[
+				join(process.cwd(), "dist/cli.js"),
+				"--api-host",
+				baseURL,
+				...(useStoredCredentials
+					? []
+					: ["--api-key", "test-spend-key"]),
+				"--config-dir",
+				configDir,
+				"--context-file",
+				join(configDir, "context.json"),
+				"--no-analytics",
+				"--no-color",
+				"--output",
+				output,
+				...args,
+			],
+			{
+				env: {
+					...process.env,
+					NEON_API_KEY: "",
+					NEON_API_HOST: baseURL,
+				},
+			},
+			(err, stdout, stderr) => {
+				resolve({
+					code:
+						err && typeof err.code === "number"
+							? err.code
+							: err
+								? -1
+								: 0,
+					stdout,
+					stderr: strip(stderr),
+				});
+			},
+		);
+	});
+
+const spendingLimit = (args: string[], output = "json") =>
+	runCli(["org", "spending-limit", ...args, "--org-id", "org-test"], output);
+
+describe("organization spending-limit CLI", () => {
+	it.each([
+		["100", "--amount", "100"],
+		["100", "--amount", "200"],
+		[],
+		["--amount", ""],
+		["--amount"],
+		["--no-amount"],
+		["--amount", "100", "--amount", "200"],
+		["100", "200"],
+		["--amount", "100", "--", "200"],
+		["100", "--unknown-setting"],
+	])("rejects ambiguous or invalid set arguments %j before any request", async (...args) => {
+		const result = await spendingLimit(["set", ...args]);
+		expect(result.code).toBe(1);
+		expect(requests).toHaveLength(0);
+	});
+
+	it.each([
+		"org",
+		"orgs",
+	])("does not register the unknown command for %s", async (org) => {
+		const result = await runCli([
+			org,
+			"unknown-setting",
+			"get",
+			"--org-id",
+			"org-test",
+		]);
+		expect(result.code).toBe(1);
+		expect(requests).toHaveLength(0);
+		const help = await runCli([org, "--help"]);
+		expect(help.code, help.stderr).toBe(0);
+		expect(help.stdout).not.toContain("unknown-setting");
+		expect(help.stdout.match(/spending-limit/g)).toHaveLength(1);
+	});
+
+	it.each([
+		["org", "100.25", [], undefined],
+		["orgs", "100.25", ["--suspend-on-limit"], true],
+		["org", "100.25", ["--suspend-on-limit=false"], false],
+		["orgs", "100.25", ["--no-suspend-on-limit"], false],
+	] as const)("%s positional set %s with %j preserves explicit suspension=%s", async (org, amount, flags, enabled) => {
+		const result = await runCli([
+			org,
+			"spending-limit",
+			"set",
+			amount,
+			...flags,
+			"--org-id",
+			"org-test",
+		]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests.map((request) => request.method)).toEqual(["PUT"]);
+		expect(requests[0].body).toEqual({
+			spending_limit_cents: 10025,
+			...(enabled === undefined
+				? {}
+				: { spending_limit_enabled: enabled }),
+		});
+	});
+
+	it.each([
+		["org", "spending-limit", "set"],
+		["orgs", "spending-limit", "set"],
+	])("help for %j explains the new-limit default and notification-only option", async (...path) => {
+		const result = await runCli([...path, "--help"]);
+		expect(result.code, result.stderr).toBe(0);
+		const help = result.stdout.replace(/\s+/g, " ");
+		expect(help).toContain(
+			"New limits default to suspension when available",
+		);
+		expect(help).toContain("existing limits keep their setting");
+		expect(help).toContain("--suspend-on-limit=false");
+		expect(requests).toHaveLength(0);
+	});
+
+	it.each([
+		["org", "spending-limit", "set", "--amount", "100"],
+		["orgs", "spending-limit", "set", "100"],
+	])("%j leaves new-limit enforcement defaults to the server", async (...args) => {
+		current = { spending_limit_cents: null };
+		const result = await runCli([...args, "--org-id", "org-test"]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests.map((req) => req.method)).toEqual(["PUT"]);
+		expect(requests[0].body).toEqual({ spending_limit_cents: 10000 });
+	});
+
+	it("can explicitly create a notification-only limit without observed usage", async () => {
+		current = { spending_limit_cents: null, current_usage_cents: null };
+		const result = await spendingLimit([
+			"set",
+			"--amount",
+			"100",
+			"--suspend-on-limit=false",
+		]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests.map((req) => req.method)).toEqual(["PUT"]);
+		expect(requests[0].body).toEqual({
+			spending_limit_cents: 10000,
+			spending_limit_enabled: false,
+		});
+	});
+
+	it("legacy amount-only set shows a warning without inventing unavailable acknowledgement status", async () => {
+		current = {
+			spending_limit_cents: 10000,
+			warning:
+				"Observed usage has reached the new spending limit; services will be suspended.",
+		};
+		const result = await runCli(
+			["orgs", "spending-limit", "set", "50", "--org-id", "org-test"],
+			"table",
+		);
+		expect(result.code, result.stderr).toBe(0);
+		expect(result.stdout).toContain(current.warning);
+		expect(result.stdout).not.toContain("Enforcement Status");
+		expect(result.stdout).not.toContain("Enforcement Note");
+		expect(requests[0].body).toEqual({ spending_limit_cents: 5000 });
+	});
+
+	it.each([
+		"table",
+		"json",
+		"yaml",
+	])("legacy amount-only set reports a successful suspension warning and acknowledgement in %s", async (output) => {
+		current.current_usage_cents = 10000;
+		current.warning =
+			"Observed usage has reached the new spending limit; services will be suspended.";
+		const result = await runCli(
+			["orgs", "spending-limit", "set", "50", "--org-id", "org-test"],
+			output,
+		);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests.map((req) => req.method)).toEqual(["PUT"]);
+		expect(requests[0].body).toEqual({ spending_limit_cents: 5000 });
+		expect(current.spending_limit_enabled).toBe(true);
+		if (output === "table") {
+			expect(result.stdout).toContain("$50.00");
+			expect(result.stdout).toContain(current.warning);
+			expect(result.stdout).toContain("reached");
+			expect(result.stdout).toContain("pending");
+			expect(result.stdout).toContain("does not confirm every workload");
+		} else {
+			const data =
+				output === "json"
+					? JSON.parse(result.stdout)
+					: YAML.parse(result.stdout);
+			expect(data).toEqual(current);
+			expect(result.stderr).toBe("");
+		}
+	});
+
+	it.each([
+		"json",
+		"yaml",
+		"table",
+	])("shows current usage, pending status, warning and monitoring delay in %s", async (output) => {
+		const result = await spendingLimit(["get"], output);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests).toMatchObject([
+			{
+				method: "GET",
+				path: "/api/v2/organizations/org-test/billing/spending_limit",
+				authorization: "Bearer test-spend-key",
+			},
+		]);
+		if (output === "table") {
+			expect(result.stdout).toContain("$100.42");
+			expect(result.stdout).toContain("$100.00");
+			expect(result.stdout).toContain("pending");
+			expect(result.stdout).toContain(reachedLimit.warning);
+			expect(result.stdout).toContain("1-2 hours");
+		} else {
+			const data =
+				output === "json"
+					? JSON.parse(result.stdout)
+					: YAML.parse(result.stdout);
+			expect(data).toMatchObject(reachedLimit);
+			expect(data).toEqual(current);
+		}
+		if (output === "table")
+			expect(result.stdout).toContain("Storage charges continue");
+	});
+
+	it.each([
+		false,
+		true,
+	])("amount-only set preserves existing suspension=%s", async (enabled) => {
+		current.spending_limit_enabled = enabled;
+		const result = await spendingLimit(["set", "--amount", "200.29"]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(current.spending_limit_cents).toBe(20029);
+		expect(current.spending_limit_enabled).toBe(enabled);
+		expect(requests).toMatchObject([
+			{
+				method: "PUT",
+				body: { spending_limit_cents: 20029 },
+				contentType: "application/json",
+			},
+		]);
+		expect(requests[0].body).not.toHaveProperty("spending_limit_enabled");
+		expect(JSON.parse(result.stdout).notice).toContain(
+			"Configuration accepted.",
+		);
+	});
+
+	it("explicitly opts into suspension and returns a reached-limit save warning", async () => {
+		current.spending_limit_enabled = false;
+		const result = await spendingLimit([
+			"set",
+			"--amount",
+			"100",
+			"--suspend-on-limit",
+		]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(current.spending_limit_enabled).toBe(true);
+		expect(requests[0].body).toEqual({
+			spending_limit_cents: 10000,
+			spending_limit_enabled: true,
+		});
+		expect(JSON.parse(result.stdout)).toMatchObject({
+			warning: reachedLimit.warning,
+			enforcement_status: "pending",
+		});
+	});
+
+	it("accepts explicit false on set", async () => {
+		const result = await spendingLimit([
+			"set",
+			"--amount",
+			"100",
+			"--suspend-on-limit=false",
+		]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(current.spending_limit_enabled).toBe(false);
+		expect(requests[0].body).toEqual({
+			spending_limit_cents: 10000,
+			spending_limit_enabled: false,
+		});
+	});
+
+	it("disables with one authenticated bodyless POST and retains the notification amount", async () => {
+		const result = await spendingLimit(["disable"]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests).toHaveLength(1);
+		expect(requests).toMatchObject([
+			{
+				method: "POST",
+				path: "/api/v2/organizations/org-test/billing/spending_limit/disable",
+				rawBody: "",
+				authorization: "Bearer test-spend-key",
+			},
+		]);
+		expect(current.spending_limit_cents).toBe(10000);
+		expect(current.spending_limit_enabled).toBe(false);
+		expect(JSON.parse(result.stdout).enforcement_status).toBe("pending");
+	});
+
+	it("disables an unset threshold without fabricating an amount or requiring observed usage", async () => {
+		current = { spending_limit_cents: null };
+		const result = await spendingLimit(["disable"]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests.map((req) => req.method)).toEqual(["POST"]);
+		expect(requests[0].rawBody).toBe("");
+		expect(JSON.parse(result.stdout)).toMatchObject({
+			spending_limit_cents: null,
+		});
+		expect(JSON.parse(result.stdout)).not.toHaveProperty(
+			"enforcement_status",
+		);
+	});
+
+	it.each([
+		20000,
+		null,
+	])("disable preserves a concurrent threshold change to %s", async (amount) => {
+		concurrentAmount = amount;
+		const result = await spendingLimit(["disable"]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(current.spending_limit_cents).toBe(amount);
+		expect(current.spending_limit_enabled).toBe(false);
+		expect(JSON.parse(result.stdout).spending_limit_cents).toBe(amount);
+		expect(requests.map((req) => req.method)).toEqual(["POST"]);
+		expect(requests[0].rawBody).toBe("");
+	});
+
+	it.each([
+		403, 404, 405, 423, 429, 501, 503,
+	])("disable surfaces HTTP %s without fallback or retry", async (status) => {
+		errorStatus = status;
+		error = {
+			code:
+				status === 403
+					? "INSUFFICIENT_ORG_PERMISSIONS"
+					: "DISABLE_UNAVAILABLE",
+			message: "Disable request rejected",
+		};
+		const result = await spendingLimit(["disable"]);
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(error.message);
+		expect(result.stdout).toBe("");
+		expect(requests.map((req) => req.method)).toEqual(["POST"]);
+		expect(requests[0].rawBody).toBe("");
+	});
+
+	it("does not replay disable after stored OAuth credentials are replaced following a 401", async () => {
+		await writeFile(
+			join(configDir, "credentials.json"),
+			JSON.stringify({
+				access_token: "rejected-access-token",
+				refresh_token: "test-refresh-token",
+				expires_at: Date.now() + 60 * 60 * 1000,
+			}),
+		);
+		errorStatus = 401;
+		error = { code: "UNAUTHORIZED", message: "Unauthorized" };
+		replaceRejectedToken = true;
+		const result = await runCli(
+			[
+				"org",
+				"spending-limit",
+				"disable",
+				"--org-id",
+				"org-test",
+				"--oauth-host",
+				baseURL,
+			],
+			"json",
+			true,
+		);
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("Authentication failed");
+		expect(requests.map((req) => req.method)).toEqual(["POST"]);
+		expect(requests[0].authorization).toBe("Bearer rejected-access-token");
+		expect(requests[0].rawBody).toBe("");
+	});
+
+	it.each([
+		"json",
+		"yaml",
+		"table",
+	])("does not invent optional status on an older server (%s)", async (output) => {
+		current = { spending_limit_cents: 10000 };
+		const result = await spendingLimit(["get"], output);
+		expect(result.code, result.stderr).toBe(0);
+		if (output === "table") {
+			expect(result.stdout).toContain("$100.00");
+		} else {
+			const data =
+				output === "json"
+					? JSON.parse(result.stdout)
+					: YAML.parse(result.stdout);
+			expect(data).not.toHaveProperty("enforcement_status");
+			expect(data).not.toHaveProperty("status");
+			expect(data).not.toHaveProperty("spending_limit_enabled");
+		}
+	});
+
+	it("resolves the sole organization when no org-id is supplied", async () => {
+		const result = await runCli(["orgs", "spending-limit", "get"]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests.map((req) => req.path)).toEqual([
+			"/api/v2/users/me/organizations",
+			"/api/v2/organizations/org-test/billing/spending_limit",
+		]);
+	});
+
+	it("uses the linked organization without listing user organizations", async () => {
+		await writeFile(
+			join(configDir, "context.json"),
+			JSON.stringify({ orgId: "org-test" }),
+		);
+		const result = await runCli(["org", "spending-limit", "get"]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests.map((req) => req.path)).toEqual([
+			"/api/v2/organizations/org-test/billing/spending_limit",
+		]);
+	});
+
+	it("prints parent help with no subcommand without contacting the API", async () => {
+		const result = await runCli(["org", "spending-limit"]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(result.stdout).toContain("Disable suspension");
+		expect(requests).toHaveLength(0);
+	});
+
+	it.each([
+		null,
+		0,
+	])("retains unavailable versus zero observed usage (%s)", async (usage) => {
+		current.current_usage_cents = usage;
+		current.usage_observed_at = null;
+		const result = await spendingLimit(["get"]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(JSON.parse(result.stdout)).toMatchObject({
+			current_usage_cents: usage,
+			usage_observed_at: null,
+		});
+	});
+
+	it.each([
+		"off",
+		"pending",
+		"applied",
+	])("preserves the backend acknowledgement status %s", async (status) => {
+		current.enforcement_status = status;
+		const result = await spendingLimit(["get"]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(JSON.parse(result.stdout).enforcement_status).toBe(status);
+		expect(JSON.parse(result.stdout)).toEqual(current);
+	});
+
+	it("requires explicit scope when multiple organizations are available", async () => {
+		organizations.push({ id: "org-other", name: "Other" });
+		const result = await runCli(["org", "spending-limit", "get"]);
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("--org-id");
+		expect(requests).toHaveLength(1);
+	});
+
+	it("rejects an invalid organization path without sending a request", async () => {
+		const result = await runCli([
+			"org",
+			"spending-limit",
+			"get",
+			"--org-id",
+			"org/test",
+		]);
+		expect(result.code).toBe(1);
+		expect(requests).toHaveLength(0);
+	});
+
+	it.each([
+		"0",
+		"-1",
+		"1.001",
+		"1e2",
+		"Infinity",
+		"NaN",
+		"90071992547409.92",
+		"92233720368547758.07",
+	])("rejects invalid or unsafe amount %s without any billing request", async (amount) => {
+		const result = await spendingLimit(["set", "--amount", amount]);
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("positive amount");
+		expect(requests).toHaveLength(0);
+	});
+
+	it.each([
+		["0.01", 1],
+		["1.15", 115],
+		["90071992547409.91", Number.MAX_SAFE_INTEGER],
+	] as const)("serializes %s exactly in integer cents", async (amount, cents) => {
+		const result = await spendingLimit(["set", "--amount", amount]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(current.spending_limit_cents).toBe(cents);
+	});
+
+	it("renders the largest supported currency value exactly", async () => {
+		current.spending_limit_cents = Number.MAX_SAFE_INTEGER;
+		const result = await spendingLimit(["get"], "table");
+		expect(result.code, result.stderr).toBe(0);
+		expect(result.stdout).toContain("$90,071,992,547,409.91");
+	});
+
+	it.each([
+		"spending_limit_cents",
+		"current_usage_cents",
+		"generation",
+	] as const)("rejects unsafe API %s instead of silently rounding", async (field) => {
+		current[field] = Number.MAX_SAFE_INTEGER + 1;
+		const result = await spendingLimit(["disable"]);
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(`unsupported ${field}`);
+		expect(requests.map((req) => req.method)).toEqual(["POST"]);
+		expect(result.stdout).toBe("");
+	});
+
+	it("rejects unknown options rather than silently ignoring an opt-in typo", async () => {
+		const result = await spendingLimit([
+			"set",
+			"--amount",
+			"100",
+			"--suspend-on-limt",
+		]);
+		expect(result.code).toBe(1);
+		expect(requests).toHaveLength(0);
+	});
+
+	it("reports backend admin permission errors with the original code and message", async () => {
+		error = {
+			code: "INSUFFICIENT_ORG_PERMISSIONS",
+			message: "Only an administrator may update this organization",
+		};
+		const result = await spendingLimit(["set", "--amount", "100"]);
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(error.code);
+		expect(result.stderr).toContain(error.message);
+		expect(result.stderr).toContain("Organization Admin");
+		expect(requests).toHaveLength(1);
+	});
+
+	it("prints the spending limit code and Billing guidance for an existing blocked command and exits without retry", async () => {
+		error = {
+			code: "SPENDING_LIMIT_EXCEEDED",
+			message: "This organization has reached its spending limit",
+		};
+		const result = await runCli([
+			"projects",
+			"create",
+			"--name",
+			"blocked-project",
+			"--org-id",
+			"org-test",
+		]);
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(error.code);
+		expect(result.stderr).toContain(error.message);
+		expect(result.stderr).toContain("Organization Billing");
+		expect(requests).toHaveLength(1);
+	});
+});

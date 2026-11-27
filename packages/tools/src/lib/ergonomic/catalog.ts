@@ -13,6 +13,11 @@ import { sendFeedbackTool } from "../custom/feedback.js";
 import { fetchResourceTool } from "../custom/fetch.js";
 import { userOrganizationsTool } from "../custom/organizations.js";
 import { searchResourcesTool } from "../custom/resources.js";
+import {
+	disableSpendingLimitTool,
+	getSpendingLimitTool,
+	setSpendingLimitTool,
+} from "../custom/spending-limit.js";
 import { describeBranchTool } from "../custom/sql/describe-branch.js";
 import { inspectDatabaseTool } from "../custom/sql/inspect/inspect.js";
 import {
@@ -2314,31 +2319,9 @@ export const toolFactories = {
 					{ signal },
 				),
 		}),
-	"organizations.spendingLimit.get": (options) =>
-		fromGenerated(options, {
-			id: "organizations.spendingLimit.get",
-			generated: "getOrganizationSpendingLimit",
-			output: output.SpendingLimitResponse,
-			run: (neon, input, signal) =>
-				neon.organizations.spendingLimit.get(
-					{ orgId: input.org_id },
-					{ signal },
-				),
-		}),
-	"organizations.spendingLimit.set": (options) =>
-		fromGenerated(options, {
-			id: "organizations.spendingLimit.set",
-			generated: "setOrganizationSpendingLimit",
-			output: output.SpendingLimitResponse,
-			run: (neon, input, signal) =>
-				neon.organizations.spendingLimit.set(
-					{
-						orgId: input.org_id,
-						spendingLimitCents: input.spending_limit_cents,
-					},
-					{ signal },
-				),
-		}),
+	"organizations.spendingLimit.get": getSpendingLimitTool,
+	"organizations.spendingLimit.set": setSpendingLimitTool,
+	"organizations.spendingLimit.disable": disableSpendingLimitTool,
 	"organizations.spendingLimit.delete": (options) =>
 		fromGenerated(options, {
 			id: "organizations.spendingLimit.delete",

@@ -1615,13 +1615,64 @@ neon orgs invitations create --email dev@example.com --email ops@example.com --r
 neon orgs spending-limit get
 neon orgs spending-limit set 500                      # US dollars per month
 neon orgs spending-limit delete
+neon org spending-limit get --org-id org-example
+neon org spending-limit set --org-id org-example --amount 100.25
+neon org spending-limit set --org-id org-example --amount 100.25 --suspend-on-limit
+neon org spending-limit set --org-id org-example --amount 100.25 --suspend-on-limit=false
+neon org spending-limit disable --org-id org-example
+neon org spending-limit get --org-id org-example --output json
 ```
 
 Every subcommand except `list` takes `--org-id`. Without it, the CLI uses the organization in `.neon`, then the only organization you belong to, and otherwise fails naming `--org-id`. `orgs get` also takes the id as a positional argument.
 
 `members update` and `invitations create` take `--role`: `admin`, `member`, `editor`, `viewer`, or `collaborator`. The API decides which of them an organization accepts. Every invitee is emailed, and anyone who already has a Neon account joins immediately.
 
-`spending-limit set` takes dollars with up to two decimals and sends cents. The limit sends emails at 80% and 100% and does not suspend computes. JSON and YAML output keep the API's `spending_limit_cents`, and `members list` keeps the API's `{ member, user }` items. Role changes, member removal, and the spending limit writes need an organization admin.
+`spending-limit set` takes dollars with up to two decimals and sends cents. The threshold sends emails at 80% and 100%. When no limit is configured, the server defaults a new limit to suspension only if the organization's spending-limit feature is available. Amount-only updates to an existing configured limit preserve its saved suspension setting; an existing notification-only threshold stays notification-only. JSON and YAML output keep the API's `spending_limit_cents`, and `members list` keeps the API's `{ member, user }` items. Role changes, member removal, and the spending limit writes need an organization admin.
+
+The existing `spending-limit` table also shows any returned suspension warning and
+limit/acknowledgement status. Servers that omit these fields keep the amount-only
+display; JSON and YAML preserve the API response without adding display fields.
+
+`org spending-limit set --amount` accepts positive USD amounts with at most two decimal
+places, from $0.01 through $90071992547409.91. Cent conversion is exact; input or
+API integers outside JavaScript's safe range are rejected rather than rounded.
+Omitting `--suspend-on-limit` uses the server's new-limit default or preserves an
+existing configured limit's saved setting. Use `--suspend-on-limit` to explicitly
+enable suspension, or `--suspend-on-limit=false` to create or update a
+notification-only limit, including when suspension is available. Enabling a new
+limit requires observed current-invoice usage; explicit false does not require a
+usage observation. Both positional `set <usd>` and `set --amount <usd>` accept
+`--suspend-on-limit=false` for notification-only configuration. Pass exactly one
+amount, using either the positional argument or the option. The CLI leaves omitted
+options out of the request so the server applies its availability gate and defaults.
+
+`disable` sends a bodyless POST to
+`/organizations/{org_id}/billing/spending_limit/disable`. The server atomically
+turns suspension off while preserving the current notification amount, including
+concurrent changes or deletion; an unset threshold stays unset. It requires no
+invoice observation. Older servers can reject the new endpoint; the CLI surfaces
+that error without retrying or falling back to GET/PUT or DELETE.
+Spending limit writes require an Organization Admin on an eligible non-free plan.
+
+Table, JSON, and YAML output show the server's current-invoice usage, observation
+time, invoice-period ID, limit and enforcement status, generation, period end,
+monitoring delay, and any successful-save warning. Older servers can omit optional
+fields: tables mark them unavailable/unsupported and structured output leaves them
+absent. Missing status never establishes that enforcement is off or applied.
+
+Billing resets on the first day of each UTC calendar month. Only the current open
+invoice counts, even when plan changes create several invoices in a month. Usage
+detection can lag by 1–2 hours and actual spending can exceed the spending limit. Storage
+charges continue; lift the spending limit before deleting stored data to reduce those charges.
+Choose a threshold below your maximum acceptable bill.
+
+Successful saves accept configuration asynchronously. `pending` means control
+planes have not acknowledged the current restriction or clear. `applied` confirms
+acknowledgements, not that every running workload has finished stopping or
+resuming. Raising or disabling the spending limit clears only spending-limit restrictions; other
+restrictions may remain. Use `get` to check later status. Existing commands that
+are blocked by the spending limit exit unsuccessfully with `SPENDING_LIMIT_EXCEEDED` and Organization
+Billing guidance, without retrying the denial.
 
 ## Commands
 

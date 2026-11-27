@@ -36,6 +36,20 @@ const mcpErrorPayload = (error: unknown): Record<string, unknown> => {
 		}
 		if (typeof error.code === "string") {
 			payload.code = error.code;
+			const spendingLimitSql =
+				error.code === "57P03" &&
+				typeof error.detail === "string" &&
+				error.detail.includes("SPENDING_LIMIT_EXCEEDED");
+			if (spendingLimitSql) {
+				payload.detail = error.detail;
+			}
+			if (error.code === "SPENDING_LIMIT_EXCEEDED" || spendingLimitSql) {
+				payload.action =
+					"An Organization Admin can increase or disable the spending limit in Organization Billing. Storage charges continue; recovery is asynchronous and other restrictions can remain.";
+			} else if (error.code === "INSUFFICIENT_ORG_PERMISSIONS") {
+				payload.action =
+					"An Organization Admin must perform this action.";
+			}
 		}
 		if (typeof error.source === "string") {
 			payload.source = error.source;

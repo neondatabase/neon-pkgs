@@ -267,6 +267,18 @@ await tools["api.call"].execute({
 
 Neon's feedback reporting counts `manual_test`, `neon_agent`, `neon_cli`, `neon_mcp`, and `neon_website` by name and any other `feedbackSource`, including the default, as `other`.
 
+## Organization spending limits
+
+MCP names: `get_organization_spending_limit`, `set_organization_spending_limit`, and `disable_organization_spending_limit`.
+
+`organizations.spendingLimit.get` reads the notification threshold, observed current-invoice usage and optional enforcement status. `organizations.spendingLimit.set` takes a positive safe integer `spending_limit_cents` in USD cents (10000 means $100.00). For a new limit, omitting `spending_limit_enabled` defaults suspension on when the organization's `organization_spending_limits_enabled` rollout flag is available. For an existing limit, omission and amount-only updates preserve the saved enforcement setting: existing notification-only limits stay off. Explicit `false` creates a notification-only limit; explicit `true` requests suspension. The tools forward an omitted boolean unchanged and let the API choose the applicable default.
+
+New enabled limits require observed current-invoice usage. Explicit `false` does not require a usage observation. `organizations.spendingLimit.disable` sends a bodyless POST to `/organizations/{org_id}/billing/spending_limit/disable`, atomically turning off suspension while retaining the current amount or null and notification emails, including concurrent amount changes or deletion. Disabling requires no usage observation. Older servers can reject this endpoint; errors surface without retries or a legacy GET/PUT/DELETE fallback. `organizations.spendingLimit.delete` removes notifications as well. Global rollout gates remain off by default; creating a limit does not enable those gates.
+
+Writes require Organization Admin permission from the API. This additive contract needs the organization spending-limit API rollout; no SDK schema upgrade is required. Missing status is unavailable or unsupported, never proof enforcement is off or applied. Results preserve optional status fields and include operational `notice` alongside any backend warning. Accepted saves do not confirm workload shutdown or recovery: `pending` waits for control-plane acknowledgements, and `applied` does not mean all workloads finished stopping or resuming. Other restrictions may remain.
+
+Billing resets on the first UTC calendar day of each month. Only the current open invoice counts, including when a month contains multiple invoices. Detection can lag by 1-2 hours, actual bills can exceed the threshold, and storage charges continue during suspension. Deleting stored objects requires lifting the restriction. The tools do not compute usage or enforcement decisions. Unsafe int64 values outside JavaScript's exact integer range are rejected rather than rounded.
+
 ## Read-only
 
 `metadata.readOnlySafe` is `true` when a tool changes no Neon resource and returns no connection string or role password: a `GET` that needs no approval, `logs.query`, the SQL tools that run one statement in a `READ ONLY` transaction, and the docs, feedback, search, and incidents tools. `postgres.connectionString` is a `GET` but not read-only safe, because its URI carries a role password that works against the read-write compute.

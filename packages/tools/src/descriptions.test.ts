@@ -305,10 +305,21 @@ describe("path parameter descriptions", () => {
 });
 
 describe("mcp-tool-names.json", () => {
+	test("publishes organization spending limit names with the existing selectors", () => {
+		for (const action of ["get", "set", "disable"]) {
+			expect(mcpToolNames[`${action}_organization_spending_limit`]).toBe(
+				`organizations.spendingLimit.${action}`,
+			);
+			expect(mcpToolNames).not.toHaveProperty(
+				`${action}_organization_unknown_setting`,
+			);
+		}
+	});
+
 	const selectors = Object.values(mcpToolNames);
 
-	test("maps each of the Neon MCP server's 143 tools to a distinct published selector", () => {
-		expect(Object.keys(mcpToolNames)).toHaveLength(143);
+	test("maps each of the Neon MCP server's 146 tools to a distinct published selector", () => {
+		expect(Object.keys(mcpToolNames)).toHaveLength(146);
 		expect(new Set(selectors).size).toBe(selectors.length);
 		expect(selectors.filter((selector) => !isNeonToolId(selector))).toEqual(
 			[],

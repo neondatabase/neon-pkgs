@@ -1,0 +1,126 @@
+import {
+	disableOrganizationSpendingLimit,
+	getOrganizationSpendingLimit,
+	type SpendingLimitResponse,
+	setOrganizationSpendingLimit,
+} from "../spending_limits_api.js";
+import type { CommonProps } from "../types.js";
+import { fillSingleOrg } from "../utils/enrichers.js";
+import { writer } from "../writer.js";
+import {
+	formatUsd,
+	parseUsdCents,
+	SPENDING_LIMIT_ACKNOWLEDGEMENT_NOTICE,
+	writeSpendingLimit,
+} from "./orgs.js";
+
+type SpendingLimitProps = CommonProps & { orgId?: string };
+const resolveOrg = (props: SpendingLimitProps) =>
+	fillSingleOrg({ ...props, orgId: props.orgId ?? "" });
+
+type SetSpendingLimitProps = SpendingLimitProps & {
+	amount: string;
+	spendingLimitEnabled?: boolean;
+};
+
+const formatCents = (cents: number | null | undefined) => {
+	if (cents === null || cents === undefined) return "Unavailable";
+	return formatUsd(cents);
+};
+
+const writeSpendingLimitDetails = (
+	props: SpendingLimitProps,
+	data: SpendingLimitResponse,
+	saved = false,
+) => {
+	const notice = [
+		...(saved ? ["Configuration accepted."] : []),
+		SPENDING_LIMIT_ACKNOWLEDGEMENT_NOTICE,
+		"Usage detection can lag by 1-2 hours; this is not a guaranteed maximum bill. Storage charges continue.",
+		"Only the current open invoice counts. Billing resets on the first UTC calendar day of each month.",
+	].join(" ");
+	if (props.output !== "table") {
+		writer(props).end({ ...data, notice }, { fields: [] });
+		return;
+	}
+	const rows = [
+		[
+			"Spending limit",
+			data.spending_limit_cents === null
+				? "Not configured"
+				: formatCents(data.spending_limit_cents),
+		],
+		[
+			"Service suspension enabled",
+			data.spending_limit_enabled === undefined
+				? "Unavailable / unsupported"
+				: String(data.spending_limit_enabled),
+		],
+		["Current invoice usage", formatCents(data.current_usage_cents)],
+		["Usage observed at", data.usage_observed_at ?? "Unavailable"],
+		["Invoice period ID", data.invoice_period_id ?? "Unavailable"],
+		["Status", data.status ?? "Unavailable / unsupported"],
+		[
+			"Enforcement status",
+			data.enforcement_status ?? "Unavailable / unsupported",
+		],
+		["Generation", data.generation?.toString() ?? "Unavailable"],
+		["Period ends at", data.period_ends_at ?? "Unavailable"],
+		[
+			"Monitoring delay",
+			data.monitoring_delay ?? "Unavailable / unsupported",
+		],
+		...(data.warning ? [["Warning", data.warning]] : []),
+	];
+	const details = Object.fromEntries(
+		rows.map(([setting, value]) => [
+			setting.toLowerCase().replace(/ /g, "_"),
+			value,
+		]),
+	);
+	writer(props).end(details, {
+		fields: Object.keys(details),
+		title: "Organization spending limit",
+	});
+	writer(props).text(notice + "\n");
+};
+
+export const getSpendingLimit = async (input: SpendingLimitProps) => {
+	const props = await resolveOrg(input);
+	const data = await getOrganizationSpendingLimit(props);
+	if (
+		props.output === "table" &&
+		(data.spending_limit_enabled !== undefined ||
+			data.current_usage_cents !== undefined)
+	) {
+		writeSpendingLimitDetails(props, data);
+	} else {
+		writeSpendingLimit(props, props.orgId, data);
+	}
+};
+
+export const setSpendingLimit = async (props: SetSpendingLimitProps) => {
+	const body = {
+		spending_limit_cents: parseUsdCents(
+			props.amount,
+			"org spending-limit set",
+		),
+		...(props.spendingLimitEnabled !== undefined
+			? { spending_limit_enabled: props.spendingLimitEnabled }
+			: {}),
+	};
+	writeSpendingLimitDetails(
+		props,
+		await setOrganizationSpendingLimit(await resolveOrg(props), body),
+		true,
+	);
+};
+
+export const disableSpendingLimit = async (input: SpendingLimitProps) => {
+	const props = await resolveOrg(input);
+	writeSpendingLimitDetails(
+		props,
+		await disableOrganizationSpendingLimit(props),
+		true,
+	);
+};
