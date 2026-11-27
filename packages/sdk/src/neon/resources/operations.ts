@@ -132,12 +132,17 @@ export class Operations<DThrow extends boolean> {
 		const { operations } = params;
 		const defaults = this.#ctx.defaults;
 		const shouldThrow = opts?.throwOnError ?? defaults.throwOnError;
-		const result = await waitForOperations(this.#ctx.client, operations, {
-			pollIntervalMs:
-				opts?.pollIntervalMs ?? defaults.waitOptions.pollIntervalMs,
-			timeoutMs: opts?.timeoutMs ?? defaults.waitOptions.timeoutMs,
-			signal: opts?.signal,
-		});
+		const result = await waitForOperations(
+			this.#ctx.client,
+			operations,
+			defaults.retries,
+			{
+				pollIntervalMs:
+					opts?.pollIntervalMs ?? defaults.waitOptions.pollIntervalMs,
+				timeoutMs: opts?.timeoutMs ?? defaults.waitOptions.timeoutMs,
+				signal: opts?.signal,
+			},
+		);
 		if (!shouldThrow) return result;
 		if (result.error) throw result.error;
 		return result.data;

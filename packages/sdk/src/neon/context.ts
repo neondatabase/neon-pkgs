@@ -233,13 +233,18 @@ export class RequestContext {
 	): Promise<NeonResult<void> | undefined> {
 		const wait = opts?.waitForReadiness ?? this.#config.waitForReadiness;
 		if (!wait || !hasOperations(data)) return undefined;
-		return waitForOperations(this.#config.client, data.operations, {
-			pollIntervalMs:
-				opts?.wait?.pollIntervalMs ??
-				this.#config.waitOptions.pollIntervalMs,
-			timeoutMs:
-				opts?.wait?.timeoutMs ?? this.#config.waitOptions.timeoutMs,
-			signal: opts?.signal,
-		});
+		return waitForOperations(
+			this.#config.client,
+			data.operations,
+			this.#config.retries,
+			{
+				pollIntervalMs:
+					opts?.wait?.pollIntervalMs ??
+					this.#config.waitOptions.pollIntervalMs,
+				timeoutMs:
+					opts?.wait?.timeoutMs ?? this.#config.waitOptions.timeoutMs,
+				signal: opts?.signal,
+			},
+		);
 	}
 }

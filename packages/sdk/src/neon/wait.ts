@@ -14,6 +14,7 @@ import {
 	toNeonError,
 } from "./errors.js";
 import { err, type NeonResult, ok } from "./result.js";
+import { withRetries } from "./retry.js";
 
 const SUCCESS: ReadonlySet<OperationStatus> = new Set(["finished", "skipped"]);
 const FAILURE: ReadonlySet<OperationStatus> = new Set([
@@ -73,6 +74,7 @@ function readinessEnded(
 export async function waitForOperations(
 	client: Client,
 	operations: readonly Operation[],
+	retries: number,
 	options: WaitForOptions = {},
 ): Promise<NeonResult<void>> {
 	const pollIntervalMs = options.pollIntervalMs ?? 1000;
@@ -107,15 +109,20 @@ export async function waitForOperations(
 			for (let i = 0; i < pending.length; i++) {
 				const op = pending[i];
 				const polled = await runBounded(deadline, () =>
-					getProjectOperation({
-						client,
-						path: {
-							project_id: op.project_id,
-							operation_id: op.id,
-						},
-						throwOnError: false,
-						signal: deadline.signal,
-					}),
+					withRetries(
+						() =>
+							getProjectOperation({
+								client,
+								path: {
+									project_id: op.project_id,
+									operation_id: op.id,
+								},
+								throwOnError: false,
+								signal: deadline.signal,
+							}),
+						retries,
+						deadline,
+					),
 				);
 
 				// Classify from the deadline first: an aborted poll is a transport

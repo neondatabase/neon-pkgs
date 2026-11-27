@@ -35,7 +35,8 @@ export interface NeonConfig<Throw extends boolean = false> {
 	wait?: WaitBudget;
 	/**
 	 * Number of automatic retries on always-safe statuses (423/429/503), and on a
-	 * `GET` whose connection dropped before a response. Default 2.
+	 * `GET`, operation polls included, that answered 500 or 502 or whose connection
+	 * dropped before a response. Default 2.
 	 * `0` disables retries. Non-integer, negative, `NaN`, or `Infinity` throws a
 	 * `"client"`-kind error at construction.
 	 */
