@@ -11,6 +11,7 @@ import {
 	formatUsd,
 	parseUsdCents,
 	SPEND_CAP_ACKNOWLEDGEMENT_NOTICE,
+	writeSpendingLimit,
 } from "./orgs.js";
 
 type SpendCapProps = CommonProps & { orgId?: string };
@@ -79,19 +80,31 @@ const writeSpendCap = (
 	);
 	writer(props).end(details, {
 		fields: Object.keys(details),
-		title: "Organization spend cap",
+		title: "Organization spending limit",
 	});
 	writer(props).text(notice + "\n");
 };
 
 export const getSpendCap = async (input: SpendCapProps) => {
 	const props = await resolveOrg(input);
-	writeSpendCap(props, await getOrganizationSpendCap(props));
+	const data = await getOrganizationSpendCap(props);
+	if (
+		props.output === "table" &&
+		(data.spend_cap_enabled !== undefined ||
+			data.current_usage_cents !== undefined)
+	) {
+		writeSpendCap(props, data);
+	} else {
+		writeSpendingLimit(props, props.orgId, data);
+	}
 };
 
 export const setSpendCap = async (props: SetSpendCapProps) => {
 	const body = {
-		spending_limit_cents: parseUsdCents(props.amount, "org spend-cap set"),
+		spending_limit_cents: parseUsdCents(
+			props.amount,
+			"org spending-limit set",
+		),
 		...(props.spendCapEnabled !== undefined
 			? { spend_cap_enabled: props.spendCapEnabled }
 			: {}),

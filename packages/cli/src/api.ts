@@ -173,7 +173,7 @@ export function spendCapErrorMessage(body: unknown): string | undefined {
 	const code = codeFromBody(body);
 	const message = messageFromBody(body);
 	if (code === "SPEND_CAP_EXCEEDED") {
-		return `${code}: ${message ?? "Organization spend cap reached."} Ask an Organization Admin to increase or disable the cap in Organization Billing. Other restrictions may still apply.`;
+		return `${code}: ${message ?? "Organization spending limit reached."} Ask an Organization Admin to increase or disable the spending limit in Organization Billing. Other restrictions may still apply.`;
 	}
 	if (code === "INSUFFICIENT_ORG_PERMISSIONS") {
 		return `${code}: ${message ?? "Permission denied."} An Organization Admin must make this change.`;

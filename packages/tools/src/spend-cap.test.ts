@@ -13,7 +13,8 @@ const fullStatus = {
 	generation: 14,
 	period_ends_at: "2026-12-01T00:00:00Z",
 	monitoring_delay: "1-2 hours",
-	warning: "Observed usage has reached the cap; suspension is being applied.",
+	warning:
+		"Observed usage has reached the spending limit; suspension is being applied.",
 };
 
 const additiveStatus = {
@@ -43,7 +44,7 @@ const setup = (response: object = fullStatus, status = 200) => {
 	return { requests, tools };
 };
 
-describe("organization spend caps", () => {
+describe("organization spending limits", () => {
 	test("uses the authenticated SDK transport and preserves every status field", async () => {
 		const { tools, requests } = setup();
 		const { data } = await tools["organizations.spendingLimit.get"].execute(

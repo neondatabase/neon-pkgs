@@ -137,7 +137,7 @@ export const toolDescriptions: Readonly<Partial<Record<NeonToolId, string>>> = {
 	"organizations.members.remove": "Removes org member except last admin; admin only.",
 	"organizations.invitations.list": "Lists pending/accepted org invitations.",
 	"organizations.invitations.create": "Invites by email; users join, others sign up.",
-	"organizations.spendingLimit.set": "Sets org cap; admin only.",
+	"organizations.spendingLimit.set": "Sets spending limit; admin only.",
 	"organizations.spendingLimit.delete": "Clears amount, emails and suspension.",
 	"organizations.apiKeys.list": "Lists org keys without tokens.",
 	"organizations.apiKeys.create": "Creates org key, optionally project-scoped. Store its one-time token.",

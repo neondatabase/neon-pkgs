@@ -21,7 +21,7 @@ const reachedCap: SpendingLimitResponse = {
 	period_ends_at: "2026-12-01T00:00:00Z",
 	monitoring_delay: "1-2 hours",
 	warning:
-		"Observed usage $100.42 has reached the $100.00 cap. Storage charges continue.",
+		"Observed usage $100.42 has reached the $100.00 spending limit. Storage charges continue.",
 };
 
 type Request = {
@@ -188,11 +188,70 @@ const runCli = (
 	});
 
 const spendCap = (args: string[], output = "json") =>
-	runCli(["org", "spend-cap", ...args, "--org-id", "org-test"], output);
+	runCli(["org", "spending-limit", ...args, "--org-id", "org-test"], output);
 
-describe("organization spend-cap CLI", () => {
+describe("organization spending-limit CLI", () => {
 	it.each([
-		["org", "spend-cap", "set"],
+		["100", "--amount", "100"],
+		["100", "--amount", "200"],
+		[],
+		["--amount", ""],
+		["--amount"],
+		["--no-amount"],
+		["--amount", "100", "--amount", "200"],
+		["100", "200"],
+		["--amount", "100", "--", "200"],
+		["100", "--spend-cap-enabled"],
+	])("rejects ambiguous or invalid set arguments %j before any request", async (...args) => {
+		const result = await spendCap(["set", ...args]);
+		expect(result.code).toBe(1);
+		expect(requests).toHaveLength(0);
+	});
+
+	it.each([
+		"org",
+		"orgs",
+	])("does not register the unreleased spend-cap command for %s", async (org) => {
+		const result = await runCli([
+			org,
+			"spend-cap",
+			"get",
+			"--org-id",
+			"org-test",
+		]);
+		expect(result.code).toBe(1);
+		expect(requests).toHaveLength(0);
+		const help = await runCli([org, "--help"]);
+		expect(help.code, help.stderr).toBe(0);
+		expect(help.stdout).not.toContain("spend-cap");
+		expect(help.stdout.match(/spending-limit/g)).toHaveLength(1);
+	});
+
+	it.each([
+		["org", "100.25", [], undefined],
+		["orgs", "100.25", ["--suspend-on-limit"], true],
+		["org", "100.25", ["--suspend-on-limit=false"], false],
+		["orgs", "100.25", ["--no-suspend-on-limit"], false],
+	] as const)("%s positional set %s with %j preserves explicit suspension=%s", async (org, amount, flags, enabled) => {
+		const result = await runCli([
+			org,
+			"spending-limit",
+			"set",
+			amount,
+			...flags,
+			"--org-id",
+			"org-test",
+		]);
+		expect(result.code, result.stderr).toBe(0);
+		expect(requests.map((request) => request.method)).toEqual(["PUT"]);
+		expect(requests[0].body).toEqual({
+			spending_limit_cents: 10025,
+			...(enabled === undefined ? {} : { spend_cap_enabled: enabled }),
+		});
+	});
+
+	it.each([
+		["org", "spending-limit", "set"],
 		["orgs", "spending-limit", "set"],
 	])("help for %j explains the new-limit default and notification-only option", async (...path) => {
 		const result = await runCli([...path, "--help"]);
@@ -202,16 +261,12 @@ describe("organization spend-cap CLI", () => {
 			"New limits default to suspension when available",
 		);
 		expect(help).toContain("existing limits keep their setting");
-		if (path[1] === "spend-cap") {
-			expect(help).toContain("false selects email notifications only");
-		} else {
-			expect(help).toContain("--spend-cap-enabled=false");
-		}
+		expect(help).toContain("--suspend-on-limit=false");
 		expect(requests).toHaveLength(0);
 	});
 
 	it.each([
-		["org", "spend-cap", "set", "--amount", "100"],
+		["org", "spending-limit", "set", "--amount", "100"],
 		["orgs", "spending-limit", "set", "100"],
 	])("%j leaves new-limit enforcement defaults to the server", async (...args) => {
 		current = { spending_limit_cents: null };
@@ -227,7 +282,7 @@ describe("organization spend-cap CLI", () => {
 			"set",
 			"--amount",
 			"100",
-			"--spend-cap-enabled=false",
+			"--suspend-on-limit=false",
 		]);
 		expect(result.code, result.stderr).toBe(0);
 		expect(requests.map((req) => req.method)).toEqual(["PUT"]);
@@ -241,7 +296,7 @@ describe("organization spend-cap CLI", () => {
 		current = {
 			spending_limit_cents: 10000,
 			warning:
-				"Observed usage has reached the new cap; services will be suspended.",
+				"Observed usage has reached the new spending limit; services will be suspended.",
 		};
 		const result = await runCli(
 			["orgs", "spending-limit", "set", "50", "--org-id", "org-test"],
@@ -261,7 +316,7 @@ describe("organization spend-cap CLI", () => {
 	])("legacy amount-only set reports a successful suspension warning and acknowledgement in %s", async (output) => {
 		current.current_usage_cents = 10000;
 		current.warning =
-			"Observed usage has reached the new cap; services will be suspended.";
+			"Observed usage has reached the new spending limit; services will be suspended.";
 		const result = await runCli(
 			["orgs", "spending-limit", "set", "50", "--org-id", "org-test"],
 			output,
@@ -312,9 +367,10 @@ describe("organization spend-cap CLI", () => {
 					? JSON.parse(result.stdout)
 					: YAML.parse(result.stdout);
 			expect(data).toMatchObject(reachedCap);
-			expect(data.notice).toContain("acknowledged asynchronously");
+			expect(data).toEqual(current);
 		}
-		expect(result.stdout).toContain("Storage charges continue");
+		if (output === "table")
+			expect(result.stdout).toContain("Storage charges continue");
 	});
 
 	it.each([
@@ -339,13 +395,13 @@ describe("organization spend-cap CLI", () => {
 		);
 	});
 
-	it("explicitly opts into suspension and returns a reached-cap save warning", async () => {
+	it("explicitly opts into suspension and returns a reached-limit save warning", async () => {
 		current.spend_cap_enabled = false;
 		const result = await spendCap([
 			"set",
 			"--amount",
 			"100",
-			"--spend-cap-enabled",
+			"--suspend-on-limit",
 		]);
 		expect(result.code, result.stderr).toBe(0);
 		expect(current.spend_cap_enabled).toBe(true);
@@ -364,7 +420,7 @@ describe("organization spend-cap CLI", () => {
 			"set",
 			"--amount",
 			"100",
-			"--spend-cap-enabled=false",
+			"--suspend-on-limit=false",
 		]);
 		expect(result.code, result.stderr).toBe(0);
 		expect(current.spend_cap_enabled).toBe(false);
@@ -453,7 +509,7 @@ describe("organization spend-cap CLI", () => {
 		const result = await runCli(
 			[
 				"org",
-				"spend-cap",
+				"spending-limit",
 				"disable",
 				"--org-id",
 				"org-test",
@@ -479,7 +535,7 @@ describe("organization spend-cap CLI", () => {
 		const result = await spendCap(["get"], output);
 		expect(result.code, result.stderr).toBe(0);
 		if (output === "table") {
-			expect(result.stdout).toContain("Unavailable / unsupported");
+			expect(result.stdout).toContain("$100.00");
 		} else {
 			const data =
 				output === "json"
@@ -492,7 +548,7 @@ describe("organization spend-cap CLI", () => {
 	});
 
 	it("resolves the sole organization when no org-id is supplied", async () => {
-		const result = await runCli(["orgs", "spend-cap", "get"]);
+		const result = await runCli(["orgs", "spending-limit", "get"]);
 		expect(result.code, result.stderr).toBe(0);
 		expect(requests.map((req) => req.path)).toEqual([
 			"/api/v2/users/me/organizations",
@@ -505,7 +561,7 @@ describe("organization spend-cap CLI", () => {
 			join(configDir, "context.json"),
 			JSON.stringify({ orgId: "org-test" }),
 		);
-		const result = await runCli(["org", "spend-cap", "get"]);
+		const result = await runCli(["org", "spending-limit", "get"]);
 		expect(result.code, result.stderr).toBe(0);
 		expect(requests.map((req) => req.path)).toEqual([
 			"/api/v2/organizations/org-test/billing/spending_limit",
@@ -513,7 +569,7 @@ describe("organization spend-cap CLI", () => {
 	});
 
 	it("prints parent help with no subcommand without contacting the API", async () => {
-		const result = await runCli(["org", "spend-cap"]);
+		const result = await runCli(["org", "spending-limit"]);
 		expect(result.code, result.stderr).toBe(0);
 		expect(result.stdout).toContain("Disable suspension");
 		expect(requests).toHaveLength(0);
@@ -542,14 +598,12 @@ describe("organization spend-cap CLI", () => {
 		const result = await spendCap(["get"]);
 		expect(result.code, result.stderr).toBe(0);
 		expect(JSON.parse(result.stdout).enforcement_status).toBe(status);
-		expect(JSON.parse(result.stdout).notice).toContain(
-			"does not confirm every workload",
-		);
+		expect(JSON.parse(result.stdout)).toEqual(current);
 	});
 
 	it("requires explicit scope when multiple organizations are available", async () => {
 		organizations.push({ id: "org-other", name: "Other" });
-		const result = await runCli(["org", "spend-cap", "get"]);
+		const result = await runCli(["org", "spending-limit", "get"]);
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain("--org-id");
 		expect(requests).toHaveLength(1);
@@ -558,7 +612,7 @@ describe("organization spend-cap CLI", () => {
 	it("rejects an invalid organization path without sending a request", async () => {
 		const result = await runCli([
 			"org",
-			"spend-cap",
+			"spending-limit",
 			"get",
 			"--org-id",
 			"org/test",
@@ -618,7 +672,7 @@ describe("organization spend-cap CLI", () => {
 			"set",
 			"--amount",
 			"100",
-			"--spend-cap-enabld",
+			"--suspend-on-limt",
 		]);
 		expect(result.code).toBe(1);
 		expect(requests).toHaveLength(0);
@@ -637,10 +691,10 @@ describe("organization spend-cap CLI", () => {
 		expect(requests).toHaveLength(1);
 	});
 
-	it("prints cap code and Billing guidance for an existing blocked command and exits without retry", async () => {
+	it("prints the spending limit code and Billing guidance for an existing blocked command and exits without retry", async () => {
 		error = {
 			code: "SPEND_CAP_EXCEEDED",
-			message: "This organization has reached its spend cap",
+			message: "This organization has reached its spending limit",
 		};
 		const result = await runCli([
 			"projects",

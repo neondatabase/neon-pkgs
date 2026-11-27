@@ -13,7 +13,7 @@ import {
 } from "./spend-cap-api.js";
 
 const notices = [
-	"For new limits, omitted spend_cap_enabled defaults to suspension when spend caps are available for the organization. For existing limits, omission preserves saved enforcement, including notifications-only limits. Explicit false creates notifications only and does not require observed usage; a new enabled limit requires observed current-invoice usage.",
+	"For new limits, omitted spend_cap_enabled defaults to suspension when spending limits are available for the organization. For existing limits, omission preserves saved enforcement, including notifications-only limits. Explicit false creates notifications only and does not require observed usage; a new enabled limit requires observed current-invoice usage.",
 	"Usage detection can lag by 1-2 hours; this is not a guaranteed maximum bill. Storage charges continue during suspension.",
 	"Billing resets on the first UTC calendar day of each month. Only the current open invoice counts, including when plan changes create multiple invoices in one month.",
 	"Missing status fields are unavailable or unsupported; they do not prove enforcement is off or applied.",
@@ -53,8 +53,8 @@ export const getSpendCapTool = (options: ToolClientOptions) =>
 		{
 			operationId: "organizations.spendingLimit.get",
 			id: publishedId("organizations.spendingLimit.get"),
-			title: "Get spend cap",
-			description: "Gets org cap status and usage.",
+			title: "Get spending limit",
+			description: "Gets spending limit and usage.",
 			inputSchema: spendCapInput,
 			outputSchema: spendCapResponse,
 			annotations: {
@@ -76,10 +76,10 @@ export const setSpendCapTool = (options: ToolClientOptions) =>
 		{
 			operationId: "organizations.spendingLimit.set",
 			id: publishedId("organizations.spendingLimit.set"),
-			title: "Set spend cap",
+			title: "Set spending limit",
 			description:
 				toolDescriptions["organizations.spendingLimit.set"] ??
-				"Sets org cap; admins only.",
+				"Sets spending limit; admin only.",
 			inputSchema: setSpendCapInput,
 			outputSchema: spendCapResponse,
 			annotations,
@@ -96,9 +96,9 @@ export const disableSpendCapTool = (options: ToolClientOptions) =>
 		{
 			operationId: "organizations.spendingLimit.disable",
 			id: publishedId("organizations.spendingLimit.disable"),
-			title: "Disable spend cap",
+			title: "Disable spending limit",
 			description:
-				"Disables cap, keeping amount and emails; admin required.",
+				"Disables suspension; keeps limit and emails. Admin only.",
 			inputSchema: spendCapInput,
 			outputSchema: spendCapResponse,
 			annotations,

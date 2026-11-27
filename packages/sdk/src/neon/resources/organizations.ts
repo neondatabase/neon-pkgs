@@ -59,7 +59,7 @@ export interface OrganizationInvitationCreateParams extends OrganizationParams {
 }
 export type OrganizationSpendingLimitGetParams = OrganizationParams;
 export interface OrganizationSpendingLimitSetParams extends OrganizationParams {
-	/** Monthly cap in cents. Must be positive; use `delete` to clear it. */
+	/** Monthly spending limit in cents. Must be positive; use `delete` to clear it. */
 	spendingLimitCents: number;
 }
 export type OrganizationSpendingLimitDeleteParams = OrganizationParams;

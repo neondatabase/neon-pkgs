@@ -305,6 +305,17 @@ describe("path parameter descriptions", () => {
 });
 
 describe("mcp-tool-names.json", () => {
+	test("publishes organization spending limit names with the existing selectors", () => {
+		for (const action of ["get", "set", "disable"]) {
+			expect(mcpToolNames[`${action}_organization_spending_limit`]).toBe(
+				`organizations.spendingLimit.${action}`,
+			);
+			expect(mcpToolNames).not.toHaveProperty(
+				`${action}_organization_spend_cap`,
+			);
+		}
+	});
+
 	const selectors = Object.values(mcpToolNames);
 
 	test("maps each of the Neon MCP server's 146 tools to a distinct published selector", () => {

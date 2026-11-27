@@ -78,69 +78,6 @@ export const builder = (argv: yargs.Argv) => {
 	return argv
 		.usage("$0 orgs <sub-command> [options]")
 		.command(
-			"spend-cap",
-			"Manage organization spending notifications and optional service suspension",
-			(argv) =>
-				argv
-					.usage("$0 org spend-cap <sub-command> [options]")
-					.options(orgIdOption)
-					.command(
-						"get",
-						"Get the threshold, observed usage, and enforcement status",
-						guarded,
-						async (args) => {
-							const { getSpendCap } = await import(
-								"./spend_cap.js"
-							);
-							await getSpendCap(args as unknown as OrgProps);
-						},
-					)
-					.command(
-						"set",
-						"Set the amount. New limits default to suspension when available; existing limits keep their setting. Admin only",
-						(argv) =>
-							guarded(
-								argv
-									.option("amount", {
-										describe:
-											"Positive USD amount with at most two decimal places",
-										type: "string",
-										coerce: single("amount", {
-											required: true,
-										}),
-										demandOption: true,
-									})
-									.option("spend-cap-enabled", {
-										describe:
-											"true enables service suspension; false selects email notifications only. Omit to use the new-limit default or preserve an existing setting",
-										type: "boolean",
-									}),
-							),
-						async (args) => {
-							const { setSpendCap } = await import(
-								"./spend_cap.js"
-							);
-							await setSpendCap(
-								args as unknown as OrgProps & {
-									amount: string;
-									spendCapEnabled?: boolean;
-								},
-							);
-						},
-					)
-					.command(
-						"disable",
-						"Disable suspension while retaining the amount and email notifications. Admin only",
-						guarded,
-						async (args) => {
-							const { disableSpendCap } = await import(
-								"./spend_cap.js"
-							);
-							await disableSpendCap(args as unknown as OrgProps);
-						},
-					),
-		)
-		.command(
 			"list",
 			"List organizations",
 			(yargs) => yargs,
@@ -257,7 +194,7 @@ export const builder = (argv: yargs.Argv) => {
 		)
 		.command(
 			"spending-limit",
-			"Manage the organization's monthly spending notifications (non-free plans)",
+			"Manage organization spending limits and optional service suspension (non-free plans)",
 			(yargs) =>
 				yargs
 					.usage("$0 orgs spending-limit <sub-command> [options]")
@@ -270,20 +207,56 @@ export const builder = (argv: yargs.Argv) => {
 							await getSpendingLimit(args as unknown as OrgProps),
 					)
 					.command(
-						"set <usd>",
-						"Set the monthly threshold. New limits default to suspension when available; existing limits keep their setting. Admin only",
+						"set [usd]",
+						"Set the monthly spending limit. New limits default to suspension when available; existing limits keep their setting. Admin only",
 						(yargs) =>
 							guarded(
-								yargs.positional("usd", {
-									describe:
-										"Monthly limit in US dollars, e.g. 500 or 250.50. For notifications only, use org spend-cap set --amount <usd> --spend-cap-enabled=false",
-									type: "string",
-								}),
+								yargs
+									.positional("usd", {
+										describe:
+											"Monthly limit in US dollars, e.g. 500 or 250.50",
+										type: "string",
+									})
+									.option("amount", {
+										describe:
+											"Positive USD amount with at most two decimal places; use instead of <usd>",
+										type: "string",
+										coerce: single("amount", {
+											required: true,
+										}),
+									})
+									.option("suspend-on-limit", {
+										describe:
+											"true enables service suspension; --suspend-on-limit=false selects email notifications only. Omit to use the new-limit default or preserve an existing setting",
+										type: "boolean",
+									})
+									.check((args) => {
+										if (
+											(args.usd === undefined) ===
+											(args.amount === undefined)
+										) {
+											throw new Error(
+												"Pass exactly one spending limit amount: <usd> or --amount <usd>.",
+											);
+										}
+										return true;
+									}),
 							),
 						async (args) =>
 							await setSpendingLimit(
 								args as unknown as SetSpendingLimitProps,
 							),
+					)
+					.command(
+						"disable",
+						"Disable suspension while retaining the amount and email notifications. Admin only",
+						guarded,
+						async (args) => {
+							const { disableSpendCap } = await import(
+								"./spend_cap.js"
+							);
+							await disableSpendCap(args as unknown as OrgProps);
+						},
 					)
 					.command(
 						"delete",
@@ -305,7 +278,11 @@ type GetProps = OrgProps & { id?: string };
 type MemberProps = OrgProps & { memberId: string };
 type UpdateMemberProps = MemberProps & { role: MemberRole };
 type CreateInvitationsProps = OrgProps & { email: string[]; role: MemberRole };
-type SetSpendingLimitProps = OrgProps & { usd: string };
+type SetSpendingLimitProps = OrgProps & {
+	usd?: string;
+	amount?: string;
+	suspendOnLimit?: boolean;
+};
 
 const list = async (props: CommonProps) => {
 	const out = writer(props);
@@ -467,16 +444,20 @@ const writeInvitations = (
 };
 
 const getSpendingLimit = async (props: OrgProps) => {
-	const { neon, fail, orgId } = await sdk(props);
-	const limit = await neon.organizations.spendingLimit
-		.get({ orgId })
-		.catch((error: unknown) => {
-			throw fail(error);
-		});
-	writeSpendingLimit(props, orgId, limit);
+	const { getSpendCap } = await import("./spend_cap.js");
+	await getSpendCap(props);
 };
 
 const setSpendingLimit = async (props: SetSpendingLimitProps) => {
+	if (props.amount !== undefined || props.suspendOnLimit !== undefined) {
+		const { setSpendCap } = await import("./spend_cap.js");
+		await setSpendCap({
+			...props,
+			amount: props.amount ?? props.usd ?? "",
+			spendCapEnabled: props.suspendOnLimit,
+		});
+		return;
+	}
 	const spendingLimitCents = parseUsdCents(props.usd);
 	const { neon, fail, orgId } = await sdk(props);
 	const limit = await neon.organizations.spendingLimit
@@ -498,7 +479,7 @@ const deleteSpendingLimit = async (props: OrgProps) => {
 };
 
 /** JSON and YAML keep the API's cents; the table shows dollars. */
-const writeSpendingLimit = (
+export const writeSpendingLimit = (
 	props: OrgProps,
 	orgId: string,
 	limit: SpendingLimitResponse,
