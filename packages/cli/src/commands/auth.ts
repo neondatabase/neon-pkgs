@@ -66,6 +66,7 @@ import {
 	isDocsCommand,
 	isFeedbackCommand,
 	isFunctionsTemplateCommand,
+	isGenTypesDbUrl,
 	isGitLocalCommand,
 	isIncidentsCommand,
 	isInspectDbUrl,
@@ -754,7 +755,7 @@ export const ensureAuth = async (
 	}
 
 	// `--db-url` is a Postgres URI; project/branch resolution is skipped.
-	if (isInspectDbUrl(props)) {
+	if (isInspectDbUrl(props) || isGenTypesDbUrl(props)) {
 		return;
 	}
 

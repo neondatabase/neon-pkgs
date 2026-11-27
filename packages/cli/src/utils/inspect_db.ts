@@ -33,6 +33,8 @@ export type ResolvedConnection = {
 	role: string;
 	password: string;
 	database: string;
+	/** The branch id, resolved from the name with any point-in-time suffix removed. */
+	branchId: string;
 	/** The encoded query-string (sslmode, options, …), for extended output. */
 	options: string;
 };
@@ -298,6 +300,7 @@ export const resolveConnectionUri = async (
 		role,
 		password,
 		database,
+		branchId,
 		options: connectionString.searchParams.toString(),
 	};
 };
