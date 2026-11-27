@@ -33,6 +33,125 @@ afterEach(async () => {
 });
 
 describe("Realtime TanStack DB collection", () => {
+	it("acquires the first capability only on sync and preserves the transaction wait deadline", async () => {
+		const wire = wireClient();
+		const subscribe = vi.spyOn(wire.client, "subscribe");
+		let resolveQuery!: (value: SealedLiveQuery<MessageRow>) => void;
+		const initialQuery = vi.fn(
+			() =>
+				new Promise<SealedLiveQuery<MessageRow>>((resolve) => {
+					resolveQuery = resolve;
+				}),
+		);
+		const collection = createCollection(
+			realtimeCollectionOptions({
+				client: wire.client,
+				initialQuery,
+				getKey: (row) => row.id,
+			}),
+		);
+		cleanups.push(async () => {
+			await collection.cleanup();
+			wire.client.close();
+		});
+		expect(initialQuery).not.toHaveBeenCalled();
+		const preload = collection.preload();
+		void preload.catch(() => {});
+		await eventually(() => expect(initialQuery).toHaveBeenCalledOnce());
+		expect(subscribe).not.toHaveBeenCalled();
+		await expect(collection.utils.awaitTxId("41", 1)).rejects.toThrow(
+			"Timed out",
+		);
+		const waiting = collection.utils.awaitTxId("41");
+		resolveQuery(query("initial"));
+		await eventually(() => expect(subscribe).toHaveBeenCalledOnce());
+		wire.baseline();
+		await preload;
+		wire.receive({
+			type: "progress",
+			mvcc: { xmin: "42", xmax: "42", xip: [] },
+		});
+		await expect(waiting).resolves.toBe(true);
+		expect(collection.get(1)?.title).toBe("before");
+	});
+
+	it("surfaces initial acquisition failure and acquires again on reload", async () => {
+		const client = new TestClient<MessageRow>();
+		const failure = new Error("Capability request failed");
+		const initialQuery = vi
+			.fn<() => Promise<SealedLiveQuery<MessageRow>>>()
+			.mockRejectedValueOnce(failure)
+			.mockResolvedValueOnce(query("retry"));
+		const collection = createCollection(
+			realtimeCollectionOptions({
+				client,
+				initialQuery,
+				getKey: (row) => row.id,
+			}),
+		);
+		cleanups.push(() => collection.cleanup());
+		const waiting = collection.utils
+			.awaitTxId("41")
+			.catch((error) => error);
+		await expect(collection.preload()).rejects.toBeDefined();
+		expect(await waiting).toBe(failure);
+		expect(collection.health.error?.cause).toBe(failure);
+		expect(client.subscriptions).toHaveLength(0);
+		const reload = collection.reload();
+		await eventually(() => expect(client.subscriptions).toHaveLength(1));
+		client
+			.latest()
+			.reset([{ rowId: "a", row: { id: 1, title: "recovered" } }]);
+		await reload;
+		expect(initialQuery).toHaveBeenCalledTimes(2);
+		expect(collection.get(1)?.title).toBe("recovered");
+	});
+
+	it("aborts a pending supplier and ignores a late capability after a new sync starts", async () => {
+		const client = new TestClient<MessageRow>();
+		let resolveRetired!: (value: SealedLiveQuery<MessageRow>) => void;
+		const retired = new Promise<SealedLiveQuery<MessageRow>>((resolve) => {
+			resolveRetired = resolve;
+		});
+		const initialQuery = vi
+			.fn<
+				(_signal: AbortSignal) => Promise<SealedLiveQuery<MessageRow>>
+			>()
+			.mockReturnValueOnce(retired)
+			.mockResolvedValueOnce(query("replacement"));
+		const collection = createCollection(
+			realtimeCollectionOptions({
+				client,
+				initialQuery,
+				getKey: (row) => row.id,
+			}),
+		);
+		cleanups.push(() => collection.cleanup());
+		const preload = collection.preload().catch((error) => error);
+		const waiting = collection.utils
+			.awaitTxId("41")
+			.catch((error) => error);
+		await eventually(() => expect(initialQuery).toHaveBeenCalledOnce());
+		const signal = initialQuery.mock.calls[0]?.[0];
+		await collection.cleanup();
+		expect(signal?.aborted).toBe(true);
+		expect(await preload).toBeInstanceOf(Error);
+		expect(await waiting).toMatchObject({
+			message: "Realtime collection was cleaned up",
+		});
+		const restarted = collection.preload();
+		resolveRetired(query("retired"));
+		await eventually(() => expect(client.subscriptions).toHaveLength(1));
+		expect(client.latest().query.capability).toBe(
+			query("replacement").capability,
+		);
+		client
+			.latest()
+			.reset([{ rowId: "a", row: { id: 1, title: "replacement" } }]);
+		await restarted;
+		expect(initialQuery).toHaveBeenCalledTimes(2);
+	});
+
 	it("ignores moves in its unordered keyed collection without deleting rows", async () => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
