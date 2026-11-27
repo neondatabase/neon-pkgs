@@ -68,12 +68,18 @@ export interface RealtimeCollectionConfig<
 	readonly query: SealedLiveQuery<Row>;
 	/**
 	 * Obtain a replacement capability for the same exact query before expiry.
-	 * Transient failures are retried while the current capability remains valid.
+	 * Transient failures are retried, including after the capability expires.
 	 * A collection that restarts or reloads subscribes with the newest
 	 * capability this returned, and calls it straight away if that one has
 	 * expired.
 	 */
 	readonly refreshQuery?: () => Promise<SealedLiveQuery<Row>>;
+	/**
+	 * Return true for a permanent error from `refreshQuery`. The collection
+	 * stops syncing and reports the error through its health state. By default,
+	 * errors from `refreshQuery` are retried.
+	 */
+	readonly isTerminalRefreshError?: (error: unknown) => boolean;
 	/** Derive the stable unique TanStack DB key for a row. */
 	readonly getKey: (row: Row) => Key;
 }
@@ -159,7 +165,13 @@ function createRealtimeCollectionOptions<
 >(
 	config: RealtimeCollectionConfig<Row, Key, Schema>,
 ): RealtimeCollectionOptions<Row, Key, Schema> {
-	const { client, query: initialQuery, refreshQuery, ...baseConfig } = config;
+	const {
+		client,
+		query: initialQuery,
+		refreshQuery,
+		isTerminalRefreshError,
+		...baseConfig
+	} = config;
 	// The newest capability this collection has obtained. A restarted or
 	// reloaded sync run subscribes with it rather than with the initial query,
 	// which has often expired by then.
@@ -309,6 +321,7 @@ function createRealtimeCollectionOptions<
 				queryRefresh = new QueryRefreshController({
 					query: latestQuery,
 					refreshQuery,
+					isTerminalRefreshError,
 					renewSubscription: (replacement) =>
 						subscription.renew(replacement),
 					onRefreshExhausted: stop,
