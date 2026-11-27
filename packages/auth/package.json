@@ -114,7 +114,7 @@
 		"better-auth": "~1.7.12",
 		"better-call": "~1.4.4",
 		"jose": "6.2.5",
-		"zod": "^4.5.4"
+		"zod": "^4.6.6"
 	},
 	"peerDependencies": {
 		"react": ">=18.0.0",

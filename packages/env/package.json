@@ -61,7 +61,7 @@
 	},
 	"dependencies": {
 		"@neon/config": "workspace:*",
-		"zod": "^4.5.4",
+		"zod": "^4.6.6",
 		"yargs": "^18.0.0"
 	},
 	"optionalDependencies": {
