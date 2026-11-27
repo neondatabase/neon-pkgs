@@ -178,6 +178,88 @@ describe("Realtime React integration", () => {
 		}
 	});
 
+	it("reads the current subscription snapshot inside update and state observers", () => {
+		const wire = wireClient();
+		let observed: UseLiveQueryResult<MessageRow> | undefined;
+		const view = render(
+			<RealtimeProvider client={wire.client}>
+				<Messages
+					query={query("observer reads")}
+					observe={(result) => {
+						observed = result;
+					}}
+				/>
+			</RealtimeProvider>,
+		);
+		try {
+			act(() => wire.baseline());
+			if (!observed) throw new Error("Expected the query to render");
+			const { utils } = observed;
+			const observedUpdates: LiveQuerySnapshot<MessageRow>[] = [];
+			const observedStates: Array<{
+				event: LiveQueryState;
+				current: LiveQueryState;
+				snapshot: LiveQuerySnapshot<MessageRow>;
+			}> = [];
+			utils.onUpdate(() => observedUpdates.push(utils.getSnapshot()));
+			utils.onStateChange((event) =>
+				observedStates.push({
+					event,
+					current: utils.getState(),
+					snapshot: utils.getSnapshot(),
+				}),
+			);
+			act(() => {
+				wire.receive({
+					type: "open",
+					publication_id: "observer-change",
+				});
+				wire.receive({
+					type: "keyed_results",
+					publication_id: "observer-change",
+					index: 0,
+					txids: ["42"],
+					targets: [{ live_id: "1", epoch: "1", sequence: "1" }],
+					changes: [
+						{
+							op: "upsert",
+							row_key: "a".repeat(64),
+							values: ["1", "after"],
+						},
+					],
+				});
+				wire.receive({
+					type: "commit",
+					publication_id: "observer-change",
+					body_count: 1,
+					frontier: { lsn: "0/10" },
+				});
+				wire.receive({
+					type: "subscription_error",
+					live_id: "1",
+					code: "authorization_expired",
+					message: "expired",
+				});
+			});
+
+			const data = [{ id: 1, title: "after" }];
+			const stale = { status: "stale", error: undefined };
+			expect({ observedUpdates, observedStates }).toEqual({
+				observedUpdates: [{ status: "live", error: undefined, data }],
+				observedStates: [
+					{
+						event: stale,
+						current: stale,
+						snapshot: { ...stale, data },
+					},
+				],
+			});
+		} finally {
+			view.unmount();
+			wire.client.close();
+		}
+	});
+
 	it("renders preloaded data and exposes materialized subscription utilities", async () => {
 		const client = new TestClient<MessageRow>();
 		let observed: UseLiveQueryResult<MessageRow> | undefined;
