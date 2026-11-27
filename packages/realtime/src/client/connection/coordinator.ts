@@ -88,6 +88,14 @@ interface Renewal {
 	readonly reject: (error: Error) => void;
 }
 
+function renewalSuperseded(): ConnectionCoordinatorError {
+	return new ConnectionCoordinatorError(
+		"renewal_superseded",
+		false,
+		"Live-query renewal was superseded by a newer sealed query",
+	);
+}
+
 type ManagedSubscriptionState =
 	| "active"
 	| "awaiting_query"
@@ -272,14 +280,7 @@ export class ConnectionCoordinator {
 			);
 		}
 		subscription.query = query;
-		this.rejectQueuedRenewals(
-			subscription,
-			new ConnectionCoordinatorError(
-				"renewal_superseded",
-				false,
-				"Live-query renewal was superseded by a newer sealed query",
-			),
-		);
+		this.rejectQueuedRenewals(subscription, renewalSuperseded());
 		const renewal = promiseWithResolvers<void>();
 		const pending: Renewal = {
 			query,
@@ -523,7 +524,7 @@ export class ConnectionCoordinator {
 			lifecycle: subscription.recovery,
 		});
 		if (acceptedCapability === subscription.query.capability) {
-			this.resolveRenewals(subscription);
+			this.resolveAdmittedRenewals(subscription, acceptedCapability);
 		} else if (subscription.queuedRenewals.length > 0) {
 			this.sendNextRenewal(subscription);
 		}
@@ -977,13 +978,19 @@ export class ConnectionCoordinator {
 		subscription.queuedRenewals = [];
 	}
 
-	private resolveRenewals(subscription: ManagedSubscription): void {
-		const renewed =
-			subscription.renewing !== undefined ||
-			subscription.queuedRenewals.length > 0;
-		subscription.renewing?.resolve();
-		subscription.renewing = undefined;
-		for (const renewal of subscription.queuedRenewals) renewal.resolve();
+	private resolveAdmittedRenewals(
+		subscription: ManagedSubscription,
+		acceptedCapability: string,
+	): void {
+		let renewed = false;
+		for (const renewal of subscription.queuedRenewals) {
+			if (renewal.query.capability === acceptedCapability) {
+				renewal.resolve();
+				renewed = true;
+			} else {
+				renewal.reject(renewalSuperseded());
+			}
+		}
 		subscription.queuedRenewals = [];
 		if (renewed) subscription.events.renewed();
 	}
