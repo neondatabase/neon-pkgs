@@ -1,4 +1,5 @@
 import type { NeonClient } from "@neon/sdk";
+import { types } from "@neondatabase/serverless";
 import * as z from "zod";
 import {
 	bindTool,
@@ -79,6 +80,37 @@ export const explainSqlInputSchema = z.strictObject({
 		),
 });
 
+const DATE_TIME_OIDS: ReadonlySet<number> = new Set([
+	types.builtins.DATE,
+	types.builtins.TIMESTAMP,
+	types.builtins.TIMESTAMPTZ,
+]);
+
+// The driver parses `infinity` to a number that JSON renders as null, and a
+// year past 275760 to an Invalid Date that throws in toISOString. Postgres's
+// own text is the only faithful value for either.
+const keepTextUnlessDate =
+	(parse: (text: string) => unknown) =>
+	(text: string): unknown => {
+		const value = parse(text);
+		return value instanceof Date && !Number.isNaN(value.getTime())
+			? value
+			: text;
+	};
+
+// The driver reads `types` from each query's options, never from neon()'s.
+const callerResults = {
+	types: {
+		...types,
+		getTypeParser: (oid: number, format?: "text" | "binary") => {
+			const parse = types.getTypeParser(oid, format);
+			return DATE_TIME_OIDS.has(oid) && format !== "binary"
+				? keepTextUnlessDate(parse)
+				: parse;
+		},
+	},
+} satisfies { types: typeof types };
+
 /** One caller statement, in its own `READ ONLY` transaction when `readOnly` is set. */
 export const runStatement = async (
 	neonClient: NeonClient<true>,
@@ -95,12 +127,13 @@ export const runStatement = async (
 	);
 	const query = sqlClient(connection.uri, signal);
 	if (context.readOnly === true) {
-		const [rows] = await query.transaction([query.query(sql)], {
-			readOnly: true,
-		});
+		const [rows] = await query.transaction(
+			[query.query(sql, [], callerResults)],
+			{ readOnly: true },
+		);
 		return rows;
 	}
-	return query.query(sql);
+	return query.query(sql, [], callerResults);
 };
 
 export const runTransaction = async (
@@ -118,7 +151,9 @@ export const runTransaction = async (
 	);
 	const query = sqlClient(connection.uri, signal);
 	return query.transaction(
-		statements.map((statement) => query.query(statement)),
+		statements.map((statement) =>
+			query.query(statement, [], callerResults),
+		),
 	);
 };
 
