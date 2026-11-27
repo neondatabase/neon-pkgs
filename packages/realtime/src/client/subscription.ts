@@ -1,4 +1,5 @@
 import { ConnectionCoordinatorError } from "./connection/coordinator.js";
+import { isPromiseLike } from "./diagnostics/dispatcher.js";
 import type { SubscriptionEventSink } from "./diagnostics.js";
 import type { ParsedMvccSnapshot } from "./mvcc.js";
 import type { PostgreSQLParserRegistry } from "./postgres/parsers.js";
@@ -448,7 +449,12 @@ export class Subscription<Row>
 	): void {
 		for (const listener of [...listeners]) {
 			try {
-				listener(...args);
+				const result: unknown = listener(...args);
+				if (isPromiseLike(result)) {
+					void Promise.resolve(result).catch((error: unknown) =>
+						this.events.listenerFailed(error),
+					);
+				}
 			} catch (error) {
 				this.events.listenerFailed(error);
 			}
