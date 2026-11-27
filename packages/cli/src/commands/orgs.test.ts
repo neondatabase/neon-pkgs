@@ -183,7 +183,7 @@ describe("orgs", () => {
 		]);
 	});
 
-	test("spending-limit get shows an unset limit", async ({
+	test("spending-limit get shows an unset threshold", async ({
 		testCliCommand,
 	}) => {
 		await testCliCommand(
@@ -228,7 +228,7 @@ describe("orgs", () => {
 			["orgs", "spending-limit", "delete", "--org-id", "org-7"],
 			{
 				stderr: expect.stringContaining(
-					"Spending limit removed from org-7",
+					"Spending notification threshold removed from org-7",
 				),
 				snapshot: false,
 			},

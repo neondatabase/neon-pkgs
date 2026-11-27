@@ -26,7 +26,7 @@ const ORG_DETAIL_FIELDS = [
 const MEMBER_TABLE_FIELDS = ["id", "email", "role", "joined_at"] as const;
 const MEMBER_FIELDS = ["id", "user_id", "role", "joined_at"] as const;
 const INVITATION_FIELDS = ["id", "email", "role", "invited_at"] as const;
-const SPENDING_LIMIT_TABLE_FIELDS = ["monthly_limit"] as const;
+const SPENDING_LIMIT_TABLE_FIELDS = ["monthly_threshold"] as const;
 
 const MEMBER_ROLES = [
 	"admin",
@@ -185,26 +185,26 @@ export const builder = (argv: yargs.Argv) => {
 		)
 		.command(
 			"spending-limit",
-			"Manage the organization's monthly spending limit (Launch and Scale plans)",
+			"Manage the organization's monthly spending notification threshold (Launch and Scale plans)",
 			(yargs) =>
 				yargs
 					.usage("$0 orgs spending-limit <sub-command> [options]")
 					.options(orgIdOption)
 					.command(
 						"get",
-						"Show the monthly spending limit",
+						"Show the monthly spending notification threshold",
 						guarded,
 						async (args) =>
 							await getSpendingLimit(args as unknown as OrgProps),
 					)
 					.command(
 						"set <usd>",
-						"Set the monthly spending limit. Neon emails at 80% and 100% and keeps computes running. Admin only",
+						"Set the monthly spending notification threshold. Neon emails organization admins at 80% and 100% and keeps computes running. Admin only",
 						(yargs) =>
 							guarded(
 								yargs.positional("usd", {
 									describe:
-										"Monthly limit in US dollars, e.g. 500 or 250.50",
+										"Monthly threshold in US dollars, e.g. 500 or 250.50",
 									type: "string",
 								}),
 							),
@@ -215,7 +215,7 @@ export const builder = (argv: yargs.Argv) => {
 					)
 					.command(
 						"delete",
-						"Remove the monthly spending limit. Admin only",
+						"Remove the spending notification threshold, which stops the emails. Admin only",
 						guarded,
 						async (args) =>
 							await deleteSpendingLimit(
@@ -422,7 +422,7 @@ const deleteSpendingLimit = async (props: OrgProps) => {
 		.catch((error: unknown) => {
 			throw fail(error);
 		});
-	log.info(`Spending limit removed from ${orgId}`);
+	log.info(`Spending notification threshold removed from ${orgId}`);
 };
 
 /** JSON and YAML keep the API's cents; the table shows dollars. */
@@ -437,10 +437,10 @@ const writeSpendingLimit = (
 	}
 	const cents = limit.spending_limit_cents;
 	writer(props).end(
-		{ monthly_limit: cents === null ? "Not set" : formatUsd(cents) },
+		{ monthly_threshold: cents === null ? "Not set" : formatUsd(cents) },
 		{
 			fields: SPENDING_LIMIT_TABLE_FIELDS,
-			title: `Spending limit for ${orgId}`,
+			title: `Spending notification threshold for ${orgId}`,
 		},
 	);
 };
@@ -466,7 +466,7 @@ export const parseUsdCents = (value: unknown): number => {
 		: Number.NaN;
 	if (!Number.isSafeInteger(cents) || cents <= 0) {
 		throw new Error(
-			`spending-limit set needs a positive amount in US dollars, such as 500 or 250.50. Got \`${String(value)}\`. To remove the limit, run \`neon orgs spending-limit delete\`.`,
+			`spending-limit set needs a positive amount in US dollars, such as 500 or 250.50. Got \`${String(value)}\`. To remove the threshold, run \`neon orgs spending-limit delete\`.`,
 		);
 	}
 	return cents;

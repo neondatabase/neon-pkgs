@@ -52,14 +52,14 @@ joined_at: 2026-01-02T00:00:00Z
 "
 `;
 
-exports[`orgs > spending-limit get shows an unset limit 1`] = `
-"Spending limit for org-7
-Monthly Limit  Not set
+exports[`orgs > spending-limit get shows an unset threshold 1`] = `
+"Spending notification threshold for org-7
+Monthly Threshold  Not set
 "
 `;
 
 exports[`orgs > spending-limit set sends cents and shows dollars 1`] = `
-"Spending limit for org-7
-Monthly Limit  $1,250.50
+"Spending notification threshold for org-7
+Monthly Threshold  $1,250.50
 "
 `;
