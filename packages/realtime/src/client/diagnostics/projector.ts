@@ -61,6 +61,7 @@ const SILENT_CONNECTION_EVENTS: ConnectionEventSink = Object.freeze({
 	publicationCommitted: noop,
 	failed: noop,
 	episodeEnded: noop,
+	listenerFailed: noop,
 });
 
 export const SILENT_CLIENT_EVENTS: ClientEventSink = Object.freeze({
@@ -146,6 +147,8 @@ export function createClientEventSink(options: {
 			outageStartedAt = undefined;
 			reconnectAttempt = undefined;
 		},
+		listenerFailed: (error) =>
+			emit("connection_listener_failed", { error }),
 	};
 	Object.freeze(connection);
 

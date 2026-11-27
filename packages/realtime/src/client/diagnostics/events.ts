@@ -18,6 +18,7 @@ export interface ConnectionEventSink {
 	publicationCommitted(bodyCount: number): void;
 	failed(error: DiagnosticError): void;
 	episodeEnded(): void;
+	listenerFailed(error: unknown): void;
 }
 
 export interface QueryRefreshEventSink {
