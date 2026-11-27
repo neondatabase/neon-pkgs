@@ -131,7 +131,7 @@
 	"organizations.members.remove": "Removes org member except last admin; admin only.",
 	"organizations.invitations.list": "Lists pending/accepted org invitations.",
 	"organizations.invitations.create": "Invites by email; users join, others sign up.",
-	"organizations.spendingLimit.set": "Sets org cap; admin. New limits default on when available; false keeps emails.",
+	"organizations.spendingLimit.set": "Sets org cap; admin only.",
 	"organizations.spendingLimit.delete": "Clears amount, emails and suspension.",
 	"organizations.apiKeys.list": "Lists org keys without tokens.",
 	"organizations.apiKeys.create": "Creates org key, optionally project-scoped. Store its one-time token.",
