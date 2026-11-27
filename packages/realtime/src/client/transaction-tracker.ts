@@ -1,3 +1,4 @@
+import { setDeadlineTimer } from "./connection/timer.js";
 import {
 	mergeMvccSnapshots,
 	type ParsedMvccSnapshot,
@@ -10,7 +11,7 @@ const MAX_RECENT_TXIDS = 1_000;
 interface TransactionWaiter {
 	readonly resolve: () => void;
 	readonly reject: (error: Error) => void;
-	readonly timer?: ReturnType<typeof setTimeout>;
+	readonly cancelTimeout?: () => void;
 }
 
 export class TransactionTracker {
@@ -47,10 +48,10 @@ export class TransactionTracker {
 			const waiter: TransactionWaiter = {
 				resolve,
 				reject,
-				timer:
+				cancelTimeout:
 					timeout === undefined
 						? undefined
-						: setTimeout(() => {
+						: setDeadlineTimer(() => {
 								this.remove(normalized.text, waiter);
 								reject(
 									new Error(
@@ -104,7 +105,7 @@ export class TransactionTracker {
 		this.closeError = error;
 		for (const waiters of this.waiting.values()) {
 			for (const waiter of waiters) {
-				if (waiter.timer !== undefined) clearTimeout(waiter.timer);
+				waiter.cancelTimeout?.();
 				waiter.reject(error);
 			}
 		}
@@ -126,7 +127,7 @@ export class TransactionTracker {
 		if (!waiters) return;
 		this.waiting.delete(txid);
 		for (const waiter of waiters) {
-			if (waiter.timer !== undefined) clearTimeout(waiter.timer);
+			waiter.cancelTimeout?.();
 			waiter.resolve();
 		}
 	}
