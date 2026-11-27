@@ -4,6 +4,7 @@ import { getRequestListener } from "@hono/node-server";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+	createDevRequestListener,
 	type FetchHandler,
 	portSelectionFromEnv,
 	resolveFetchHandler,
@@ -206,7 +207,15 @@ describe("portSelectionFromEnv", () => {
 	});
 });
 
-describe("getRequestListener round-trip", () => {
+// Captured before any listener is built, the way a framework captures it when the
+// user module is imported ahead of the dev server (h3 v2, through srvx).
+const PlatformResponse = globalThis.Response;
+const platformGlobals = {
+	Request: Object.getOwnPropertyDescriptor(globalThis, "Request"),
+	Response: Object.getOwnPropertyDescriptor(globalThis, "Response"),
+};
+
+describe("createDevRequestListener round-trip", () => {
 	let server: Server | null = null;
 
 	afterEach(async () => {
@@ -225,8 +234,15 @@ describe("getRequestListener round-trip", () => {
 		}
 	});
 
-	const start = async (handler: FetchHandler): Promise<number> => {
-		const listener = getRequestListener(handler);
+	const start = async (
+		handler: FetchHandler,
+		createListener: (
+			handler: FetchHandler,
+		) => ReturnType<
+			typeof createDevRequestListener
+		> = createDevRequestListener,
+	): Promise<number> => {
+		const listener = createListener(handler);
 		const created = createServer((incoming, outgoing) => {
 			void listener(incoming, outgoing);
 		});
@@ -261,5 +277,56 @@ describe("getRequestListener round-trip", () => {
 		expect(res.status).toBe(200);
 		expect(res.headers.get("x-neon-dev")).toBe("runtime");
 		await expect(res.text()).resolves.toBe("hello from /greet");
+	});
+
+	// The shape of h3 v2's error path: build a Response from the class captured at
+	// import time, then return it only if it is `instanceof Response` and stringify it
+	// otherwise.
+	const instanceofCheckingHandler = (): FetchHandler =>
+		withErrorBoundary(
+			resolveFetchHandler({
+				default: {
+					fetch: () => {
+						const built = new PlatformResponse("teapot", {
+							status: 418,
+						});
+						return built instanceof Response
+							? built
+							: new PlatformResponse(String(built));
+					},
+				},
+			}),
+		);
+
+	it("keeps the platform Response global, so instanceof checks hold as when deployed", async () => {
+		const port = await start(instanceofCheckingHandler());
+		const res = await fetch(`http://127.0.0.1:${port}/teapot`);
+
+		expect(globalThis.Response).toBe(PlatformResponse);
+		expect(res.status).toBe(418);
+		await expect(res.text()).resolves.toBe("teapot");
+	});
+
+	it("fails that check with @hono/node-server's default options, which is why createDevRequestListener opts out", async () => {
+		// Control for the test above. If this starts failing, @hono/node-server no
+		// longer replaces the globals by default and `overrideGlobalObjects: false`
+		// can go. The default options redefine the globals for the whole worker, so
+		// put the platform ones back before any other test runs.
+		try {
+			const port = await start(instanceofCheckingHandler(), (handler) =>
+				getRequestListener(handler),
+			);
+			const res = await fetch(`http://127.0.0.1:${port}/teapot`);
+
+			expect(globalThis.Response).not.toBe(PlatformResponse);
+			expect(res.status).toBe(200);
+			await expect(res.text()).resolves.toBe("[object Response]");
+		} finally {
+			for (const [name, descriptor] of Object.entries(platformGlobals)) {
+				if (descriptor)
+					Object.defineProperty(globalThis, name, descriptor);
+			}
+		}
+		expect(globalThis.Response).toBe(PlatformResponse);
 	});
 });
