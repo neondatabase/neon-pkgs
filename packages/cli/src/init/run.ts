@@ -78,6 +78,7 @@ import {
 	configInitNext,
 	envPullFailedNext,
 	existingConfigNext,
+	incompleteProjectCreation,
 	installFailedNext,
 	MCP_API_KEY_NEEDS_AUTH,
 	MCP_SCOPED_NEEDS_PROJECT,
@@ -705,6 +706,27 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			if (alreadyLinked) {
 				throw new Error(CLAIMABLE_ALREADY_LINKED);
 			}
+		}
+
+		// `link -y` refuses a project name without a region, and a region without a
+		// name. Fail here, before any agent setup step runs, not after it. With
+		// --branch, link reports that a branch and a new project conflict; adding a
+		// region would not fix that, so that case is left to link.
+		if (
+			yes &&
+			props.link !== false &&
+			props.claimable !== true &&
+			detection.authenticated &&
+			!props.projectId &&
+			!props.branch &&
+			Boolean(props.projectName) !== Boolean(props.regionId)
+		) {
+			throw new Error(
+				incompleteProjectCreation(
+					props.projectName ? "--region-id" : "--project-name",
+					`${getCliName()} init`,
+				),
+			);
 		}
 
 		const recommended = mode === "recommended";

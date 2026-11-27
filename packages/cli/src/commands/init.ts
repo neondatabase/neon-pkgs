@@ -83,12 +83,12 @@ export const builder = (yargs: yargs.Argv) =>
 		})
 		.option("project-name", {
 			describe:
-				"Name for a new project, forwarded to link or to the claimable project",
+				"Name for a new project, forwarded to link or to the claimable project. To create and link a project, pass --region-id too",
 			type: "string",
 		})
 		.option("region-id", {
 			describe:
-				"Region for a new project, forwarded to link or to the claimable project",
+				"Region for a new project, forwarded to link or to the claimable project. To create and link a project, pass --project-name too",
 			type: "string",
 		})
 		.option("branch", {
@@ -140,6 +140,10 @@ export const builder = (yargs: yargs.Argv) =>
 		})
 		.example("$0 init", "Recommended or Custom setup")
 		.example("$0 init -y", "Recommended setup without prompts")
+		.example(
+			"$0 init -y --org-id org-… --project-name my-app --region-id aws-us-east-2",
+			"Recommended setup without prompts, creating a new project and linking it",
+		)
 		.example(
 			"$0 init -y --skill neon --mcp-auth oauth --mcp-config-location project",
 			"Custom: those skills and MCP, Recommended defaults for the rest",
